@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user with specific roles",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "plantId": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Supervisor", "Operator"] }
+      },
+      "required": ["uid", "email", "role", "plantId"]
+    },
+    "Plant": {
+      "title": "Plant",
+      "description": "Industrial plant",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Area": {
+      "title": "Area",
+      "description": "Physical area within a plant",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "plantId": { "type": "string" },
+        "name": { "type": "string" },
+        "qrCode": { "type": "string" }
+      },
+      "required": ["id", "plantId", "name"]
+    },
+    "Equipment": {
+      "title": "Equipment",
+      "description": "Specific equipment within an area",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "plantId": { "type": "string" },
+        "areaId": { "type": "string" },
+        "name": { "type": "string" },
+        "qrCode": { "type": "string" },
+        "inspectionOrder": { "type": "number", "description": "Logical order for inspection" }
+      },
+      "required": ["id", "plantId", "areaId", "name"]
+    },
+    "Inspection": {
+      "title": "Inspection",
+      "description": "Record of an area inspection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "areaId": { "type": "string" },
+        "operatorId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Completed", "With Findings"] }
+      },
+      "required": ["id", "areaId", "operatorId", "timestamp"]
+    },
+    "Finding": {
+      "title": "Finding",
+      "description": "A specific issue found during an inspection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "inspectionId": { "type": "string" },
+        "areaId": { "type": "string" },
+        "operatorId": { "type": "string" },
+        "description": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["Open", "Closed"] },
+        "solution": { "type": "string" },
+        "closedBy": { "type": "string" },
+        "closedAt": { "type": "string", "format": "date-time" },
+        "supervisorComments": { "type": "string" }
+      },
+      "required": ["id", "areaId", "operatorId", "description", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Internal and push-like notifications for users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["Finding", "System", "Announcement"] },
+        "targetRole": { "type": "string", "enum": ["All", "Admin", "Supervisor", "Operator"] },
+        "scheduledAt": { "type": "string", "format": "date-time" },
+        "sentAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Pending", "Sent"] },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "message", "type", "targetRole", "createdAt"]
+    },
+    "ReportSettings": {
+      "title": "Report Settings",
+      "description": "Configuration for exported reports",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "headerText": { "type": "string" },
+        "footerText": { "type": "string" },
+        "companyName": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/plants/{plantId}": {
+      "schema": "Plant",
+      "description": "List of plants"
+    },
+    "/areas/{areaId}": {
+      "schema": "Area",
+      "description": "List of areas"
+    },
+    "/equipment/{equipmentId}": {
+      "schema": "Equipment",
+      "description": "List of equipment"
+    },
+    "/inspections/{inspectionId}": {
+      "schema": "Inspection",
+      "description": "Inspection logs"
+    },
+    "/findings/{findingId}": {
+      "schema": "Finding",
+      "description": "Findings and their resolutions"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System notifications"
+    },
+    "/settings/reportConfig": {
+      "schema": "ReportSettings",
+      "description": "Global report configuration"
+    }
+  }
+}

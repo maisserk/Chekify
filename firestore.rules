@@ -1,0 +1,167 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - name: string (optional)
+    //   - role: string (required, enum: ["Administrador", "Supervisor", "Operador"])
+    //
+    // Collection: areas
+    // Document ID: areaId
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - qrCode: string (optional)
+    //
+    // Collection: inspections
+    // Document ID: inspectionId
+    // Fields:
+    //   - id: string (required)
+    //   - areaId: string (required)
+    //   - operatorId: string (required)
+    //   - timestamp: timestamp (required)
+    //   - status: string (required)
+    //
+    // Collection: findings
+    // Document ID: findingId
+    // Fields:
+    //   - id: string (required)
+    //   - inspectionId: string (required)
+    //   - areaId: string (required)
+    //   - operatorId: string (required)
+    //   - description: string (required)
+    //   - photoUrl: string (optional)
+    //   - status: string (required, enum: ["Open", "Closed"])
+    //   - solution: string (optional)
+    //   - closedBy: string (optional)
+    //   - closedAt: timestamp (optional)
+    //   - supervisorComments: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      let r = getUserData().role;
+      return isAuthenticated() && (r == role || 
+             (role == 'Administrador' && r == 'Admin') || 
+             (role == 'Operador' && r == 'Operator'));
+    }
+
+    function isAdmin() {
+      let r = exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? getUserData().role : '';
+      return (isAuthenticated() && request.auth.token.email == "maisserk@gmail.com") || 
+             (isAuthenticated() && (r == 'Administrador' || r == 'Admin'));
+    }
+
+    function isSupervisor() {
+      let r = exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? getUserData().role : '';
+      return (isAuthenticated() && (r == 'Supervisor' || r == 'Administrador' || r == 'Admin')) || isAdmin();
+    }
+
+    function isOperador() {
+      let r = exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? getUserData().role : '';
+      return (isAuthenticated() && (r == 'Operador' || r == 'Operator' || r == 'Supervisor' || r == 'Administrador' || r == 'Admin')) || isSupervisor();
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['Administrador', 'Supervisor', 'Operador', 'Admin', 'Operator'];
+    }
+
+    function isValidFinding(data) {
+      return data.keys().hasAll(['areaId', 'operatorId', 'description', 'status']) &&
+             data.areaId is string &&
+             data.operatorId is string &&
+             data.description is string &&
+             data.description.size() <= 2000 &&
+             data.status in ['Open', 'Closed', 'InReview'] &&
+             (!('photoUrl' in data) || data.photoUrl is string) &&
+             (!('solution' in data) || data.solution is string);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isAdmin() || isOwner(uid));
+      allow update: if isAuthenticated() && (isAdmin() || isOwner(uid));
+      allow delete: if isAdmin();
+    }
+
+    match /plants/{plantId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /areas/{areaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /equipment/{equipmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /inspections/{inspectionId} {
+      allow read: if isAuthenticated();
+      allow create: if isOperador() && request.resource.data.operatorId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /findings/{findingId} {
+      allow read: if isAuthenticated();
+      allow create: if isOperador() && request.resource.data.operatorId == request.auth.uid && isValidFinding(request.resource.data);
+      allow update: if (isSupervisor()) || 
+                      (isOperador() && resource.data.operatorId == request.auth.uid && 
+                       request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'solution', 'closedBy', 'closedAt', 'supervisorComments']));
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        (
+          (resource.data.targetRole == 'All' || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.targetRole == getUserData().role)) &&
+          (resource.data.scheduledAt != null && request.time >= resource.data.scheduledAt)
+        )
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        (request.resource.data.type == 'Finding' && request.resource.data.createdBy == request.auth.uid)
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}
