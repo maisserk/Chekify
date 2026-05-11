@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component } from 'react';
 import { 
   auth, db 
 } from './firebase';
@@ -13,7 +13,8 @@ import {
   GoogleAuthProvider, 
   signOut,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
   doc, 
@@ -46,15 +47,21 @@ import {
   X,
   AlertTriangle,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Bell,
   FileText,
   MapPin,
   Send,
+  Upload,
   Clock,
   Trash2,
   Edit3,
   Shield,
   BellRing,
+  RotateCcw,
+  Key,
+  ShieldAlert,
   Filter,
   BarChart3,
   Calendar as CalendarIcon
@@ -146,6 +153,15 @@ interface Equipment {
   checkItems?: { id: string; name: string }[];
 }
 
+interface HistoryEntry {
+  status: 'Open' | 'Closed' | 'InReview';
+  userName: string;
+  userId: string;
+  timestamp: any;
+  comment?: string;
+  action: string;
+}
+
 interface Finding {
   id: string;
   inspectionId: string;
@@ -164,6 +180,7 @@ interface Finding {
   plantId?: string;
   inspectionStartedAt?: any;
   inspectionCompletedAt?: any;
+  history?: HistoryEntry[];
 }
 
 interface Notification {
@@ -178,6 +195,7 @@ interface Notification {
   createdBy: string;
   createdAt: any;
   referenceId?: string;
+  plantId?: string;
 }
 
 interface ReportSettings {
@@ -342,7 +360,7 @@ const AuthWrapper = ({ children }: { children: (user: AppUser) => React.ReactNod
           {loginMode === 'Password' ? (
             <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
               <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1 ml-1">Usuario / Email</label>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1 ml-1">Usuario</label>
                 <input 
                   type="text" 
                   value={email}
@@ -705,6 +723,16 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       createdAt: serverTimestamp(),
       inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
       inspectionCompletedAt: serverTimestamp(),
+      history: [
+        {
+          status: isClosingImmediately ? 'Closed' : 'Open' as any,
+          userId: user.uid,
+          userName: user.name,
+          timestamp: new Date(), // using local date for initial array is okay as it's client-side defined but usually we want serverTimestamp for sorting
+          action: 'Creación de hallazgo',
+          comment: isClosingImmediately ? `Cerrado inmediatamente: ${immediateSolution}` : 'Hallazgo reportado'
+        }
+      ]
     };
 
     try {
@@ -720,7 +748,8 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         status: 'Sent',
         createdBy: user.uid,
         createdAt: serverTimestamp(),
-        referenceId: findingRef.id
+        referenceId: findingRef.id,
+        plantId: selectedArea.plantId // Target supervisors of THIS plant
       });
 
       setShowFindingForm(false);
@@ -743,6 +772,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       <AnimatePresence>
         {message && (
           <motion.div 
+            key="operator-feedback-msg"
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
             className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-2xl shadow-xl border text-sm font-bold flex items-center gap-2 ${
               message.type === 'success' ? 'bg-brand-green/10 border-brand-green/20 text-brand-green' : 'bg-red-50 border-red-100 text-red-700'
@@ -807,9 +837,9 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             <p className="text-center text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3">O selecciona manualmente</p>
             <div className="grid gap-2">
               {areas.length > 0 ? (
-                areas.slice(0, 3).map(area => (
+                areas.slice(0, 3).map((area, idx) => (
                   <button 
-                    key={area.id}
+                    key={`quick-${area.id}-${idx}`}
                     onClick={() => {
                       setSelectedArea(area);
                       setInspectionStartTime(new Date());
@@ -840,13 +870,21 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 
       <AnimatePresence>
         {searchingArea && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div 
+            key="operator-area-search-modal"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          >
             <motion.div 
+              key="operator-area-search-overlay"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setSearchingArea(false)}
               className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm"
             />
             <motion.div 
+              key="operator-area-search-content"
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -879,9 +917,9 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                       a.id.toLowerCase().includes(areaSearchQuery.toLowerCase()) ||
                       (a as any).qrCode?.toLowerCase().includes(areaSearchQuery.toLowerCase())
                     )
-                    .map(area => (
+                    .map((area, idx) => (
                       <button 
-                        key={area.id}
+                        key={`search-area-${area.id}-${idx}`}
                         onClick={() => {
                           setSelectedArea(area);
                           setInspectionStartTime(new Date());
@@ -900,7 +938,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                 </div>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -980,7 +1018,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                  <div className="flex gap-1.5 h-1.5 px-1">
                    {areaEquipment.map((e, idx) => (
                      <div 
-                       key={e.id} 
+                       key={`prog-bar-${e.id}-${idx}`} 
                        className={`flex-1 rounded-full transition-all duration-500 ${
                          idx === currentEquipmentIndex ? 'bg-brand-blue scale-y-125' : idx < currentEquipmentIndex ? 'bg-brand-green' : 'bg-zinc-100'
                        }`} 
@@ -994,13 +1032,13 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               <div className="space-y-4 py-2">
                 <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Puntos de Revisión</h4>
                 <div className="space-y-3">
-                  {currentEquipment.checkItems.map(item => (
-                    <div key={item.id} className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100 flex flex-col gap-3">
+                  {currentEquipment.checkItems.map((item, idx) => (
+                    <div key={`insp-item-${item.id}-${idx}`} className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100 flex flex-col gap-3">
                       <p className="text-sm font-bold text-zinc-700">{item.name}</p>
                       <div className="grid grid-cols-3 gap-2">
-                        {(['Bueno', 'Regular', 'Malo'] as const).map(state => (
+                        {(['Bueno', 'Regular', 'Malo'] as const).map((state, sIdx) => (
                           <button
-                            key={state}
+                            key={`btn-state-${state}-${sIdx}`}
                             onClick={() => handleSetItemState(item.id, state)}
                             className={`py-2 px-3 rounded-xl text-[10px] font-bold uppercase transition-all border ${
                               checkItemStates[item.id] === state 
@@ -1329,7 +1367,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
 
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <BarChart id="stats-summary-chart" data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis 
               dataKey="name" 
@@ -1389,8 +1427,12 @@ const SupervisorDashboard = ({
       let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Finding));
       
       // Filter by user plant if not Admin
-      if (user.role !== 'Administrador' && user.plantId) {
-        data = data.filter(f => f.plantId === user.plantId);
+      if (user.role !== 'Administrador') {
+        if (user.plantId) {
+          data = data.filter(f => f.plantId === user.plantId);
+        } else {
+          data = [];
+        }
       }
       
       setFindings(data);
@@ -1455,7 +1497,15 @@ const SupervisorDashboard = ({
       status: 'Closed',
       supervisorComments: supervisorComments,
       closedBy: user.uid,
-      closedAt: serverTimestamp()
+      closedAt: serverTimestamp(),
+      history: arrayUnion({
+        status: 'Closed',
+        userId: user.uid,
+        userName: user.name,
+        timestamp: new Date(),
+        action: 'Cierre de hallazgo',
+        comment: supervisorComments || 'Hallazgo cerrado por supervisor'
+      })
     });
     
     // Notify operator
@@ -1468,7 +1518,8 @@ const SupervisorDashboard = ({
       status: 'Sent',
       createdBy: user.uid,
       createdAt: serverTimestamp(),
-      referenceId: selectedFinding.id
+      referenceId: selectedFinding.id,
+      plantId: selectedFinding.plantId
     });
 
     setSelectedFinding(null);
@@ -1481,7 +1532,15 @@ const SupervisorDashboard = ({
     await updateDoc(doc(db, 'findings', selectedFinding.id), {
       status: 'InReview',
       supervisorComments: supervisorComments,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      history: arrayUnion({
+        status: 'InReview',
+        userId: user.uid,
+        userName: user.name,
+        timestamp: new Date(),
+        action: 'Marcar en revisión',
+        comment: supervisorComments || 'Puesto en revisión por supervisor'
+      })
     });
 
     // Notify operator
@@ -1494,7 +1553,8 @@ const SupervisorDashboard = ({
       status: 'Sent',
       createdBy: user.uid,
       createdAt: serverTimestamp(),
-      referenceId: selectedFinding.id
+      referenceId: selectedFinding.id,
+      plantId: selectedFinding.plantId
     });
 
     setSelectedFinding(null);
@@ -1536,9 +1596,9 @@ const SupervisorDashboard = ({
               <Filter className="w-5 h-5" />
             </button>
             <div className="hidden sm:flex bg-zinc-100 p-1 rounded-xl">
-              {(['Open', 'InReview', 'Closed', 'All'] as const).map((f) => (
+              {(['Open', 'InReview', 'Closed', 'All'] as const).map((f, fIdx) => (
                 <button
-                  key={f}
+                  key={`filter-tab-${f}-${fIdx}`}
                   onClick={() => setFilter(f)}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     filter === f ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
@@ -1554,6 +1614,7 @@ const SupervisorDashboard = ({
         <AnimatePresence>
           {showFilters && (
             <motion.div
+              key="supervisor-filter-panel"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -1594,8 +1655,8 @@ const SupervisorDashboard = ({
                     className="w-full p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none"
                   >
                     <option value="All">Todos los Operadores</option>
-                    {uniqueOperators.map(op => (
-                      <option key={op} value={op}>{op}</option>
+                    {uniqueOperators.map((op, idx) => (
+                      <option key={`op-opt-${op}-${idx}`} value={op}>{op}</option>
                     ))}
                   </select>
                 </div>
@@ -1621,6 +1682,7 @@ const SupervisorDashboard = ({
         <AnimatePresence>
           {showStats && (
             <motion.div
+              key="supervisor-stats"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
@@ -1659,11 +1721,11 @@ const SupervisorDashboard = ({
       </div>
 
       <div className="grid gap-4">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence>
           {filteredFindings.map((finding, index) => (
             <motion.div
               layout
-              key={`${finding.id}-${index}`}
+              key={`find-card-${finding.id}-${index}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -1859,6 +1921,47 @@ const ReportsView = ({
   const [stats, setStats] = useState({ total: 0, open: 0, inReview: 0, closed: 0 });
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Finding; direction: 'asc' | 'desc' } | null>({
+    key: 'createdAt',
+    direction: 'desc'
+  });
+
+  const handleSort = (key: keyof Finding) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedFindings = React.useMemo(() => {
+    let sortableItems = [...findings];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (aValue === undefined || bValue === undefined) return 0;
+
+        // Handle timestamps
+        if (sortConfig.key === 'createdAt' || sortConfig.key === 'closedAt') {
+          const aTime = aValue?.toDate ? aValue.toDate().getTime() : 0;
+          const bTime = bValue?.toDate ? bValue.toDate().getTime() : 0;
+          return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
+        }
+
+        // Handle strings
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortConfig.direction === 'asc' 
+            ? aValue.localeCompare(bValue) 
+            : bValue.localeCompare(aValue);
+        }
+
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [findings, sortConfig]);
 
   useEffect(() => {
     const q = query(collection(db, 'findings'), orderBy('createdAt', 'desc'));
@@ -1866,8 +1969,12 @@ const ReportsView = ({
       let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Finding));
       
       // Filter by plant
-      if (user.role !== 'Administrador' && user.plantId) {
-        data = data.filter(f => f.plantId === user.plantId);
+      if (user.role !== 'Administrador') {
+        if (user.plantId) {
+          data = data.filter(f => f.plantId === user.plantId);
+        } else {
+          data = [];
+        }
       }
 
       setFindings(data);
@@ -2005,19 +2112,60 @@ const ReportsView = ({
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm min-w-[800px]">
             <thead>
               <tr className="text-zinc-400 border-b border-zinc-50">
-                <th className="px-6 py-4 font-medium">Fecha</th>
-                <th className="px-6 py-4 font-medium">Área</th>
+                <th 
+                  className="px-6 py-4 font-medium cursor-pointer hover:text-zinc-900 transition-colors"
+                  onClick={() => handleSort('createdAt')}
+                >
+                  <div className="flex items-center gap-1">
+                    Fecha
+                    {sortConfig?.key === 'createdAt' && (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 font-medium cursor-pointer hover:text-zinc-900 transition-colors"
+                  onClick={() => handleSort('areaName')}
+                >
+                  <div className="flex items-center gap-1">
+                    Área
+                    {sortConfig?.key === 'areaName' && (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 font-medium cursor-pointer hover:text-zinc-900 transition-colors"
+                  onClick={() => handleSort('operatorName')}
+                >
+                  <div className="flex items-center gap-1">
+                    Operador
+                    {sortConfig?.key === 'operatorName' && (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 py-4 font-medium">Inspección (Inicio/Fin)</th>
                 <th className="px-6 py-4 font-medium">Resuelto en</th>
-                <th className="px-6 py-4 font-medium">Estado</th>
+                <th 
+                  className="px-6 py-4 font-medium cursor-pointer hover:text-zinc-900 transition-colors"
+                  onClick={() => handleSort('status')}
+                >
+                  <div className="flex items-center gap-1">
+                    Estado
+                    {sortConfig?.key === 'status' && (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
                 {user.role === 'Administrador' && <th className="px-6 py-4 font-medium text-right">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
-              {findings.map((f, index) => {
+              {sortedFindings.map((f, index) => {
                 const duration = f.inspectionStartedAt && f.inspectionCompletedAt 
                   ? Math.round((f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime()) / 1000) 
                   : null;
@@ -2028,7 +2176,7 @@ const ReportsView = ({
 
                 return (
                   <tr 
-                    key={`${f.id}-${index}`} 
+                    key={`rep-row-${f.id}-${index}`} 
                     onClick={() => setSelectedFinding(f)}
                     className="hover:bg-zinc-50/50 transition-colors group cursor-pointer"
                   >
@@ -2040,6 +2188,9 @@ const ReportsView = ({
                         <span>{f.areaName}</span>
                         <span className="text-[10px] text-zinc-400 uppercase tracking-tight truncate max-w-[120px]">{f.description}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-zinc-500">
+                      {f.operatorName || '-'}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col text-[11px] text-zinc-500 font-mono">
@@ -2173,6 +2324,44 @@ const ReportsView = ({
                         <p className="text-brand-blue/80 text-sm italic">{selectedFinding.supervisorComments}</p>
                       </div>
                     )}
+
+                    {selectedFinding.history && selectedFinding.history.length > 0 && (
+                      <div className="bg-zinc-50 p-4 rounded-2xl">
+                        <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <History className="w-3 h-3" />
+                          Historial de Cambios
+                        </h4>
+                        <div className="space-y-4">
+                          {selectedFinding.history.map((entry, i) => (
+                            <div key={`hist-${i}`} className="relative flex gap-4">
+                              {i !== selectedFinding.history!.length - 1 && (
+                                <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-zinc-200" />
+                              )}
+                              <div className={`mt-1.5 w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 z-10 ${
+                                entry.status === 'Open' ? 'bg-amber-50 border-amber-200 text-amber-600' :
+                                entry.status === 'InReview' ? 'bg-orange-50 border-orange-200 text-orange-600' :
+                                'bg-emerald-50 border-emerald-200 text-emerald-600'
+                              }`}>
+                                <div className="w-2 h-2 rounded-full bg-current" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className="text-xs font-bold text-zinc-900">{entry.action}</span>
+                                  <span className="text-[10px] text-zinc-400 font-mono">
+                                    {entry.timestamp?.toDate ? format(entry.timestamp.toDate(), 'dd/MM HH:mm') : 
+                                     entry.timestamp instanceof Date ? format(entry.timestamp, 'dd/MM HH:mm') : '--/--'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-zinc-500 font-medium">Por: {entry.userName}</p>
+                                {entry.comment && (
+                                  <p className="mt-1 text-[11px] text-zinc-600 italic">"{entry.comment}"</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-100">
@@ -2259,11 +2448,11 @@ const NotificationCenter = ({
                   <p className="font-medium text-sm">No tienes notificaciones</p>
                 </div>
               ) : (
-                notifications.map(n => {
+                notifications.map((n, idx) => {
                   const isRead = readIds.includes(n.id);
                   return (
                     <div 
-                      key={n.id} 
+                      key={`${n.id}-${idx}`} 
                       onClick={() => {
                         if (!isRead) onRead(n.id);
                         onAction(n);
@@ -2326,15 +2515,24 @@ const AdminNotificationManagement = () => {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [targetRole, setTargetRole] = useState<'All' | 'Administrador' | 'Supervisor' | 'Operador'>('All');
+  const [selectedPlantId, setSelectedPlantId] = useState('');
+  const [plants, setPlants] = useState<{id: string, name: string}[]>([]);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    return onSnapshot(query(collection(db, 'notifications'), orderBy('createdAt', 'desc')), (snapshot) => {
+    const unsubNotif = onSnapshot(query(collection(db, 'notifications'), orderBy('createdAt', 'desc')), (snapshot) => {
       setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
     });
+    const unsubPlants = onSnapshot(collection(db, 'plants'), (snapshot) => {
+      setPlants(snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name } as any)));
+    });
+    return () => {
+      unsubNotif();
+      unsubPlants();
+    };
   }, []);
 
   const handleSave = async () => {
@@ -2351,6 +2549,7 @@ const AdminNotificationManagement = () => {
         message,
         type: 'Announcement',
         targetRole,
+        plantId: selectedPlantId || null,
         scheduledAt,
         status: (scheduleDate && scheduleTime) ? 'Pending' : 'Sent',
         createdAt: serverTimestamp(),
@@ -2378,6 +2577,7 @@ const AdminNotificationManagement = () => {
     setTitle(n.title);
     setMessage(n.message);
     setTargetRole(n.targetRole);
+    setSelectedPlantId(n.plantId || '');
     if (n.scheduledAt?.toDate) {
       const d = n.scheduledAt.toDate();
       setScheduleDate(format(d, 'yyyy-MM-dd'));
@@ -2398,6 +2598,7 @@ const AdminNotificationManagement = () => {
     setTitle('');
     setMessage('');
     setTargetRole('All');
+    setSelectedPlantId('');
     setScheduleDate('');
     setScheduleTime('');
   };
@@ -2418,8 +2619,8 @@ const AdminNotificationManagement = () => {
       {feedback && <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest">{feedback.text}</p>}
 
       <div className="grid gap-3">
-        {notifications.map(n => (
-          <div key={n.id} className="bg-white border border-zinc-100 p-4 rounded-2xl group relative">
+        {notifications.map((n, nIdx) => (
+          <div key={`notif-admin-list-${n.id}-${nIdx}`} className="bg-white border border-zinc-100 p-4 rounded-2xl group relative">
             <div className="flex justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-1">
@@ -2427,6 +2628,11 @@ const AdminNotificationManagement = () => {
                     {n.status === 'Sent' ? 'Enviado' : 'Programado'}
                   </span>
                   <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest">{n.targetRole}</span>
+                  {n.plantId && (
+                    <span className="text-[8px] text-brand-blue font-bold uppercase tracking-widest bg-sky-50 px-2 py-0.5 rounded-full">
+                      {plants.find(p => p.id === n.plantId)?.name || 'Planta'}
+                    </span>
+                  )}
                 </div>
                 <h4 className="font-bold text-zinc-900 text-sm">{n.title}</h4>
                 <p className="text-xs text-zinc-500">{n.message}</p>
@@ -2454,14 +2660,26 @@ const AdminNotificationManagement = () => {
                 <textarea value={message} onChange={e => setMessage(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none" placeholder="Mensaje..." />
                 <div className="grid grid-cols-2 gap-4">
                   <select value={targetRole} onChange={e => setTargetRole(e.target.value as any)} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none">
-                    <option value="All">Todos</option>
-                    <option value="Administrador">Admins</option>
-                    <option value="Supervisor">Supervisores</option>
-                    <option value="Operador">Operadores</option>
+                    <option value="All">Todos los Roles</option>
+                    <option value="Administrador">Solo Admins</option>
+                    <option value="Supervisor">Solo Supervisores</option>
+                    <option value="Operador">Solo Operadores</option>
                   </select>
-                  <div className="flex gap-2">
-                    <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="flex-1 p-2 bg-zinc-50 border border-zinc-100 rounded-xl text-xs" />
-                    <input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} className="flex-1 p-2 bg-zinc-50 border border-zinc-100 rounded-xl text-xs" />
+                  <select value={selectedPlantId} onChange={e => setSelectedPlantId(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none">
+                    <option value="">Todas las Plantas (Global)</option>
+                    {plants.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[8px] font-bold text-zinc-400 uppercase mb-1 ml-1">Fecha Programada (Opcional)</label>
+                    <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="w-full p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-xs" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[8px] font-bold text-zinc-400 uppercase mb-1 ml-1">Hora Programada</label>
+                    <input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} className="w-full p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-xs" />
                   </div>
                 </div>
                 <div className="flex gap-3 pt-4">
@@ -2647,15 +2865,246 @@ const AdminReportSettings = () => {
   );
 };
 
+// --- Bulk Upload Helper ---
+
+const BulkUpload = ({ 
+  entityType, 
+  onComplete, 
+  onError,
+  plants, 
+  areas 
+}: { 
+  entityType: 'Users' | 'Plants' | 'Areas' | 'Equipment',
+  onComplete: (count: number) => void,
+  onError: (err: string) => void,
+  plants?: {id: string, name: string}[],
+  areas?: Area[]
+}) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const processCsv = async (file: File) => {
+    setIsProcessing(true);
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      try {
+        const text = e.target?.result as string;
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+        if (lines.length < 2) throw new Error("El archivo está vacío o no tiene encabezados.");
+
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const data = lines.slice(1).map(line => {
+          const values = line.split(',').map(v => v.trim());
+          const obj: any = {};
+          headers.forEach((header, index) => {
+            obj[header] = values[index];
+          });
+          return obj;
+        });
+
+        let count = 0;
+
+        for (const item of data) {
+          try {
+            if (entityType === 'Plants') {
+              const name = item.nombre || item.name;
+              if (!name) continue;
+              const id = item.id || name.toLowerCase().replace(/\s+/g, '-');
+              await setDoc(doc(db, 'plants', id), { id, name });
+              count++;
+            } 
+            else if (entityType === 'Areas') {
+              const name = item.nombre || item.name;
+              const plantInput = item.planta_id || item.planta || item.plantid;
+              if (!name || !plantInput) continue;
+              
+              // Find plant ID if name was provided
+              let plantId = plantInput;
+              if (plants) {
+                const found = plants.find(p => p.id === plantInput || p.name.toLowerCase() === plantInput.toLowerCase());
+                if (found) plantId = found.id;
+              }
+
+              const id = item.id || name.toLowerCase().replace(/\s+/g, '-');
+              await setDoc(doc(db, 'areas', id), { 
+                id, 
+                name, 
+                plantId, 
+                qrCode: item.qr || item.qrcode || id.toUpperCase() 
+              });
+              count++;
+            }
+            else if (entityType === 'Equipment') {
+              const name = item.nombre || item.name || item.nombre_equipo;
+              const plantInput = item.planta || item.planta_id;
+              const areaInput = item.area || item.area_id;
+              
+              if (!name || !plantInput || !areaInput) continue;
+
+              // Resolve Plant
+              let plantId = plantInput;
+              if (plants) {
+                const found = plants.find(p => p.id === plantInput || p.name.toLowerCase() === plantInput.toLowerCase());
+                if (found) plantId = found.id;
+              }
+
+              // Resolve Area
+              let areaId = areaInput;
+              if (areas) {
+                const found = areas.find(a => a.id === areaInput || a.name.toLowerCase() === areaInput.toLowerCase());
+                if (found) areaId = found.id;
+              }
+
+              const id = item.id || item.tag || item.etiqueta_tag || name.toLowerCase().replace(/\s+/g, '-');
+              const checkItemsStr = item.tipo_de_equipo || item.items || item.check_items || "";
+              const checkItems = checkItemsStr.split(';').map((s: string) => s.trim()).filter((s: string) => s).map((s: string) => ({
+                id: Math.random().toString(36).substr(2, 9),
+                name: s
+              }));
+
+              await setDoc(doc(db, 'equipment', id), {
+                id,
+                name,
+                plantId,
+                areaId,
+                inspectionOrder: parseInt(item.orden || "0"),
+                checkItems,
+                qrCode: item.tag || item.etiqueta_tag || id.toUpperCase()
+              });
+              count++;
+            }
+            else if (entityType === 'Users') {
+              let email = item.usuario || item.email || item.correo;
+              const name = item.nombre || item.name;
+              const roleIn = (item.rol || item.role || 'Operador') as any;
+              const plantInput = item.planta || item.planta_id;
+
+              if (!email || !name) continue;
+
+              // Force dummy domain if it looks like a username
+              if (!email.includes('@')) {
+                email = `${email}@chekify.local`;
+              }
+
+              let plantId = plantInput || "";
+              if (plants && plantInput) {
+                const found = plants.find(p => p.id === plantInput || p.name.toLowerCase() === plantInput.toLowerCase());
+                if (found) plantId = found.id;
+              }
+
+              // Map role
+              let role: UserRole = 'Operador';
+              if (['admin', 'administrador'].includes(roleIn?.toLowerCase())) role = 'Administrador';
+              if (['supervisor'].includes(roleIn?.toLowerCase())) role = 'Supervisor';
+
+              // Since we can't create Auth users easily in bulk from client, we just create Firestore doc
+              // We'll use a deterministic temporary ID or let them sign up later
+              // For now, let's use email as temporary ID or check if user exists
+              const usersRef = collection(db, 'users');
+              const q = query(usersRef, where('email', '==', email));
+              const snap = await getDoc(doc(db, 'users', email)); // Simple check
+
+              await setDoc(doc(db, 'users', email.replace(/[^a-zA-Z0-9]/g, '_')), {
+                email,
+                name,
+                role,
+                plantId,
+                uid: email.replace(/[^a-zA-Z0-9]/g, '_') // Note: This will need linking when they actually login
+              }, { merge: true });
+              count++;
+            }
+          } catch (err: any) {
+            console.error(`Error processing item:`, item, err);
+          }
+        }
+
+        onComplete(count);
+      } catch (err: any) {
+        onError(err.message || "Error al procesar el archivo");
+      } finally {
+        setIsProcessing(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsText(file);
+  };
+
+  const getTemplate = () => {
+    if (entityType === 'Plants') return "id,nombre\nPLANTA-01,Planta Norte";
+    if (entityType === 'Areas') return "id,planta_id,nombre,qr\nAREA-01,PLANTA-01,Zona de Carga,QR001";
+    if (entityType === 'Equipment') return "id,planta,area,nombre,orden,check_items\nEQ-01,Planta Norte,Zona de Carga,Motor Principal,1,Cableado;Aceite;Temperatura";
+    if (entityType === 'Users') return "nombre,usuario,rol,planta\nJuan Perez,juan.perez,Operador,Planta Norte";
+    return "";
+  };
+
+  return (
+    <div className="bg-zinc-50 border border-zinc-100 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-zinc-400">
+          <Upload className="w-5 h-5" />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-zinc-900">Carga Masiva de {
+            entityType === 'Users' ? 'Usuarios' :
+            entityType === 'Plants' ? 'Plantas' :
+            entityType === 'Areas' ? 'Áreas' : 'Equipos'
+          }</p>
+          <p className="text-[10px] text-zinc-400 font-medium tracking-tight">Sube un archivo CSV con los datos</p>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-2 w-full sm:w-auto">
+        <button 
+          onClick={() => {
+            const blob = new Blob([getTemplate()], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `plantilla_${entityType.toLowerCase()}.csv`;
+            a.click();
+          }}
+          className="flex-1 sm:flex-none px-3 py-2 text-[10px] font-bold text-brand-blue hover:bg-white rounded-lg transition-all border border-transparent hover:border-brand-blue/10"
+        >
+          Descargar Plantilla
+        </button>
+        <div className="relative flex-1 sm:flex-none">
+          <input 
+            type="file" 
+            accept=".csv"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) processCsv(file);
+            }}
+          />
+          <button 
+            disabled={isProcessing}
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl text-[10px] font-bold hover:bg-zinc-800 transition-all disabled:opacity-50"
+          >
+            {isProcessing ? (
+              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : <Upload className="w-3 h-3" />}
+            Subir CSV
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AdminManagement = () => {
   const [activeSubTab, setActiveSubTab] = useState<'Users' | 'Plants' | 'Areas' | 'Equipment'>('Users');
   
   return (
     <div className="space-y-6">
       <div className="flex bg-zinc-100 p-1 rounded-2xl overflow-x-auto no-scrollbar">
-        {(['Users', 'Plants', 'Areas', 'Equipment'] as const).map((tab) => (
+        {(['Users', 'Plants', 'Areas', 'Equipment'] as const).map((tab, tIdx) => (
           <button
-            key={tab}
+            key={`admin-tab-${tab}-${tIdx}`}
             onClick={() => setActiveSubTab(tab)}
             className={`flex-1 min-w-[100px] px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeSubTab === tab ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
@@ -2737,9 +3186,16 @@ const AdminPlantManagement = () => {
         <h3 className="font-bold text-zinc-900">Plantas Industriales</h3>
         <button onClick={() => { setEditingPlant(null); setName(''); setShowForm(true); }} className="p-2 bg-brand-blue text-white rounded-xl hover:opacity-90 transition-all shadow-md shadow-sky-100"><Plus className="w-4 h-4" /></button>
       </div>
+
+      <BulkUpload 
+        entityType="Plants" 
+        onComplete={(count) => setMessage({ text: `Se cargaron ${count} plantas exitosamente`, type: 'success' })}
+        onError={(err) => setMessage({ text: err, type: 'error' })}
+      />
+
       <div className="grid gap-3">
-        {plants.filter(p => (p as any).status !== 'deleted').map(p => (
-          <div key={p.id} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
+        {plants.filter(p => (p as any).status !== 'deleted').map((p, pIdx) => (
+          <div key={`pl-${p.id}-${pIdx}`} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
             <div>
               <span className="font-bold text-zinc-900">{p.name}</span>
               <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">{p.id}</p>
@@ -2862,9 +3318,17 @@ const AdminAreaManagement = () => {
         <h3 className="font-bold text-zinc-900">Áreas de Inspección</h3>
         <button onClick={() => { setEditingArea(null); setFormData({name:'', plantId:'', qrCode:''}); setShowForm(true); }} className="p-2 bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 transition-colors"><Plus className="w-4 h-4" /></button>
       </div>
+
+      <BulkUpload 
+        entityType="Areas"
+        plants={plants}
+        onComplete={(count) => setMessage({ text: `Se cargaron ${count} áreas exitosamente`, type: 'success' })}
+        onError={(err) => setMessage({ text: err, type: 'error' })}
+      />
+
       <div className="grid gap-3">
-        {areas.filter(a => (a as any).status !== 'deleted').map(a => (
-          <div key={a.id} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
+        {areas.filter(a => (a as any).status !== 'deleted').map((a, aIdx) => (
+          <div key={`ar-${a.id}-${aIdx}`} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
             <div>
               <p className="font-bold text-zinc-900">{a.name}</p>
               <p className="text-[10px] text-zinc-400 uppercase font-bold">Planta: {plants.find(p => p.id === (a as any).plantId)?.name || (a as any).plantId}</p>
@@ -2924,7 +3388,7 @@ const AdminAreaManagement = () => {
                   <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre del área" className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" />
                   <select value={formData.plantId} onChange={e => setFormData({...formData, plantId: e.target.value})} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue">
                     <option value="">Seleccionar Planta</option>
-                    {plants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {plants.map((p, idx) => <option key={`pl-opt-1-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
                   </select>
                   <input value={formData.qrCode} onChange={e => setFormData({...formData, qrCode: e.target.value})} placeholder="Código QR (opcional)" className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" />
                 </div>
@@ -3010,13 +3474,22 @@ const AdminEquipmentManagement = () => {
             className="text-xs p-2 bg-zinc-50 border border-zinc-100 rounded-xl outline-none"
           >
             <option value="All">Todas las Plantas</option>
-            {plants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {plants.map((p, idx) => <option key={`pl-opt-select-1-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
           </select>
           <button onClick={() => { setEditingEquip(null); setFormData({name:'', areaId:'', plantId: '', inspectionOrder: 0, checkItems: []}); setShowForm(true); }} className="p-2 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100">
             <Plus className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      <BulkUpload 
+        entityType="Equipment"
+        plants={plants}
+        areas={areas}
+        onComplete={(count) => setMessage({ text: `Se cargaron ${count} equipos exitosamente`, type: 'success' })}
+        onError={(err) => setMessage({ text: err, type: 'error' })}
+      />
+
       <div className="grid gap-3">
         {equipment
           .filter(e => {
@@ -3024,8 +3497,8 @@ const AdminEquipmentManagement = () => {
             const matchesPlant = selectedPlantFilter === 'All' || e.plantId === selectedPlantFilter;
             return isNotDeleted && matchesPlant;
           })
-          .map(e => (
-          <div key={e.id} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
+          .map((e, eIdx) => (
+          <div key={`equip-${e.id}-${eIdx}`} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
             <div>
               <p className="font-bold text-zinc-900">
                 <span className="text-zinc-400 mr-2 text-xs">#{e.inspectionOrder || '0'}</span>
@@ -3119,7 +3592,7 @@ const AdminEquipmentManagement = () => {
                     <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Planta</label>
                     <select value={formData.plantId} onChange={e => setFormData({...formData, plantId: e.target.value, areaId: ''})} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue">
                       <option value="">Seleccionar Planta</option>
-                      {plants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {plants.map((p, idx) => <option key={`pl-opt-3-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
 
@@ -3127,7 +3600,7 @@ const AdminEquipmentManagement = () => {
                     <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Área</label>
                     <select value={formData.areaId} onChange={e => setFormData({...formData, areaId: e.target.value})} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" disabled={!formData.plantId}>
                       <option value="">{formData.plantId ? 'Seleccionar Área' : 'Primero selecciona una Planta'}</option>
-                      {areas.filter(a => a.plantId === formData.plantId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      {areas.filter(a => a.plantId === formData.plantId).map((a, aIdx) => <option key={`ar-opt-${a.id}-${aIdx}`} value={a.id}>{a.name}</option>)}
                     </select>
                   </div>
 
@@ -3148,7 +3621,7 @@ const AdminEquipmentManagement = () => {
                     
                     <div className="space-y-3 mb-4">
                       {formData.checkItems.map((item, idx) => (
-                        <div key={item.id} className="flex items-center gap-3 bg-zinc-50 p-3 rounded-xl border border-zinc-100 group">
+                        <div key={`edit-item-${item.id}-${idx}`} className="flex items-center gap-3 bg-zinc-50 p-3 rounded-xl border border-zinc-100 group">
                           <span className="text-[10px] font-bold text-zinc-300">{idx + 1}</span>
                           <input 
                             value={item.name} 
@@ -3228,10 +3701,42 @@ const AdminUserManagement = () => {
   const [plants, setPlants] = useState<{id: string, name: string}[]>([]);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [confirmDeleteUid, setConfirmDeleteUid] = useState<string | null>(null);
+  const [resetPasswordFor, setResetPasswordFor] = useState<AppUser | null>(null);
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', role: 'Operador' as UserRole, password: '', plantId: '' });
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleResetPasswordDirectly = async () => {
+    if (!resetPasswordFor || !newAdminPassword) return;
+    setIsResetting(true);
+    try {
+      const adminToken = await auth.currentUser?.getIdToken();
+      const response = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: resetPasswordFor.email,
+          newPassword: newAdminPassword,
+          adminToken
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Error al reestablecer contraseña');
+
+      setMessage({ text: `Contraseña actualizada correctamente para ${resetPasswordFor.name}`, type: 'success' });
+      setResetPasswordFor(null);
+      setNewAdminPassword('');
+    } catch (err: any) {
+      console.error("Error resetting password", err);
+      setMessage({ text: "Error: " + (err.message || "Error desconocido"), type: 'error' });
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   useEffect(() => {
     if (message) {
@@ -3363,9 +3868,16 @@ const AdminUserManagement = () => {
         </button>
       </div>
 
+      <BulkUpload 
+        entityType="Users"
+        plants={plants}
+        onComplete={(count) => setMessage({ text: `Se cargaron ${count} usuarios exitosamente.`, type: 'success' })}
+        onError={(err) => setMessage({ text: err, type: 'error' })}
+      />
+
       <div className="grid gap-4">
         {users.map((u, index) => (
-          <div key={`${u.uid}-${index}`} className="bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm flex items-center justify-between">
+          <div key={`user-row-${u.uid || index}`} className="bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-sky-50 rounded-full flex items-center justify-center text-brand-blue font-bold">
                 {u.name ? u.name[0] : '?'}
@@ -3373,7 +3885,7 @@ const AdminUserManagement = () => {
               <div>
                 <h4 className="font-bold text-zinc-900">{u.name}</h4>
                 <p className="text-xs text-zinc-400">
-                  {u.email} • <span className="text-zinc-900 font-semibold">{u.role}</span>
+                  {u.email.replace('@chekify.local', '')} • <span className="text-zinc-900 font-semibold">{u.role}</span>
                   {u.plantId && (
                     <span className="ml-2 text-zinc-500">• {plants.find(p => p.id === u.plantId)?.name}</span>
                   )}
@@ -3398,6 +3910,16 @@ const AdminUserManagement = () => {
                 <FileText className="w-4 h-4" />
               </button>
               <button 
+                onClick={() => setResetPasswordFor(u)}
+                className="p-2 text-zinc-400 hover:text-brand-blue transition-colors rounded-xl hover:bg-brand-blue/5"
+                title="Reestablecer contraseña"
+              >
+                <div className="flex items-center gap-1.5">
+                  <RotateCcw className="w-4 h-4" />
+                  <span className="text-[10px] font-bold">Reseteo</span>
+                </div>
+              </button>
+              <button 
                 onClick={() => setConfirmDeleteUid(u.uid)}
                 className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
               >
@@ -3411,6 +3933,7 @@ const AdminUserManagement = () => {
       <AnimatePresence>
         {message && (
           <motion.div 
+            key="admin-message"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
@@ -3423,8 +3946,92 @@ const AdminUserManagement = () => {
           </motion.div>
         )}
 
-        {confirmDeleteUid && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+      {resetPasswordFor && (
+        <motion.div 
+          key="admin-reset-pw-modal"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        >
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-zinc-100"
+          >
+            <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 mb-4">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-zinc-900 mb-1">Cambiar Contraseña</h3>
+            <p className="text-xs text-zinc-500 mb-6 font-medium leading-relaxed">
+              Ingresa una nueva contraseña para <b>{resetPasswordFor.name}</b>. 
+              El cambio es instantáneo y se aplicará en el próximo inicio de sesión.
+            </p>
+            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1 ml-1">Nueva Contraseña</label>
+                <input 
+                  type="password"
+                  placeholder="Mínimo 6 caracteres"
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                  className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => { setResetPasswordFor(null); setNewAdminPassword(''); }}
+                className="flex-1 py-4 text-xs font-bold text-zinc-400 hover:text-zinc-900 transition-colors"
+                disabled={isResetting}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleResetPasswordDirectly}
+                disabled={isResetting || newAdminPassword.length < 6}
+                className="flex-1 py-4 bg-zinc-900 text-white rounded-2xl text-xs font-bold hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 disabled:opacity-50"
+              >
+                {isResetting ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+                ) : 'Aplicar Cambio Solicitado'}
+              </button>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-zinc-50">
+              <p className="text-[9px] text-zinc-400 text-center mb-3">¿Problemas con el servidor? Prueba la alternativa:</p>
+              <button 
+                onClick={async () => {
+                  if (!resetPasswordFor) return;
+                  try {
+                    await sendPasswordResetEmail(auth, resetPasswordFor.email);
+                    setMessage({ text: "Correo de recuperación enviado exitosamente a " + resetPasswordFor.email, type: 'success' });
+                    setResetPasswordFor(null);
+                  } catch (e: any) {
+                    setMessage({ text: "Error: " + e.message, type: 'error' });
+                  }
+                }}
+                className="w-full py-3 bg-brand-blue/5 text-brand-blue rounded-xl text-[10px] font-bold hover:bg-brand-blue/10 transition-all"
+              >
+                Enviar Correo de Recuperación
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {confirmDeleteUid && (
+        <motion.div 
+          key="admin-delete-confirm-modal"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+        >
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -3455,11 +4062,17 @@ const AdminUserManagement = () => {
                 </button>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
         {showForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowForm(false)} className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" />
+          <motion.div 
+            key="admin-edit-form-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div onClick={() => setShowForm(false)} className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
               <div className="p-8 border-b border-zinc-50">
                 <h3 className="text-xl font-bold text-zinc-900">{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h3>
@@ -3476,7 +4089,7 @@ const AdminUserManagement = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-700 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Email / Usuario</label>
+                    <label className="block text-sm font-medium text-zinc-700 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Usuario</label>
                     <input 
                       type="text"
                       value={formData.email}
@@ -3506,8 +4119,8 @@ const AdminUserManagement = () => {
                       className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
                     >
                       <option value="">Seleccionar Planta</option>
-                      {plants.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                      {plants.map((p, idx) => (
+                        <option key={`pl-opt-select-2-${p.id}-${idx}`} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>
@@ -3539,15 +4152,14 @@ const AdminUserManagement = () => {
                 </div>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
 };
 
-// --- Main App ---
-
+// --- Error Boundary ---
 export default function App() {
   const [activeTab, setActiveTab] = useState<'Home' | 'History' | 'Admin'>('Home');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -3618,7 +4230,27 @@ const AppLayout = ({
     const unsubNotify = onSnapshot(notifyQuery, (snapshot) => {
       setIsOffline(false);
       const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      const filtered = all.filter(n => !user.dismissedNotifications?.includes(n.id));
+      const filtered = all.filter(n => {
+        if (user.dismissedNotifications?.includes(n.id)) return false;
+        
+        // Admins see everything
+        if (user.role === 'Administrador') return true;
+        
+        // 1. Check if target role matches
+        const roleMatches = (n.targetRole === 'All' || n.targetRole === user.role);
+        if (!roleMatches) return false;
+
+        // 2. Strict Plant Filtering
+        // If it's a finding NOT belonging to the user's plant, reject it
+        if (n.type === 'Finding' || n.plantId) {
+          // If the user has no plant assigned, they shouldn't see plant-specific notifications
+          if (!user.plantId) return false;
+          return n.plantId === user.plantId;
+        }
+        
+        // Announcement type with no plantId is considered global
+        return true;
+      });
       setNotifications(filtered);
     }, (error) => {
       console.warn("Notification listener error:", error);
@@ -3737,7 +4369,7 @@ const AppLayout = ({
                   {user.role}
                 </p>
                 <p className="text-xs font-bold text-zinc-900 truncate">{user.name}</p>
-                <p className="text-[10px] text-zinc-400 truncate mt-1">{user.email}</p>
+                <p className="text-[10px] text-zinc-400 truncate mt-1">{user.email.replace('@chekify.local', '')}</p>
               </div>
               <button 
                 onClick={() => signOut(auth)}
