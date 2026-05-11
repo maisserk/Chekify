@@ -502,6 +502,7 @@ interface VOSOResponse {
   status: 'OK' | 'Observación' | 'Crítico' | 'NA';
   comment?: string;
   photoUrl?: string;
+  solvedByOperator?: boolean;
 }
 
 const VOSOExecutionCategory = ({ 
@@ -516,7 +517,7 @@ const VOSOExecutionCategory = ({
   icon: any, 
   items: VOSOItem[], 
   responses: Record<string, VOSOResponse>,
-  onUpdate: (id: string, status: any, comment?: string, photo?: string) => void,
+  onUpdate: (id: string, status: any, comment?: string, photo?: string, solved?: boolean) => void,
   colorClass: string
 }) => {
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
@@ -588,8 +589,26 @@ const VOSOExecutionCategory = ({
                     initial={{ height: 0, opacity: 0 }} 
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="space-y-3 pt-2 overflow-hidden"
+                    className="space-y-3 pt-2 overflow-hidden border-t border-zinc-100/50 mt-2"
                   >
+                    <div className="flex items-center justify-between bg-zinc-50/50 p-3 rounded-2xl border border-zinc-100/50">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-1.5 rounded-lg ${res?.solvedByOperator ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'}`}>
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-zinc-900 leading-none">Solucionado en sitio</p>
+                          <p className="text-[8px] text-zinc-400 mt-0.5">Acción correctiva inmediata</p>
+                        </div>
+                      </div>
+                      <button 
+                         onClick={() => onUpdate(item.id, res.status, res.comment, res.photoUrl, !res?.solvedByOperator)}
+                         className={`w-12 h-6 rounded-full transition-all relative ${res?.solvedByOperator ? 'bg-emerald-500' : 'bg-zinc-200'}`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${res?.solvedByOperator ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+
                     <textarea 
                       value={res?.comment || ''}
                       onChange={e => onUpdate(item.id, res.status, e.target.value)}
@@ -663,6 +682,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   const [checkItemStates, setCheckItemStates] = useState<Record<string, 'Bueno' | 'Regular' | 'Malo'>>({});
   const [vosoResponses, setVosoResponses] = useState<Record<string, VOSOResponse>>({});
   const [inspectionResults, setInspectionResults] = useState<Record<string, { trad: any, voso: any }>>({});
+  const [showEquipmentSummary, setShowEquipmentSummary] = useState(false);
   
   // Tracking inspection times
   const [inspectionStartTime, setInspectionStartTime] = useState<Date | null>(null);
@@ -686,14 +706,15 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
     setCheckItemStates(prev => ({ ...prev, [itemId]: state }));
   };
 
-  const handleSetVOSOResponse = (itemId: string, status: any, comment?: string, photo?: string) => {
+  const handleSetVOSOResponse = (itemId: string, status: any, comment?: string, photo?: string, solved?: boolean) => {
     setVosoResponses(prev => ({
       ...prev,
       [itemId]: {
         ...prev[itemId],
         status,
         comment: comment !== undefined ? comment : prev[itemId]?.comment,
-        photoUrl: photo !== undefined ? photo : prev[itemId]?.photoUrl
+        photoUrl: photo !== undefined ? photo : prev[itemId]?.photoUrl,
+        solvedByOperator: solved !== undefined ? solved : prev[itemId]?.solvedByOperator
       }
     }));
   };
@@ -1359,52 +1380,21 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="pt-4">
               <button
-                onClick={handleNextEquipment}
-                disabled={!allItemsChecked() || hasAnyDefect()}
-                className={`py-6 rounded-3xl font-bold flex flex-col items-center gap-2 transition-all border ${
-                  allItemsChecked() && !hasAnyDefect() 
-                    ? 'bg-brand-blue text-white shadow-lg shadow-sky-100 border-white/10 active:scale-95' 
-                    : 'bg-zinc-100 text-zinc-300 border-zinc-200 cursor-not-allowed grayscale'
+                onClick={() => setShowEquipmentSummary(true)}
+                disabled={!allItemsChecked()}
+                className={`w-full py-6 rounded-3xl font-bold flex items-center justify-center gap-3 transition-all border ${
+                  allItemsChecked() 
+                    ? 'bg-zinc-900 text-white shadow-xl shadow-zinc-200 active:scale-[0.98]' 
+                    : 'bg-zinc-100 text-zinc-300 border-zinc-200 grayscale cursor-not-allowed'
                 }`}
               >
-                <CheckCircle2 className={`w-6 h-6 ${allItemsChecked() && !hasAnyDefect() ? 'text-white' : 'text-zinc-300'}`} />
-                <span className="text-sm">Correcto</span>
-              </button>
-              <button
-                onClick={() => {
-                  if (hasAnyDefect()) {
-                    let defects = Object.entries(checkItemStates)
-                      .filter(([_, state]) => state !== 'Bueno')
-                      .map(([itemId, state]) => `${currentEquipment?.checkItems?.find(i => i.id === itemId)?.name}: ${state}`)
-                      .join(', ');
-                    
-                    const vosoDefects = (Object.entries(vosoResponses) as [string, VOSOResponse][])
-                      .filter(([_, resp]) => resp.status === 'Observación' || resp.status === 'Crítico')
-                      .map(([itemId, resp]) => {
-                        const voso = currentEquipment?.inspeccionVOSO;
-                        const allVOSO = [...(voso?.ver || []), ...(voso?.oir || []), ...(voso?.sentir || []), ...(voso?.oler || [])];
-                        const item = allVOSO.find(i => i.id === itemId);
-                        return `${item?.name} (${resp.status}): ${resp.comment || 'Sin comentario'}`;
-                      })
-                      .join(', ');
-                    
-                    if (vosoDefects) defects = defects ? `${defects}. VOSO: ${vosoDefects}` : `VOSO: ${vosoDefects}`;
-
-                    setFindingDescription(`Hallazgo en ${currentEquipment?.name}. Defectos: ${defects}. `);
-                  }
-                  setShowFindingForm(true);
-                }}
-                disabled={!allItemsChecked() && currentEquipment?.checkItems && currentEquipment.checkItems.length > 0}
-                className={`py-6 rounded-3xl font-bold flex flex-col items-center gap-2 transition-all border ${
-                  (allItemsChecked() && hasAnyDefect()) || (!currentEquipment?.checkItems || currentEquipment.checkItems.length === 0)
-                    ? 'bg-amber-500 text-white shadow-lg shadow-amber-100 border-amber-400 active:scale-95'
-                    : 'bg-zinc-100 text-zinc-400 border-zinc-200 hover:bg-zinc-200 active:scale-95'
-                }`}
-              >
-                <AlertCircle className={`w-6 h-6 ${allItemsChecked() && hasAnyDefect() ? 'text-white' : 'text-amber-500'}`} />
-                <span className="text-sm">Observación</span>
+                <CheckCircle2 className={`w-5 h-5 ${allItemsChecked() ? 'text-emerald-400' : 'text-zinc-300'}`} />
+                <span className="text-sm uppercase tracking-widest font-black">
+                  {currentEquipmentIndex < areaEquipment.length - 1 ? 'Siguiente Equipo' : 'Finalizar Inspección'}
+                </span>
+                <ChevronRight className={`w-5 h-5 transition-transform ${allItemsChecked() ? 'translate-x-1' : ''}`} />
               </button>
             </div>
 
@@ -1589,6 +1579,151 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           )}
         </motion.div>
       )}
+
+      <AnimatePresence>
+        {showEquipmentSummary && currentEquipment && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setShowEquipmentSummary(false)} 
+              className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ y: "100%" }} 
+              animate={{ y: 0 }} 
+              exit={{ y: "100%" }} 
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="relative w-full max-w-lg bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            >
+              <div className="p-8 border-b border-zinc-50 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-zinc-900">Resumen de Inspección</h3>
+                  <p className="text-sm text-zinc-500">{currentEquipment.name}</p>
+                </div>
+                <button onClick={() => setShowEquipmentSummary(false)} className="p-2 bg-zinc-50 rounded-full">
+                  <X className="w-5 h-5 text-zinc-400" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-8 pt-4 custom-scrollbar">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-emerald-50 p-4 rounded-3xl border border-emerald-100 flex items-center gap-3">
+                      <div className="p-2 bg-white rounded-xl shadow-sm text-emerald-500">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Normal</p>
+                        <h4 className="text-xl font-black text-emerald-700">
+                          {(Object.values(vosoResponses) as VOSOResponse[]).filter(r => r.status === 'OK' || r.status === 'NA').length + 
+                           Object.values(checkItemStates).filter(s => s === 'Bueno').length}
+                        </h4>
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 p-4 rounded-3xl border border-amber-100 flex items-center gap-3">
+                      <div className="p-2 bg-white rounded-xl shadow-sm text-amber-500">
+                         <AlertTriangle className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Hallazgos</p>
+                        <h4 className="text-xl font-black text-amber-700">
+                           {(Object.values(vosoResponses) as VOSOResponse[]).filter(r => r.status === 'Observación' || r.status === 'Crítico').length + 
+                            Object.values(checkItemStates).filter(s => s !== 'Bueno').length}
+                        </h4>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                     <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Detalle de Hallazgos</h4>
+                     
+                     {(Object.entries(vosoResponses) as [string, VOSOResponse][])
+                       .filter(([_, r]) => r.status === 'Observación' || r.status === 'Crítico')
+                       .map(([id, r]) => {
+                         const voso = currentEquipment?.inspeccionVOSO;
+                         const item = [...(voso?.ver || []), ...(voso?.oir || []), ...(voso?.sentir || []), ...(voso?.oler || [])].find(i => i.id === id);
+                         return (
+                           <div key={`sum-voso-${id}`} className="bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 flex items-start gap-4">
+                             <div className={`p-2 rounded-xl text-white ${r.status === 'Crítico' ? 'bg-red-500' : 'bg-amber-500'}`}>
+                               {r.status === 'Crítico' ? <AlertCircle className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                             </div>
+                             <div className="flex-1 min-w-0">
+                               <p className="text-sm font-bold text-zinc-900 truncate">{item?.name}</p>
+                               <div className="flex items-center gap-2 mt-0.5">
+                                 <span className={`text-[8px] font-bold uppercase px-1 rounded ${r.status === 'Crítico' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-600'}`}>
+                                   {r.status}
+                                 </span>
+                                 <p className="text-[10px] text-zinc-500 truncate">{r.comment || 'Sin observación escrita'}</p>
+                               </div>
+                               {r.solvedByOperator && (
+                                 <div className="flex items-center gap-1.5 mt-2 text-emerald-600 bg-emerald-50 w-fit px-2 py-0.5 rounded-full">
+                                   <ShieldCheck className="w-3 h-3" />
+                                   <span className="text-[9px] font-bold uppercase tracking-wider">Solucionado en sitio</span>
+                                 </div>
+                               )}
+                             </div>
+                             {r.photoUrl && (
+                               <div className="w-10 h-10 rounded-lg overflow-hidden border border-white shadow-sm flex-shrink-0">
+                                 <img src={r.photoUrl} className="w-full h-full object-cover" />
+                               </div>
+                             )}
+                           </div>
+                         );
+                       })
+                     }
+
+                     {Object.entries(checkItemStates)
+                       .filter(([_, s]) => s !== 'Bueno')
+                       .map(([id, s]) => {
+                         const item = currentEquipment.checkItems?.find(i => i.id === id);
+                         return (
+                           <div key={`sum-trad-${id}`} className="bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 flex items-start gap-4">
+                             <div className={`p-2 rounded-xl text-white ${s === 'Malo' ? 'bg-red-500' : 'bg-amber-500'}`}>
+                                <AlertTriangle className="w-4 h-4" />
+                             </div>
+                             <div className="flex-1">
+                               <p className="text-sm font-bold text-zinc-900">{item?.name}</p>
+                               <p className="text-[10px] text-zinc-500 mt-0.5 uppercase font-bold tracking-widest">{s}</p>
+                             </div>
+                           </div>
+                         );
+                       })
+                     }
+
+                     {((Object.values(vosoResponses) as VOSOResponse[]).every(r => r.status === 'OK' || r.status === 'NA') && 
+                      Object.values(checkItemStates).every(s => s === 'Bueno')) && (
+                       <div className="py-12 text-center bg-zinc-50 rounded-[2.5rem] border border-dashed border-zinc-200">
+                         <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                           <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                         </div>
+                         <p className="text-sm font-bold text-zinc-900">Sin hallazgos reportados</p>
+                         <p className="text-xs text-zinc-400 mt-1">Todo se encuentra en orden en este equipo.</p>
+                       </div>
+                     )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-8 border-t border-zinc-50 bg-zinc-50/50">
+                <button 
+                  onClick={() => {
+                    setShowEquipmentSummary(false);
+                    handleNextEquipment();
+                  }}
+                  className="w-full py-4 bg-zinc-900 text-white rounded-2xl font-bold shadow-lg shadow-zinc-200 active:scale-95 transition-all flex items-center justify-center gap-3"
+                >
+                  <span className="uppercase tracking-widest">
+                    {currentEquipmentIndex < areaEquipment.length - 1 ? 'Siguiente Equipo' : 'Finalizar y Guardar'}
+                  </span>
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
