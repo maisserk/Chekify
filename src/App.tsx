@@ -112,8 +112,8 @@ const compressImage = (base64Str: string): Promise<string> => {
     img.src = base64Str;
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 1000;
-      const MAX_HEIGHT = 1000;
+      const MAX_WIDTH = 800; // Reduced slightly for better optimization
+      const MAX_HEIGHT = 800;
       let width = img.width;
       let height = img.height;
 
@@ -133,8 +133,10 @@ const compressImage = (base64Str: string): Promise<string> => {
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       ctx?.drawImage(img, 0, 0, width, height);
-      // Using quality factor to ensure it stays well under 1MB
-      resolve(canvas.toDataURL('image/jpeg', 0.7));
+      
+      // Use webp for better compression if supported
+      // Fallback to jpeg 0.7 if webp is not supported (handled by toDataURL internally)
+      resolve(canvas.toDataURL('image/webp', 0.6)); // 0.6 quality for webp is usually excellent and very small
     };
     img.onerror = () => {
       resolve(base64Str); // Return original if compression fails
@@ -581,16 +583,37 @@ const VOSOExecutionCategory = ({
                       value={res?.comment || ''}
                       onChange={e => onUpdate(item.id, res.status, e.target.value)}
                       placeholder="Escribe el detalle del hallazgo..."
-                      className="w-full p-3 bg-white/80 border border-white rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[80px] font-medium text-zinc-700"
+                      className="w-full p-3 bg-white/80 border border-zinc-200 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[80px] font-medium text-zinc-700 shadow-sm"
                     />
                     
                     <div className="flex items-center gap-3">
-                      <button className="flex-1 py-3 bg-zinc-900 text-white rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        capture="environment" 
+                        className="hidden" 
+                        id={`photo-${item.id}`}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = async () => {
+                              const compressed = await compressImage(reader.result as string);
+                              onUpdate(item.id, res.status, res.comment, compressed);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      <button 
+                        onClick={() => document.getElementById(`photo-${item.id}`)?.click()}
+                        className="flex-1 py-3 bg-zinc-900 text-white rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-zinc-200"
+                      >
                         <Camera className="w-4 h-4" />
                         CAPTURAR EVIDENCIA
                       </button>
                       {res?.photoUrl && (
-                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 border-2 border-white shadow-sm">
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 border-2 border-white shadow-sm flex-shrink-0">
                           <img src={res.photoUrl} className="w-full h-full object-cover" />
                         </div>
                       )}
