@@ -64,8 +64,45 @@ import {
   ShieldAlert,
   Filter,
   BarChart3,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Eye,
+  Ear,
+  Hand,
+  Wind,
+  Settings2,
+  ArrowLeft,
+  ShieldCheck,
+  ListChecks
 } from 'lucide-react';
+
+const DEFAULT_VOSO: VOSOInspection = {
+  ver: [
+    { id: 'v1', name: 'Fugas', type: 'Crítico' },
+    { id: 'v2', name: 'Pernos sueltos', type: 'Mantenimiento' },
+    { id: 'v3', name: 'Desgaste', type: 'Mantenimiento' },
+    { id: 'v4', name: 'Vibración visible', type: 'Crítico' },
+    { id: 'v5', name: 'Temperatura visual anormal', type: 'Crítico' }
+  ],
+  oir: [
+    { id: 'o1', name: 'Ruidos metálicos', type: 'Crítico' },
+    { id: 'o2', name: 'Golpeteos', type: 'Operacional' },
+    { id: 'o3', name: 'Chillidos', type: 'Mantenimiento' },
+    { id: 'o4', name: 'Cavitación', type: 'Crítico' },
+    { id: 'o5', name: 'Sonido irregular', type: 'Operacional' }
+  ],
+  sentir: [
+    { id: 's1', name: 'Vibración excesiva', type: 'Mantenimiento' },
+    { id: 's2', name: 'Temperatura elevada', type: 'Seguridad' },
+    { id: 's3', name: 'Holguras', type: 'Mantenimiento' },
+    { id: 's4', name: 'Fricción anormal', type: 'Mantenimiento' }
+  ],
+  oler: [
+    { id: 'ol1', name: 'Olor a quemado', type: 'Crítico' },
+    { id: 'ol2', name: 'Olor químico', type: 'Seguridad' },
+    { id: 'ol3', name: 'Olor a aceite', type: 'Mantenimiento' },
+    { id: 'ol4', name: 'Olor eléctrico', type: 'Crítico' }
+  ]
+};
 import { motion, AnimatePresence } from 'motion/react';
 
 // Utility to compress images before saving to Firestore
@@ -143,6 +180,21 @@ interface Area {
   qrCode: string;
 }
 
+type VOSOPreference = 'Crítico' | 'Operacional' | 'Seguridad' | 'Mantenimiento';
+
+interface VOSOItem {
+  id: string;
+  name: string;
+  type: VOSOPreference;
+}
+
+interface VOSOInspection {
+  ver: VOSOItem[];
+  oir: VOSOItem[];
+  sentir: VOSOItem[];
+  oler: VOSOItem[];
+}
+
 interface Equipment {
   id: string;
   plantId: string;
@@ -151,6 +203,7 @@ interface Equipment {
   qrCode?: string;
   inspectionOrder: number;
   checkItems?: { id: string; name: string }[];
+  inspeccionVOSO?: VOSOInspection;
 }
 
 interface HistoryEntry {
@@ -432,6 +485,127 @@ const AuthWrapper = ({ children }: { children: (user: AppUser) => React.ReactNod
   return <>{children(user)}</>;
 };
 
+interface VOSOResponse {
+  status: 'OK' | 'Observación' | 'Crítico' | 'NA';
+  comment?: string;
+  photoUrl?: string;
+}
+
+const VOSOExecutionCategory = ({ 
+  title, 
+  icon: Icon, 
+  items, 
+  responses, 
+  onUpdate,
+  colorClass 
+}: { 
+  title: string, 
+  icon: any, 
+  items: VOSOItem[], 
+  responses: Record<string, VOSOResponse>,
+  onUpdate: (id: string, status: any, comment?: string, photo?: string) => void,
+  colorClass: string
+}) => {
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className={`p-6 rounded-[2.5rem] border border-zinc-100 ${colorClass} space-y-4 shadow-sm`}>
+       <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-white rounded-xl shadow-sm">
+            <Icon className="w-5 h-5 text-zinc-600" />
+          </div>
+          <h4 className="font-bold text-zinc-900">{title}</h4>
+        </div>
+        <span className="text-[8px] font-black text-zinc-300 uppercase tracking-[0.2em]">{items.length} ítems</span>
+      </div>
+
+      <div className="space-y-4">
+        {items.map((item) => {
+          const res = responses[item.id];
+          const hasIssue = res?.status === 'Observación' || res?.status === 'Crítico';
+          
+          return (
+            <div key={item.id} className="bg-white/60 backdrop-blur-sm p-4 rounded-3xl border border-white/40 space-y-4 transition-all">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-zinc-800 leading-tight">{item.name}</p>
+                  <div className="flex gap-2 mt-1">
+                    <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded tracking-widest ${
+                      item.type === 'Crítico' ? 'bg-red-50 text-red-500' :
+                      item.type === 'Seguridad' ? 'bg-amber-50 text-amber-600' :
+                      item.type === 'Mantenimiento' ? 'bg-brand-blue/5 text-brand-blue' :
+                      'bg-zinc-100 text-zinc-400'
+                    }`}>
+                      {item.type}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { label: 'OK', value: 'OK', selectedClasses: 'bg-emerald-500 text-white border-emerald-600 shadow-lg shadow-emerald-200' },
+                  { label: 'Obs.', value: 'Observación', selectedClasses: 'bg-amber-500 text-white border-amber-600 shadow-lg shadow-amber-200' },
+                  { label: 'Crit.', value: 'Crítico', selectedClasses: 'bg-red-500 text-white border-red-600 shadow-lg shadow-red-200' },
+                  { label: 'N/A', value: 'NA', selectedClasses: 'bg-zinc-600 text-white border-zinc-700 shadow-lg shadow-zinc-200' }
+                ].map((opt) => {
+                  const isSelected = res?.status === opt.value;
+                  return (
+                    <button
+                      key={opt.label}
+                      onClick={() => onUpdate(item.id, opt.value as any)}
+                      className={`py-3 px-1 rounded-xl text-[9px] font-bold uppercase transition-all border ${
+                        isSelected 
+                          ? `${opt.selectedClasses} scale-[1.05] z-10`
+                          : 'bg-white text-zinc-400 border-zinc-100 hover:border-zinc-200 shadow-sm active:scale-95'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <AnimatePresence>
+                {hasIssue && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }} 
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="space-y-3 pt-2 overflow-hidden"
+                  >
+                    <textarea 
+                      value={res?.comment || ''}
+                      onChange={e => onUpdate(item.id, res.status, e.target.value)}
+                      placeholder="Escribe el detalle del hallazgo..."
+                      className="w-full p-3 bg-white/80 border border-white rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[80px] font-medium text-zinc-700"
+                    />
+                    
+                    <div className="flex items-center gap-3">
+                      <button className="flex-1 py-3 bg-zinc-900 text-white rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+                        <Camera className="w-4 h-4" />
+                        CAPTURAR EVIDENCIA
+                      </button>
+                      {res?.photoUrl && (
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 border-2 border-white shadow-sm">
+                          <img src={res.photoUrl} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // --- Operator View ---
 
 const OperatorDashboard = ({ user }: { user: AppUser }) => {
@@ -453,26 +627,62 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   const [duplicateFinding, setDuplicateFinding] = useState<Finding | null>(null);
   
   const [checkItemStates, setCheckItemStates] = useState<Record<string, 'Bueno' | 'Regular' | 'Malo'>>({});
+  const [vosoResponses, setVosoResponses] = useState<Record<string, VOSOResponse>>({});
+  const [inspectionResults, setInspectionResults] = useState<Record<string, { trad: any, voso: any }>>({});
   
   // Tracking inspection times
   const [inspectionStartTime, setInspectionStartTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    // Reset check item states when equipment changes
+    // Save current results to the list before resetting for next equipment
+    if (currentEquipment) {
+      setInspectionResults(prev => ({
+        ...prev,
+        [currentEquipment.id]: {
+          trad: { ...checkItemStates },
+          voso: { ...vosoResponses }
+        }
+      }));
+    }
     setCheckItemStates({});
+    setVosoResponses({});
   }, [currentEquipmentIndex, selectedArea]);
 
   const handleSetItemState = (itemId: string, state: 'Bueno' | 'Regular' | 'Malo') => {
     setCheckItemStates(prev => ({ ...prev, [itemId]: state }));
   };
 
+  const handleSetVOSOResponse = (itemId: string, status: any, comment?: string, photo?: string) => {
+    setVosoResponses(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        status,
+        comment: comment !== undefined ? comment : prev[itemId]?.comment,
+        photoUrl: photo !== undefined ? photo : prev[itemId]?.photoUrl
+      }
+    }));
+  };
+
   const allItemsChecked = () => {
-    if (!currentEquipment?.checkItems || currentEquipment.checkItems.length === 0) return true;
-    return currentEquipment.checkItems.every(item => checkItemStates[item.id]);
+    const tradChecked = !currentEquipment?.checkItems || currentEquipment.checkItems.length === 0 || 
+                        currentEquipment.checkItems.every(item => checkItemStates[item.id]);
+    
+    const voso = currentEquipment?.inspeccionVOSO;
+    const vosoChecked = !voso || [
+      ...(voso.ver || []), 
+      ...(voso.oir || []), 
+      ...(voso.sentir || []), 
+      ...(voso.oler || [])
+    ].every(item => vosoResponses[item.id]?.status);
+
+    return tradChecked && vosoChecked;
   };
 
   const hasAnyDefect = () => {
-    return Object.values(checkItemStates).some(state => state === 'Regular' || state === 'Malo');
+    const tradDefect = Object.values(checkItemStates).some(state => state === 'Regular' || state === 'Malo');
+    const vosoDefect = (Object.values(vosoResponses) as VOSOResponse[]).some(resp => resp.status === 'Observación' || resp.status === 'Crítico');
+    return tradDefect || vosoDefect;
   };
   const scannerRef = useRef<Html5Qrcode | null>(null);
   
@@ -674,6 +884,15 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
     if (currentEquipmentIndex < areaEquipment.length - 1) {
       setCurrentEquipmentIndex(currentEquipmentIndex + 1);
     } else {
+      // Final capture for the last equipment
+      const finalResults = {
+        ...inspectionResults,
+        [currentEquipment.id]: {
+          trad: { ...checkItemStates },
+          voso: { ...vosoResponses }
+        }
+      };
+
       // Finished all equipment
       addDoc(collection(db, 'inspections'), {
         areaId: selectedArea!.id,
@@ -682,11 +901,13 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         timestamp: serverTimestamp(),
         startedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
         completedAt: serverTimestamp(),
-        status: 'Completed'
+        status: 'Completed',
+        results: finalResults
       });
       setSelectedArea(null);
       setInspectionStartTime(null);
       setCurrentEquipmentIndex(0);
+      setInspectionResults({});
       setMessage({ text: "Inspección de área finalizada correctamente", type: 'success' });
     }
   };
@@ -1028,6 +1249,52 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               </div>
             )}
 
+            {areaEquipment.length > 0 && currentEquipment?.inspeccionVOSO && (
+              <div className="space-y-6 py-2 border-t border-zinc-50 mt-4">
+                <div className="flex items-center justify-between px-1">
+                  <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Inspección Primaria VOSO</h4>
+                  <div className="flex gap-1">
+                    {[Eye, Ear, Hand, Wind].map((Ico, i) => <Ico key={`mini-voso-${i}`} className="w-3 h-3 text-zinc-300" />)}
+                  </div>
+                </div>
+                
+                <div className="space-y-6">
+                  <VOSOExecutionCategory 
+                    title="👁 Ver" 
+                    icon={Eye} 
+                    items={currentEquipment.inspeccionVOSO.ver || []} 
+                    responses={vosoResponses}
+                    colorClass="bg-sky-50/30"
+                    onUpdate={handleSetVOSOResponse}
+                  />
+                  <VOSOExecutionCategory 
+                    title="👂 Oír" 
+                    icon={Ear} 
+                    items={currentEquipment.inspeccionVOSO.oir || []} 
+                    responses={vosoResponses}
+                    colorClass="bg-indigo-50/30"
+                    onUpdate={handleSetVOSOResponse}
+                  />
+                  <VOSOExecutionCategory 
+                    title="✋ Sentir" 
+                    icon={Hand} 
+                    items={currentEquipment.inspeccionVOSO.sentir || []} 
+                    responses={vosoResponses}
+                    colorClass="bg-emerald-50/30"
+                    onUpdate={handleSetVOSOResponse}
+                  />
+                  <VOSOExecutionCategory 
+                    title="👃 Oler" 
+                    icon={Wind} 
+                    items={currentEquipment.inspeccionVOSO.oler || []} 
+                    responses={vosoResponses}
+                    colorClass="bg-orange-50/30"
+                    onUpdate={handleSetVOSOResponse}
+                  />
+                </div>
+              </div>
+            )}
+
             {areaEquipment.length > 0 && currentEquipment?.checkItems && currentEquipment.checkItems.length > 0 && (
               <div className="space-y-4 py-2">
                 <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Puntos de Revisión</h4>
@@ -1074,11 +1341,24 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               <button
                 onClick={() => {
                   if (hasAnyDefect()) {
-                    const defects = Object.entries(checkItemStates)
+                    let defects = Object.entries(checkItemStates)
                       .filter(([_, state]) => state !== 'Bueno')
                       .map(([itemId, state]) => `${currentEquipment?.checkItems?.find(i => i.id === itemId)?.name}: ${state}`)
                       .join(', ');
-                    setFindingDescription(`Hallazgo en ${currentEquipment?.name}. Defectos detectados: ${defects}. `);
+                    
+                    const vosoDefects = (Object.entries(vosoResponses) as [string, VOSOResponse][])
+                      .filter(([_, resp]) => resp.status === 'Observación' || resp.status === 'Crítico')
+                      .map(([itemId, resp]) => {
+                        const voso = currentEquipment?.inspeccionVOSO;
+                        const allVOSO = [...(voso?.ver || []), ...(voso?.oir || []), ...(voso?.sentir || []), ...(voso?.oler || [])];
+                        const item = allVOSO.find(i => i.id === itemId);
+                        return `${item?.name} (${resp.status}): ${resp.comment || 'Sin comentario'}`;
+                      })
+                      .join(', ');
+                    
+                    if (vosoDefects) defects = defects ? `${defects}. VOSO: ${vosoDefects}` : `VOSO: ${vosoDefects}`;
+
+                    setFindingDescription(`Hallazgo en ${currentEquipment?.name}. Defectos: ${defects}. `);
                   }
                   setShowFindingForm(true);
                 }}
@@ -2970,7 +3250,8 @@ const BulkUpload = ({
                 areaId,
                 inspectionOrder: parseInt(item.orden || "0"),
                 checkItems,
-                qrCode: item.tag || item.etiqueta_tag || id.toUpperCase()
+                qrCode: item.tag || item.etiqueta_tag || id.toUpperCase(),
+                inspeccionVOSO: DEFAULT_VOSO
               });
               count++;
             }
@@ -3407,13 +3688,115 @@ const AdminAreaManagement = () => {
   );
 };
 
+const VOSOEditorCategory = ({ 
+  title, 
+  icon: Icon, 
+  items, 
+  onUpdate, 
+  colorClass 
+}: { 
+  title: string, 
+  icon: any, 
+  items: VOSOItem[], 
+  onUpdate: (items: VOSOItem[]) => void,
+  colorClass: string
+}) => {
+  const [newItemName, setNewItemName] = useState('');
+  
+  const addItem = () => {
+    if (!newItemName) return;
+    const newItem: VOSOItem = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: newItemName,
+      type: 'Operacional'
+    };
+    onUpdate([...items, newItem]);
+    setNewItemName('');
+  };
+
+  const removeItem = (id: string) => {
+    onUpdate(items.filter(i => i.id !== id));
+  };
+
+  const updateItemType = (id: string, type: VOSOPreference) => {
+    onUpdate(items.map(i => i.id === id ? { ...i, type } : i));
+  };
+
+  const updateItemName = (id: string, name: string) => {
+    onUpdate(items.map(i => i.id === id ? { ...i, name } : i));
+  };
+
+  return (
+    <div className={`p-6 rounded-[2rem] border border-zinc-100 ${colorClass} space-y-4`}>
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-white rounded-xl shadow-sm">
+          <Icon className="w-5 h-5 text-zinc-600" />
+        </div>
+        <h4 className="font-bold text-zinc-900">{title}</h4>
+      </div>
+
+      <div className="space-y-2">
+        {items.map((item, idx) => (
+          <div key={item.id} className="bg-white/60 backdrop-blur-sm p-3 rounded-2xl border border-white/40 flex flex-col gap-2 group">
+            <div className="flex items-center gap-2">
+              <input 
+                value={item.name} 
+                onChange={e => updateItemName(item.id, e.target.value)}
+                className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-zinc-800 focus:ring-0" 
+              />
+              <button onClick={() => removeItem(item.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
+              {['Crítico', 'Operacional', 'Seguridad', 'Mantenimiento'].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => updateItemType(item.id, t as VOSOPreference)}
+                  className={`text-[8px] font-bold uppercase px-2 py-1 rounded-full whitespace-nowrap transition-all ${
+                    item.type === t 
+                      ? 'bg-zinc-900 text-white' 
+                      : 'bg-white text-zinc-400 hover:bg-zinc-100'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <input 
+          value={newItemName} 
+          onChange={e => setNewItemName(e.target.value)}
+          placeholder={`Agregar a ${title.toLowerCase()}...`}
+          className="flex-1 p-3 bg-white/80 border border-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+          onKeyPress={e => e.key === 'Enter' && addItem()}
+        />
+        <button onClick={addItem} className="p-3 bg-zinc-900 text-white rounded-xl active:scale-95 transition-all">
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const AdminEquipmentManagement = () => {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [plants, setPlants] = useState<{id: string, name: string}[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingEquip, setEditingEquip] = useState<any | null>(null);
-  const [formData, setFormData] = useState({ name: '', areaId: '', plantId: '', inspectionOrder: 0, checkItems: [] as { id: string; name: string }[] });
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    areaId: '', 
+    plantId: '', 
+    inspectionOrder: 0, 
+    checkItems: [] as { id: string; name: string }[],
+    inspeccionVOSO: DEFAULT_VOSO
+  });
   const [newCheckItemName, setNewCheckItemName] = useState('');
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>('All');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -3433,18 +3816,22 @@ const AdminEquipmentManagement = () => {
   }, []);
 
   const handleSave = async () => {
-    if (!formData.name || !formData.areaId || !formData.plantId) return;
+    if (!formData.name || !formData.areaId || !formData.plantId) {
+      setMessage({ text: "Completa los campos obligatorios (Nombre, Planta y Área)", type: 'error' });
+      return;
+    }
     try {
       const id = editingEquip ? editingEquip.id : formData.name.toLowerCase().replace(/\s+/g, '-');
       await setDoc(doc(db, 'equipment', id), { 
         ...formData, 
         id, 
         inspectionOrder: Number(formData.inspectionOrder) || 0,
-        checkItems: formData.checkItems || []
+        checkItems: formData.checkItems || [],
+        inspeccionVOSO: formData.inspeccionVOSO || DEFAULT_VOSO
       });
       setShowForm(false);
       setEditingEquip(null);
-      setFormData({ name: '', areaId: '', plantId: '', inspectionOrder: 0, checkItems: [] });
+      setFormData({ name: '', areaId: '', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO });
       setNewCheckItemName('');
       setMessage({ text: "Equipo guardado correctamente", type: 'success' });
     } catch (err: any) {
@@ -3463,6 +3850,239 @@ const AdminEquipmentManagement = () => {
     }
   };
 
+  if (showForm) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }} 
+        animate={{ opacity: 1, x: 0 }} 
+        className="fixed inset-0 z-[100] bg-zinc-50 flex flex-col h-screen overflow-hidden"
+      >
+        <div className="bg-white border-b border-zinc-100 p-4 sm:px-8 sm:py-6 flex items-center justify-between shadow-sm sticky top-0 z-10">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setShowForm(false)} 
+              className="p-2 hover:bg-zinc-100 rounded-xl transition-colors text-zinc-500"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h3 className="text-xl font-bold text-zinc-900 leading-tight">
+                {editingEquip ? 'Editar Equipo Industrial' : 'Configurar Nuevo Equipo'}
+              </h3>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Administración de Activos</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setShowForm(false)} 
+              className="hidden sm:block px-6 py-2.5 bg-zinc-100 text-zinc-600 rounded-xl font-bold text-sm hover:bg-zinc-200 transition-all"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={handleSave} 
+              className="px-8 py-2.5 bg-brand-blue text-white rounded-xl font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-sky-200"
+            >
+              {editingEquip ? 'Actualizar' : 'Guardar Equipo'}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar pb-24">
+          <div className="max-w-4xl mx-auto space-y-8">
+            {/* General Info Card */}
+            <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm space-y-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-brand-blue/5 rounded-xl">
+                  <Settings2 className="w-5 h-5 text-brand-blue" />
+                </div>
+                <h4 className="font-bold text-zinc-900">Información General</h4>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Nombre del Equipo</label>
+                  <input 
+                    value={formData.name} 
+                    onChange={e => setFormData({...formData, name: e.target.value})} 
+                    placeholder="Ej: Motor Principal 45KW" 
+                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Orden de Inspección</label>
+                  <input 
+                    type="number"
+                    value={formData.inspectionOrder} 
+                    onChange={e => setFormData({...formData, inspectionOrder: parseInt(e.target.value) || 0})} 
+                    placeholder="Ej: 1" 
+                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Planta</label>
+                  <select 
+                    value={formData.plantId} 
+                    onChange={e => setFormData({...formData, plantId: e.target.value, areaId: ''})} 
+                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
+                  >
+                    <option value="">Seleccionar Planta</option>
+                    {plants.map((p, idx) => <option key={`pl-opt-3-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Área</label>
+                  <select 
+                    value={formData.areaId} 
+                    onChange={e => setFormData({...formData, areaId: e.target.value})} 
+                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                    disabled={!formData.plantId}
+                  >
+                    <option value="">{formData.plantId ? 'Seleccionar Área' : 'Primero selecciona una Planta'}</option>
+                    {areas.filter(a => a.plantId === formData.plantId).map((a, aIdx) => <option key={`ar-opt-${a.id}-${aIdx}`} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* VOSO Methodology Card */}
+            <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-sky-50 rounded-xl">
+                    <ShieldCheck className="w-5 h-5 text-brand-blue" />
+                  </div>
+                  <h4 className="font-bold text-zinc-900">Configuración VOSO (Inspección Primaria)</h4>
+                </div>
+                <span className="text-[10px] bg-sky-50 text-brand-blue px-3 py-1 rounded-full font-bold uppercase tracking-wider">Estándar Klist</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <VOSOEditorCategory 
+                  title="Ver" 
+                  icon={Eye} 
+                  items={formData.inspeccionVOSO.ver} 
+                  colorClass="bg-sky-50/50"
+                  onUpdate={(ver) => setFormData({...formData, inspeccionVOSO: {...formData.inspeccionVOSO, ver}})}
+                />
+                <VOSOEditorCategory 
+                  title="Oír" 
+                  icon={Ear} 
+                  items={formData.inspeccionVOSO.oir} 
+                  colorClass="bg-indigo-50/50"
+                  onUpdate={(oir) => setFormData({...formData, inspeccionVOSO: {...formData.inspeccionVOSO, oir}})}
+                />
+                <VOSOEditorCategory 
+                  title="Sentir" 
+                  icon={Hand} 
+                  items={formData.inspeccionVOSO.sentir} 
+                  colorClass="bg-emerald-50/50"
+                  onUpdate={(sentir) => setFormData({...formData, inspeccionVOSO: {...formData.inspeccionVOSO, sentir}})}
+                />
+                <VOSOEditorCategory 
+                  title="Oler" 
+                  icon={Wind} 
+                  items={formData.inspeccionVOSO.oler} 
+                  colorClass="bg-orange-50/50"
+                  onUpdate={(oler) => setFormData({...formData, inspeccionVOSO: {...formData.inspeccionVOSO, oler}})}
+                />
+              </div>
+            </div>
+
+            {/* CheckItems Card */}
+            <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-zinc-50 rounded-xl">
+                  <ListChecks className="w-5 h-5 text-zinc-600" />
+                </div>
+                <h4 className="font-bold text-zinc-900">Otros Puntos de Revisión</h4>
+              </div>
+
+              <div className="space-y-3">
+                {formData.checkItems.map((item, idx) => (
+                  <div key={`edit-item-${item.id}-${idx}`} className="flex items-center gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 group transition-all">
+                    <div className="w-8 h-8 rounded-xl bg-white border border-zinc-100 flex items-center justify-center text-[10px] font-bold text-zinc-400">
+                      {idx + 1}
+                    </div>
+                    <input 
+                      value={item.name} 
+                      onChange={e => {
+                        const newItems = [...formData.checkItems];
+                        newItems[idx].name = e.target.value;
+                        setFormData({...formData, checkItems: newItems});
+                      }}
+                      className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-zinc-900 focus:ring-0" 
+                    />
+                    <button 
+                      onClick={() => {
+                        const newItems = formData.checkItems.filter(i => i.id !== item.id);
+                        setFormData({...formData, checkItems: newItems});
+                      }}
+                      className="p-2 text-red-100 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <input 
+                  value={newCheckItemName} 
+                  onChange={e => setNewCheckItemName(e.target.value)} 
+                  placeholder="Agregar nuevo punto de revisión (ej: Nivel de aceite)"
+                  onKeyPress={e => {
+                    if (e.key === 'Enter' && newCheckItemName) {
+                      e.preventDefault();
+                      setFormData({
+                        ...formData, 
+                        checkItems: [...formData.checkItems, { id: Math.random().toString(36).substr(2, 9), name: newCheckItemName }]
+                      });
+                      setNewCheckItemName('');
+                    }
+                  }}
+                  className="flex-1 p-4 bg-zinc-100 border border-zinc-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                />
+                <button 
+                  onClick={() => {
+                    if (newCheckItemName) {
+                      setFormData({
+                        ...formData, 
+                        checkItems: [...formData.checkItems, { id: Math.random().toString(36).substr(2, 9), name: newCheckItemName }]
+                      });
+                      setNewCheckItemName('');
+                    }
+                  }}
+                  type="button"
+                  className="px-6 bg-zinc-900 text-white rounded-2xl shadow-xl active:scale-95 transition-all outline-none"
+                >
+                  <Plus className="w-5 h-5 transition-transform group-active:scale-90" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {message && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+              className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[110] px-6 py-4 rounded-[2rem] shadow-2xl border text-sm font-bold flex items-center gap-3 ${
+                message.type === 'success' ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-red-500 border-red-400 text-white'
+              }`}
+            >
+              {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5" />}
+              {message.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -3476,7 +4096,11 @@ const AdminEquipmentManagement = () => {
             <option value="All">Todas las Plantas</option>
             {plants.map((p, idx) => <option key={`pl-opt-select-1-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
           </select>
-          <button onClick={() => { setEditingEquip(null); setFormData({name:'', areaId:'', plantId: '', inspectionOrder: 0, checkItems: []}); setShowForm(true); }} className="p-2 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100">
+          <button onClick={() => { 
+            setEditingEquip(null); 
+            setFormData({name:'', areaId:'', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO}); 
+            setShowForm(true); 
+          }} className="p-2 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100">
             <Plus className="w-4 h-4" />
           </button>
         </div>
@@ -3521,7 +4145,8 @@ const AdminEquipmentManagement = () => {
                   areaId: e.areaId, 
                   plantId: e.plantId || '', 
                   inspectionOrder: e.inspectionOrder || 0,
-                  checkItems: e.checkItems || []
+                  checkItems: e.checkItems || [],
+                  inspeccionVOSO: e.inspeccionVOSO || DEFAULT_VOSO
                 }); 
                 setShowForm(true); 
               }} className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors">
@@ -3569,124 +4194,6 @@ const AdminEquipmentManagement = () => {
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-3 rounded-2xl bg-zinc-100 text-zinc-600 font-bold text-sm hover:bg-zinc-200 transition-all">Cancelar</button>
                 <button onClick={() => handleDelete(confirmDeleteId)} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200">Eliminar</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-        {showForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowForm(false)} className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-              <div className="p-8 border-b border-zinc-50">
-                <h3 className="text-xl font-bold text-zinc-900">{editingEquip ? 'Editar Equipo' : 'Nuevo Equipo'}</h3>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto p-8 pt-4 custom-scrollbar">
-                <div className="space-y-6">
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Nombre del Equipo</label>
-                    <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Ej: Motor Principal" className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" />
-                  </div>
-                  
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Planta</label>
-                    <select value={formData.plantId} onChange={e => setFormData({...formData, plantId: e.target.value, areaId: ''})} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue">
-                      <option value="">Seleccionar Planta</option>
-                      {plants.map((p, idx) => <option key={`pl-opt-3-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Área</label>
-                    <select value={formData.areaId} onChange={e => setFormData({...formData, areaId: e.target.value})} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" disabled={!formData.plantId}>
-                      <option value="">{formData.plantId ? 'Seleccionar Área' : 'Primero selecciona una Planta'}</option>
-                      {areas.filter(a => a.plantId === formData.plantId).map((a, aIdx) => <option key={`ar-opt-${a.id}-${aIdx}`} value={a.id}>{a.name}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Orden de Inspección</label>
-                    <input 
-                      type="number"
-                      value={formData.inspectionOrder} 
-                      onChange={e => setFormData({...formData, inspectionOrder: parseInt(e.target.value) || 0})} 
-                      placeholder="Ej: 1" 
-                      className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" 
-                    />
-                    <p className="text-[10px] text-zinc-400 mt-1 ml-1 italic">Define el orden en que el operador debe revisar los equipos.</p>
-                  </div>
-
-                  <div className="border-t border-zinc-100 pt-6">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1 mb-3 block">Sub-ítems de Revisión</label>
-                    
-                    <div className="space-y-3 mb-4">
-                      {formData.checkItems.map((item, idx) => (
-                        <div key={`edit-item-${item.id}-${idx}`} className="flex items-center gap-3 bg-zinc-50 p-3 rounded-xl border border-zinc-100 group">
-                          <span className="text-[10px] font-bold text-zinc-300">{idx + 1}</span>
-                          <input 
-                            value={item.name} 
-                            onChange={e => {
-                              const newItems = [...formData.checkItems];
-                              newItems[idx].name = e.target.value;
-                              setFormData({...formData, checkItems: newItems});
-                            }}
-                            className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-zinc-900 focus:ring-0" 
-                          />
-                          <button 
-                            onClick={() => {
-                              const newItems = formData.checkItems.filter(i => i.id !== item.id);
-                              setFormData({...formData, checkItems: newItems});
-                            }}
-                            className="p-1 text-zinc-300 hover:text-red-500 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <input 
-                        value={newCheckItemName} 
-                        onChange={e => setNewCheckItemName(e.target.value)} 
-                        placeholder="Ej: Cableado, Focos, Ubicación..."
-                        onKeyPress={e => {
-                          if (e.key === 'Enter' && newCheckItemName) {
-                            e.preventDefault();
-                            setFormData({
-                              ...formData, 
-                              checkItems: [...formData.checkItems, { id: Math.random().toString(36).substr(2, 9), name: newCheckItemName }]
-                            });
-                            setNewCheckItemName('');
-                          }
-                        }}
-                        className="flex-1 p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-blue" 
-                      />
-                      <button 
-                        onClick={() => {
-                          if (newCheckItemName) {
-                            setFormData({
-                              ...formData, 
-                              checkItems: [...formData.checkItems, { id: Math.random().toString(36).substr(2, 9), name: newCheckItemName }]
-                            });
-                            setNewCheckItemName('');
-                          }
-                        }}
-                        type="button"
-                        className="p-3 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100 active:scale-95 transition-all"
-                      >
-                        <Plus className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-8 border-t border-zinc-50 bg-zinc-50/50">
-                <div className="flex gap-3">
-                  <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-zinc-100 text-zinc-600 rounded-2xl font-bold hover:bg-zinc-200 transition-colors">Cancelar</button>
-                  <button onClick={handleSave} className="flex-1 py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors shadow-lg shadow-sky-100">Guardar</button>
-                </div>
               </div>
             </motion.div>
           </div>

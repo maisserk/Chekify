@@ -45,7 +45,8 @@
         "areaId": { "type": "string" },
         "name": { "type": "string" },
         "qrCode": { "type": "string" },
-        "inspectionOrder": { "type": "number", "description": "Logical order for inspection" }
+        "inspectionOrder": { "type": "number", "description": "Logical order for inspection" },
+        "inspeccionVOSO": { "type": "object", "description": "VOSO methodology configuration" }
       },
       "required": ["id", "plantId", "areaId", "name"]
     },
@@ -58,7 +59,8 @@
         "areaId": { "type": "string" },
         "operatorId": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" },
-        "status": { "type": "string", "enum": ["Completed", "With Findings"] }
+        "status": { "type": "string", "enum": ["Completed", "With Findings"] },
+        "results": { "type": "object", "description": "Detailed equipment inspection results including VOSO" }
       },
       "required": ["id", "areaId", "operatorId", "timestamp"]
     },
