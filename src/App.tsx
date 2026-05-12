@@ -717,6 +717,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   
   // Tracking inspection times
   const [inspectionStartTime, setInspectionStartTime] = useState<Date | null>(null);
+  const [equipmentStartTime, setEquipmentStartTime] = useState<Date | null>(null);
 
   // Removed problematic useEffect that caused data mismatch
   
@@ -752,17 +753,20 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
     setCheckItemStates(prev => ({ ...prev, [itemId]: state }));
   };
 
-  const handleSetVOSOResponse = (itemId: string, status: any, comment?: string, photo?: string, solved?: boolean) => {
-    setVosoResponses(prev => ({
-      ...prev,
-      [itemId]: {
-        ...prev[itemId],
-        status,
-        comment: comment !== undefined ? comment : prev[itemId]?.comment,
-        photoUrl: photo !== undefined ? photo : prev[itemId]?.photoUrl,
-        solvedByOperator: solved !== undefined ? solved : prev[itemId]?.solvedByOperator
-      }
-    }));
+   const handleSetVOSOResponse = (itemId: string, status: any, comment?: string, photo?: string, solved?: boolean) => {
+    setVosoResponses(prev => {
+      const current = prev[itemId] || { status: 'OK' };
+      return {
+        ...prev,
+        [itemId]: {
+          ...current,
+          status,
+          comment: comment !== undefined ? comment : (current.comment ?? null),
+          photoUrl: photo !== undefined ? photo : (current.photoUrl ?? null),
+          solvedByOperator: solved !== undefined ? solved : (current.solvedByOperator ?? false)
+        }
+      };
+    });
   };
 
   const allItemsChecked = () => {
@@ -904,6 +908,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           if (area) {
             setSelectedArea(area);
             setInspectionStartTime(new Date());
+            setEquipmentStartTime(new Date());
             scanner.stop().then(() => {
               scannerRef.current = null;
               setScanning(false);
@@ -981,26 +986,52 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 
   const currentEquipment = areaEquipment[currentEquipmentIndex];
 
+  const sanitizeForFirestore = (obj: any): any => {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (obj instanceof Date || obj instanceof Timestamp) return obj;
+    // Check for Firestore FieldValue
+    if (obj?._methodName || obj?.constructor?.name === 'FieldValue') return obj;
+    
+    if (Array.isArray(obj)) return obj.map(v => sanitizeForFirestore(v));
+    
+    const newObj: any = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== undefined) {
+        newObj[k] = sanitizeForFirestore(v);
+      }
+    }
+    return newObj;
+  };
+
   const handleNextEquipment = async () => {
+    const now = new Date();
     const currentData = {
       trad: { ...checkItemStates },
-      voso: { ...vosoResponses }
+      voso: { ...vosoResponses },
+      timing: {
+        startedAt: equipmentStartTime,
+        completedAt: now
+      }
     };
     
-    const updatedResults = {
+    const updatedRawResults = {
       ...inspectionResults,
       [currentEquipment.id]: currentData
     };
+
+    const updatedResults = sanitizeForFirestore(updatedRawResults);
 
     if (currentEquipmentIndex < areaEquipment.length - 1) {
       setInspectionResults(updatedResults);
       // Load next equipment data (or empty if new)
       const nextIndex = currentEquipmentIndex + 1;
       const nextEquip = areaEquipment[nextIndex];
-      const nextSaved = updatedResults[nextEquip.id] as { trad: any, voso: any } | undefined;
+      const nextSaved = updatedResults[nextEquip.id] as { trad: any, voso: any, timing: any } | undefined;
       setCheckItemStates(nextSaved?.trad || {});
       setVosoResponses(nextSaved?.voso || {});
       setCurrentEquipmentIndex(nextIndex);
+      setEquipmentStartTime(new Date());
     } else {
       // Finished all equipment
       setIsSaving(true);
@@ -1024,7 +1055,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 
         // Register findings in the 'findings' collection for each equipment that has issues
         for (const [equipId, resAny] of Object.entries(updatedResults)) {
-          const res = resAny as { trad: any, voso: any };
+          const res = resAny as { trad: any, voso: any, timing?: any };
           const equip = equipment.find(e => e.id === equipId);
           const tradIssues = Object.entries(res.trad).filter(([_, s]) => s !== 'Bueno');
           const vosoIssues = (Object.entries(res.voso) as [string, VOSOResponse][]).filter(([_, v]) => v.status === 'Observación' || v.status === 'Crítico');
@@ -1044,7 +1075,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             if (tradIssues.length > 0) {
               description += "\nOTROS PUNTOS:\n";
               tradIssues.forEach(([id, s]) => {
-                const item = equip?.checkItems?.find(i => i.id === id);
+                const item = equip?.checkItems?.find(i => id === id);
                 description += `• ${item?.name || id}: ${s}\n`;
               });
             }
@@ -1052,18 +1083,47 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             const priority = vosoIssues.some(v => v[1].status === 'Crítico') ? 'Alta' : 'Media';
             const firstPhoto = vosoIssues.find(v => v[1].photoUrl)?.[1].photoUrl || null;
 
-            await addDoc(collection(db, 'findings'), {
+            const findingRef = await addDoc(collection(db, 'findings'), sanitizeForFirestore({
               areaId: selectedArea!.id,
+              areaName: selectedArea!.name,
               plantId: selectedArea!.plantId,
               equipmentId: equipId,
+              equipmentName: equip?.name || null,
               description: description,
               status: vosoIssues.every(v => v[1].solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
               priority,
+              createdAt: serverTimestamp(),
               date: serverTimestamp(),
+              equipmentStartedAt: res.timing?.startedAt || null,
+              equipmentCompletedAt: res.timing?.completedAt || null,
               operatorId: user.uid,
-              operatorName: user.email,
+              operatorName: user.name || user.email,
               photoUrl: firstPhoto,
-              source: 'Inspection'
+              source: 'Inspection',
+              history: [
+                {
+                  status: (vosoIssues.every(v => v[1].solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
+                  userId: user.uid,
+                  userName: user.name || user.email,
+                  timestamp: new Date(),
+                  action: 'Hallazgo autogenerado (Inspección VOSO)',
+                  comment: 'Hallazgo detectado durante la inspección de ruta.'
+                }
+              ]
+            }));
+
+            // Register notification for the autogenerated finding
+            await addDoc(collection(db, 'notifications'), {
+              title: 'Nuevo Hallazgo VOSO',
+              message: `${user.name || user.email} ha reportado hallazgos en ${equip?.name || equipId}`,
+              type: 'Finding',
+              targetRole: 'Supervisor',
+              scheduledAt: serverTimestamp(),
+              status: 'Sent',
+              createdBy: user.uid,
+              createdAt: serverTimestamp(),
+              referenceId: findingRef.id,
+              plantId: selectedArea!.plantId
             });
           }
         }
@@ -1129,7 +1189,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
     };
 
     try {
-      const findingRef = await addDoc(collection(db, 'findings'), findingData);
+      const findingRef = await addDoc(collection(db, 'findings'), sanitizeForFirestore(findingData));
       
       // Auto-generate notification for supervisors and admins
       await addDoc(collection(db, 'notifications'), {
@@ -1236,6 +1296,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     onClick={() => {
                       setSelectedArea(area);
                       setInspectionStartTime(new Date());
+                      setEquipmentStartTime(new Date());
                     }}
                     className="w-full p-4 bg-white border border-zinc-100 rounded-2xl flex items-center justify-between hover:bg-zinc-50 transition-colors"
                   >
@@ -1316,6 +1377,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                         onClick={() => {
                           setSelectedArea(area);
                           setInspectionStartTime(new Date());
+                          setEquipmentStartTime(new Date());
                           setSearchingArea(false);
                           setAreaSearchQuery('');
                         }}
