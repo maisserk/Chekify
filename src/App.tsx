@@ -75,7 +75,8 @@ import {
   Settings2,
   ArrowLeft,
   ShieldCheck,
-  ListChecks
+  ListChecks,
+  FileSearch
 } from 'lucide-react';
 
 const DEFAULT_VOSO: VOSOInspection = {
@@ -2666,29 +2667,57 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
     const vosoPart = rest.match(/🚨 HALLAZGOS VOSO:\n([\s\S]*?)(?=\n(\n)?📋 OTROS PUNTOS:|$)/);
     const tradPart = rest.match(/📋 OTROS PUNTOS:\n([\s\S]*)/);
 
+    const vosoLines = vosoPart ? vosoPart[1].split('\n').filter(l => l.trim()) : [];
+    const criticalCount = vosoLines.filter(l => l.includes('Crítico')).length;
+    const observationCount = vosoLines.filter(l => l.includes('Observación')).length;
+
     return (
-      <div className={`space-y-6 ${className}`}>
+      <div className={`space-y-8 ${className}`}>
         {/* Header - Location */}
-        <div className="flex items-center gap-4 bg-zinc-900 p-5 rounded-[2.5rem] shadow-lg relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-xl" />
-          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0 backdrop-blur-sm border border-white/10">
-            <MapPin className="w-6 h-6 text-sky-400" />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-zinc-900 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-48 h-48 bg-sky-500/10 rounded-full -mr-24 -mt-24 blur-3xl opacity-50" />
+          <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0 backdrop-blur-md border border-white/20 shadow-inner">
+            <LayoutDashboard className="w-8 h-8 text-sky-400" />
           </div>
           <div className="relative z-10 flex-1 min-w-0">
-            <p className="text-[10px] text-sky-400 font-black uppercase tracking-[0.2em] mb-0.5">Ubicación del Hallazgo</p>
-            <h4 className="text-white font-black text-lg leading-tight tracking-tight truncate">{cleanDescription(header)}</h4>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2 py-0.5 bg-sky-500/20 text-sky-300 text-[9px] font-black uppercase tracking-widest rounded-md border border-sky-500/30">Reporte de Inspección</span>
+              <span className="w-1 h-1 rounded-full bg-zinc-700" />
+              <span className="text-zinc-500 text-[10px] font-bold">VOSO Professional v2</span>
+            </div>
+            <h4 className="text-white font-black text-xl leading-tight tracking-tight uppercase">{cleanDescription(header)}</h4>
           </div>
         </div>
+
+        {/* Summary Dashboard */}
+        {(criticalCount > 0 || observationCount > 0) && (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div className={`p-4 rounded-3xl border-2 flex flex-col items-center justify-center text-center transition-all ${criticalCount > 0 ? 'bg-red-50 border-red-100' : 'bg-zinc-50 border-zinc-100 opacity-50'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${criticalCount > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-100' : 'bg-zinc-200 text-zinc-400'}`}>
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <p className={`text-2xl font-black ${criticalCount > 0 ? 'text-red-600' : 'text-zinc-400'}`}>{criticalCount}</p>
+              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Críticos</p>
+            </div>
+            <div className={`p-4 rounded-3xl border-2 flex flex-col items-center justify-center text-center transition-all ${observationCount > 0 ? 'bg-amber-50 border-amber-100' : 'bg-zinc-50 border-zinc-100 opacity-50'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${observationCount > 0 ? 'bg-amber-500 text-white shadow-lg shadow-amber-100' : 'bg-zinc-200 text-zinc-400'}`}>
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <p className={`text-2xl font-black ${observationCount > 0 ? 'text-amber-600' : 'text-zinc-400'}`}>{observationCount}</p>
+              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Observaciones</p>
+            </div>
+          </div>
+        )}
         
         {vosoPart && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <h5 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.2em]">Metodología VOSO</h5>
-              <div className="h-px bg-zinc-100 flex-1 ml-4" />
+            <div className="flex items-center justify-between px-1">
+              <h5 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.25em]">Detalle Metodología VOSO</h5>
+              <div className="h-[2px] bg-zinc-100 flex-1 ml-4 rounded-full" />
             </div>
             
-            <div className="grid gap-3">
-              {vosoPart[1].split('\n').filter(l => l.trim()).map((line, i) => {
+            <div className="grid gap-4">
+              {vosoLines.map((line, i) => {
                 const categoryMatch = line.match(/\[(.*?)\]/);
                 const category = categoryMatch ? categoryMatch[1] : 'GENERAL';
                 const IconComp = VOSO_ICONS[category] || AlertTriangle;
@@ -2697,33 +2726,67 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
                 const afterCategory = line.split(']').pop() || line;
                 const rawTitle = afterCategory.split(':').shift()?.trim() || 'Ítem';
                 const detail = afterCategory.split(':').slice(1).join(':').trim();
+                const isSolved = detail.includes('[SOLUCIONADO]');
+
+                const statusMatch = detail.match(/^(Crítico|Observación|Bueno)/);
+                const status = statusMatch ? statusMatch[1] : null;
+                const comment = status ? detail.replace(status, '').replace(/^-/, '').trim().replace('[SOLUCIONADO]', '') : detail.replace('[SOLUCIONADO]', '');
 
                 return (
-                  <div key={i} className={`flex flex-col sm:flex-row gap-4 p-6 bg-white border-2 rounded-[2.5rem] shadow-sm transition-all hover:shadow-md ${detail.includes('[SOLUCIONADO]') ? 'border-emerald-100/50 bg-emerald-50/5' : 'border-zinc-50'}`}>
-                    <div className={`w-14 h-14 rounded-3xl flex items-center justify-center flex-shrink-0 border ${colorStyles} shadow-sm group-hover:scale-110 transition-transform`}>
-                      <IconComp className="w-7 h-7" />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest ${colorStyles}`}>
-                          {category}
-                        </span>
-                        {detail.includes('[SOLUCIONADO]') && (
-                          <span className="text-[9px] font-black bg-emerald-500 text-white px-2.5 py-1 rounded-lg uppercase tracking-widest flex items-center gap-1 shadow-sm shadow-emerald-100">
-                             <CheckCircle2 className="w-3 h-3" />
-                             Corregido
-                          </span>
-                        )}
+                  <div key={i} className={`flex flex-col gap-4 p-6 bg-white border rounded-[2.5rem] shadow-sm transition-all hover:shadow-lg hover:border-zinc-200 relative overflow-hidden group ${isSolved ? 'border-emerald-100 bg-emerald-50/10' : 'border-zinc-100'}`}>
+                    {/* Decorative accent */}
+                    <div className={`absolute top-0 left-0 w-2 h-full ${
+                      category === 'VER' ? 'bg-sky-500' :
+                      category === 'OÍR' ? 'bg-indigo-500' :
+                      category === 'SENTIR' ? 'bg-emerald-500' :
+                      category === 'OLER' ? 'bg-orange-500' :
+                      'bg-zinc-300'
+                    }`} />
+
+                    <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                      <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-[1.5rem] flex items-center justify-center flex-shrink-0 border-2 ${colorStyles} shadow-sm group-hover:scale-105 transition-transform`}>
+                        <IconComp className="w-8 h-8 sm:w-9 sm:h-9" />
                       </div>
                       
-                      <div className="space-y-1">
-                        <p className="text-zinc-900 font-black text-base leading-tight tracking-tight">
-                          {rawTitle}
-                        </p>
-                        <p className="text-zinc-500 text-xs font-semibold leading-relaxed line-clamp-3">
-                          {detail.replace('[SOLUCIONADO]', '').trim() || 'Hallazgo reportado sin descripción adicional.'}
-                        </p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          <span className={`text-[10px] font-black px-3 py-1 rounded-xl border-2 uppercase tracking-[0.15em] flex items-center gap-1.5 ${colorStyles}`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                            {category}
+                          </span>
+                          
+                          {status && (
+                            <span className={`text-[10px] font-black px-3 py-1 rounded-xl border-2 uppercase tracking-[0.15em] ${
+                              status === 'Crítico' ? 'bg-red-500 text-white border-red-500 shadow-sm shadow-red-100' :
+                              status === 'Observación' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                              'bg-zinc-100 text-zinc-500 border-zinc-200'
+                            }`}>
+                              {status}
+                            </span>
+                          )}
+
+                          {isSolved && (
+                            <span className="text-[10px] font-black bg-emerald-500 text-white px-3 py-1 rounded-xl uppercase tracking-widest flex items-center gap-1.5 shadow-sm shadow-emerald-200">
+                               <CheckCircle2 className="w-3.5 h-3.5" />
+                               SUBSANADO
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div className="flex flex-col gap-1">
+                            <p className="text-zinc-400 text-[10px] font-black uppercase tracking-widest">Punto de control inspeccionado</p>
+                            <h5 className="text-zinc-900 font-black text-lg leading-tight tracking-tight">
+                              {rawTitle}
+                            </h5>
+                          </div>
+                          
+                          <div className="bg-zinc-50 border border-zinc-100 p-4 rounded-[1.5rem]">
+                            <p className="text-zinc-600 text-sm font-semibold leading-relaxed">
+                              {comment || (isSolved ? 'El hallazgo fue detectado y corregido inmediatamente por el operador.' : 'Reportado sin comentarios adicionales.')}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2734,21 +2797,34 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
         )}
 
         {tradPart && (
-          <div className="space-y-4 pt-4 border-t border-zinc-100 border-dashed">
-            <h5 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-               <div className="w-1.5 h-1.5 rounded-full bg-zinc-300" />
-               Puntos Adicionales
+          <div className="space-y-4 pt-6 border-t border-zinc-100 border-dashed">
+            <h5 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.25em] px-1 flex items-center gap-2">
+               <div className="w-2 h-2 rounded-full bg-zinc-200 shadow-inner" />
+               Controles Estándar Adicionales
             </h5>
-            <div className="grid gap-2">
+            <div className="grid gap-3">
               {tradPart[1].split('\n').filter(l => l.trim()).map((line, i) => (
-                <div key={i} className="flex gap-4 items-center text-xs text-zinc-600 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100/50 transition-all hover:bg-zinc-50">
-                  <div className="w-8 h-8 rounded-xl bg-white shadow-sm flex items-center justify-center text-xs border border-zinc-100">📋</div>
-                  <span className="flex-1 font-bold text-zinc-900 tracking-tight">{line.replace('• ', '')}</span>
+                <div key={i} className="flex gap-4 items-center text-xs text-zinc-600 bg-white p-4 px-6 rounded-3xl border border-zinc-100 shadow-sm transition-all hover:bg-zinc-50 hover:border-zinc-200 hover:shadow-md">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-50 shadow-inner flex items-center justify-center text-xs border border-zinc-100 shrink-0">
+                    <FileSearch className="w-5 h-5 text-zinc-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-0.5">Checklist Tradicional</p>
+                    <span className="font-black text-zinc-800 tracking-tight text-sm uppercase">{line.replace('• ', '')}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-black tracking-widest">
+                    <AlertTriangle className="w-3 h-3" />
+                    FALLA
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
+
+        <div className="pt-6 border-t border-zinc-100 text-center">
+            <p className="text-[9px] text-zinc-400 font-black uppercase tracking-[0.3em] opacity-50">— Fin del Reporte Estructurado —</p>
+        </div>
       </div>
     );
   }
