@@ -49,6 +49,8 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronDown,
+  Layout,
+  Box,
   Bell,
   FileText,
   MapPin,
@@ -236,6 +238,10 @@ interface Finding {
   plantId?: string;
   inspectionStartedAt?: any;
   inspectionCompletedAt?: any;
+  inspectionDurationSeconds?: number;
+  equipmentStartedAt?: any;
+  equipmentCompletedAt?: any;
+  equipmentDurationSeconds?: number;
   history?: HistoryEntry[];
 }
 
@@ -810,6 +816,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   const [plantStats, setPlantStats] = useState({
     avgResolutionHours: 0,
     avgInspectionSeconds: 0,
+    avgEquipSeconds: 0,
     totalOpen: 0,
     totalInReview: 0,
     totalClosed: 0
@@ -853,18 +860,28 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         : 0;
 
       // Avg Inspection time
-      const inspectionsWithTime = plantFindings.filter(f => f.inspectionStartedAt && f.inspectionCompletedAt);
-      let totalInspectionMs = 0;
+      const inspectionsWithTime = plantFindings.filter(f => f.inspectionDurationSeconds !== undefined || (f.inspectionStartedAt && f.inspectionCompletedAt));
+      let totalAreaSeconds = 0;
+      let totalEquipSeconds = 0;
+      let equipCount = 0;
+
       inspectionsWithTime.forEach(f => {
-        totalInspectionMs += f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime();
+        const areaSec = f.inspectionDurationSeconds || (f.inspectionStartedAt && f.inspectionCompletedAt ? (f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime()) / 1000 : 0);
+        totalAreaSeconds += areaSec;
+        
+        if (f.equipmentDurationSeconds !== undefined) {
+          totalEquipSeconds += f.equipmentDurationSeconds;
+          equipCount++;
+        }
       });
-      const avgInsSeconds = inspectionsWithTime.length > 0
-        ? (totalInspectionMs / 1000) / inspectionsWithTime.length
-        : 0;
+
+      const avgAreaSeconds = inspectionsWithTime.length > 0 ? totalAreaSeconds / inspectionsWithTime.length : 0;
+      const avgEquipSeconds = equipCount > 0 ? totalEquipSeconds / equipCount : 0;
 
       setPlantStats({
         avgResolutionHours: Math.round(avgHours * 10) / 10,
-        avgInspectionSeconds: Math.round(avgInsSeconds),
+        avgInspectionSeconds: Math.round(avgAreaSeconds),
+        avgEquipSeconds: Math.round(avgEquipSeconds),
         totalOpen: plantFindings.filter(f => f.status === 'Open').length,
         totalInReview: plantFindings.filter(f => f.status === 'InReview').length,
         totalClosed: plantFindings.filter(f => f.status === 'Closed').length
@@ -1042,38 +1059,61 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                  (Object.values(res.voso) as VOSOResponse[]).some(v => v.status === 'Observación' || v.status === 'Crítico');
         });
 
+        const inspectionCompletedTime = new Date();
+        const totalDurationSeconds = inspectionStartTime ? Math.round((inspectionCompletedTime.getTime() - inspectionStartTime.getTime()) / 1000) : 0;
+
         await addDoc(collection(db, 'inspections'), {
           areaId: selectedArea!.id,
+          areaName: selectedArea!.name,
           operatorId: user.uid,
+          operatorName: user.name || user.email,
           plantId: selectedArea!.plantId,
           timestamp: serverTimestamp(),
           startedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
-          completedAt: serverTimestamp(),
+          completedAt: Timestamp.fromDate(inspectionCompletedTime),
+          durationSeconds: totalDurationSeconds,
           status: hasFindings ? 'With Findings' : 'Completed',
           results: updatedResults
         });
 
         // Register findings in the 'findings' collection for each equipment that has issues
         for (const [equipId, resAny] of Object.entries(updatedResults)) {
-          const res = resAny as { trad: any, voso: any, timing?: any };
+          const res = resAny as { trad: any, voso: any, timing?: { startedAt: any, completedAt: any } };
           const equip = equipment.find(e => e.id === equipId);
+          
+          const equipStarted = res.timing?.startedAt instanceof Date ? res.timing.startedAt : (res.timing?.startedAt?.toDate ? res.timing.startedAt.toDate() : null);
+          const equipCompleted = res.timing?.completedAt instanceof Date ? res.timing.completedAt : (res.timing?.completedAt?.toDate ? res.timing.completedAt.toDate() : null);
+          const equipDuration = (equipStarted && equipCompleted) ? Math.round((equipCompleted.getTime() - equipStarted.getTime()) / 1000) : 0;
+
           const tradIssues = Object.entries(res.trad).filter(([_, s]) => s !== 'Bueno');
           const vosoIssues = (Object.entries(res.voso) as [string, VOSOResponse][]).filter(([_, v]) => v.status === 'Observación' || v.status === 'Crítico');
 
           if (tradIssues.length > 0 || vosoIssues.length > 0) {
-            let description = `Reporte autogenerado de inspección VOSO en ${equip?.name || equipId}.\n\n`;
+            let description = `Inspección VOSO en ${equip?.name || equipId}.\n\n`;
             
             if (vosoIssues.length > 0) {
-              description += "HALLAZGOS VOSO:\n";
+              description += "🚨 HALLAZGOS VOSO:\n";
               vosoIssues.forEach(([id, v]) => {
-                const allVOSO = [...(equip?.inspeccionVOSO?.ver || []), ...(equip?.inspeccionVOSO?.oir || []), ...(equip?.inspeccionVOSO?.sentir || []), ...(equip?.inspeccionVOSO?.oler || [])];
+                const ver = equip?.inspeccionVOSO?.ver || [];
+                const oir = equip?.inspeccionVOSO?.oir || [];
+                const sentir = equip?.inspeccionVOSO?.sentir || [];
+                const oler = equip?.inspeccionVOSO?.oler || [];
+
+                let icon = "🔍";
+                let categoryName = "GENERAL";
+                if (ver.some(i => i.id === id)) { icon = "👁️"; categoryName = "VER"; }
+                else if (oir.some(i => i.id === id)) { icon = "👂"; categoryName = "OÍR"; }
+                else if (sentir.some(i => i.id === id)) { icon = "🖐️"; categoryName = "SENTIR"; }
+                else if (oler.some(i => i.id === id)) { icon = "👃"; categoryName = "OLER"; }
+
+                const allVOSO = [...ver, ...oir, ...sentir, ...oler];
                 const item = allVOSO.find(i => i.id === id);
-                description += `• ${item?.name || id}: ${v.status}${v.comment ? ` - ${v.comment}` : ''}${v.solvedByOperator ? ' [SOLUCIONADO POR OPERADOR]' : ''}\n`;
+                description += `${icon} [${categoryName}] ${item?.name || id}: ${v.status}${v.comment ? ` - ${v.comment}` : ''}${v.solvedByOperator ? ' [SOLUCIONADO]' : ''}\n`;
               });
             }
 
             if (tradIssues.length > 0) {
-              description += "\nOTROS PUNTOS:\n";
+              description += "\n📋 OTROS PUNTOS:\n";
               tradIssues.forEach(([id, s]) => {
                 const item = equip?.checkItems?.find(i => id === id);
                 description += `• ${item?.name || id}: ${s}\n`;
@@ -1094,8 +1134,12 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               priority,
               createdAt: serverTimestamp(),
               date: serverTimestamp(),
-              equipmentStartedAt: res.timing?.startedAt || null,
-              equipmentCompletedAt: res.timing?.completedAt || null,
+              inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
+              inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
+              inspectionDurationSeconds: totalDurationSeconds,
+              equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
+              equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
+              equipmentDurationSeconds: equipDuration,
               operatorId: user.uid,
               operatorName: user.name || user.email,
               photoUrl: firstPhoto,
@@ -1246,10 +1290,15 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           </div>
         </div>
         <div className="bg-white text-zinc-900 p-4 rounded-3xl border border-zinc-100 flex flex-col justify-center shadow-sm">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Insp. Prom.</p>
+          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Área Prom.</p>
           <div className="flex items-baseline gap-1">
-            <p className="text-xl font-bold text-brand-green">{plantStats.avgInspectionSeconds}</p>
-            <span className="text-[10px] font-bold text-zinc-400">s</span>
+            <p className="text-xl font-bold text-zinc-900">{Math.floor(plantStats.avgInspectionSeconds / 60)}m {plantStats.avgInspectionSeconds % 60}s</p>
+          </div>
+        </div>
+        <div className="bg-white text-zinc-900 p-4 rounded-3xl border border-zinc-100 flex flex-col justify-center shadow-sm">
+          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Equipo Prom.</p>
+          <div className="flex items-baseline gap-1">
+            <p className="text-xl font-bold text-sky-600">{(plantStats as any).avgEquipSeconds}s</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-3xl shadow-sm border border-zinc-100 flex flex-col justify-center">
@@ -1778,11 +1827,11 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     Ya existe un hallazgo activo para esta ubicación. Revisa si es el mismo:
                   </p>
                   <div className="mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-100 text-left">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-2">
                       <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Reportado por {duplicateFinding.operatorName}</p>
                       <span className="text-[10px] text-amber-400 font-bold">{duplicateFinding.status === 'Open' ? 'ABIERTO' : 'EN REVISIÓN'}</span>
                     </div>
-                    <p className="text-sm text-zinc-700 italic leading-relaxed">"{duplicateFinding.description}"</p>
+                    <FindingDescriptionRenderer description={duplicateFinding.description} className="text-zinc-700" />
                   </div>
                   <p className="text-[10px] text-zinc-400 mt-4 font-bold uppercase tracking-[0.2em]">¿Deseas reportarlo de todas formas?</p>
                 </div>
@@ -2581,6 +2630,132 @@ const SupervisorDashboard = ({
   );
 };
 
+// --- Components ---
+
+const VOSO_ICONS: Record<string, any> = {
+  'VER': Eye,
+  'OÍR': Ear,
+  'SENTIR': Hand,
+  'OLER': Wind
+};
+
+const VOSO_COLORS: Record<string, string> = {
+  'VER': 'bg-sky-500/10 text-sky-600 border-sky-200/50',
+  'OÍR': 'bg-indigo-500/10 text-indigo-600 border-indigo-200/50',
+  'SENTIR': 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50',
+  'OLER': 'bg-orange-500/10 text-orange-600 border-orange-200/50'
+};
+
+const FindingDescriptionRenderer = ({ description, className = "", isPreview = false }: { description: string, className?: string, isPreview?: boolean }) => {
+  if (!description) return <p className={className}>-</p>;
+
+  const cleanDescription = (desc: string) => desc.replace('Reporte autogenerado de ', '').replace('Inspección VOSO en ', '');
+
+  if (isPreview) {
+    // Return a simplified version for lists
+    return <span className={`truncate block ${className}`}>{cleanDescription(description.split('\n')[0])}</span>;
+  }
+
+  // Check if it's an autogenerated or VOSO inspection report
+  if (description.startsWith('Reporte autogenerado') || description.startsWith('Inspección VOSO')) {
+    const sections = description.split('\n\n');
+    const header = sections[0];
+    const rest = sections.slice(1).join('\n\n');
+    
+    // Parse VOSO items and Otros items
+    const vosoPart = rest.match(/🚨 HALLAZGOS VOSO:\n([\s\S]*?)(?=\n(\n)?📋 OTROS PUNTOS:|$)/);
+    const tradPart = rest.match(/📋 OTROS PUNTOS:\n([\s\S]*)/);
+
+    return (
+      <div className={`space-y-6 ${className}`}>
+        {/* Header - Location */}
+        <div className="flex items-center gap-4 bg-zinc-900 p-5 rounded-[2.5rem] shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-xl" />
+          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0 backdrop-blur-sm border border-white/10">
+            <MapPin className="w-6 h-6 text-sky-400" />
+          </div>
+          <div className="relative z-10 flex-1 min-w-0">
+            <p className="text-[10px] text-sky-400 font-black uppercase tracking-[0.2em] mb-0.5">Ubicación del Hallazgo</p>
+            <h4 className="text-white font-black text-lg leading-tight tracking-tight truncate">{cleanDescription(header)}</h4>
+          </div>
+        </div>
+        
+        {vosoPart && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <h5 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.2em]">Metodología VOSO</h5>
+              <div className="h-px bg-zinc-100 flex-1 ml-4" />
+            </div>
+            
+            <div className="grid gap-3">
+              {vosoPart[1].split('\n').filter(l => l.trim()).map((line, i) => {
+                const categoryMatch = line.match(/\[(.*?)\]/);
+                const category = categoryMatch ? categoryMatch[1] : 'GENERAL';
+                const IconComp = VOSO_ICONS[category] || AlertTriangle;
+                const colorStyles = VOSO_COLORS[category] || 'bg-zinc-100 text-zinc-500 border-zinc-200';
+                
+                const afterCategory = line.split(']').pop() || line;
+                const rawTitle = afterCategory.split(':').shift()?.trim() || 'Ítem';
+                const detail = afterCategory.split(':').slice(1).join(':').trim();
+
+                return (
+                  <div key={i} className={`flex flex-col sm:flex-row gap-4 p-6 bg-white border-2 rounded-[2.5rem] shadow-sm transition-all hover:shadow-md ${detail.includes('[SOLUCIONADO]') ? 'border-emerald-100/50 bg-emerald-50/5' : 'border-zinc-50'}`}>
+                    <div className={`w-14 h-14 rounded-3xl flex items-center justify-center flex-shrink-0 border ${colorStyles} shadow-sm group-hover:scale-110 transition-transform`}>
+                      <IconComp className="w-7 h-7" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest ${colorStyles}`}>
+                          {category}
+                        </span>
+                        {detail.includes('[SOLUCIONADO]') && (
+                          <span className="text-[9px] font-black bg-emerald-500 text-white px-2.5 py-1 rounded-lg uppercase tracking-widest flex items-center gap-1 shadow-sm shadow-emerald-100">
+                             <CheckCircle2 className="w-3 h-3" />
+                             Corregido
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <p className="text-zinc-900 font-black text-base leading-tight tracking-tight">
+                          {rawTitle}
+                        </p>
+                        <p className="text-zinc-500 text-xs font-semibold leading-relaxed line-clamp-3">
+                          {detail.replace('[SOLUCIONADO]', '').trim() || 'Hallazgo reportado sin descripción adicional.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {tradPart && (
+          <div className="space-y-4 pt-4 border-t border-zinc-100 border-dashed">
+            <h5 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
+               <div className="w-1.5 h-1.5 rounded-full bg-zinc-300" />
+               Puntos Adicionales
+            </h5>
+            <div className="grid gap-2">
+              {tradPart[1].split('\n').filter(l => l.trim()).map((line, i) => (
+                <div key={i} className="flex gap-4 items-center text-xs text-zinc-600 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100/50 transition-all hover:bg-zinc-50">
+                  <div className="w-8 h-8 rounded-xl bg-white shadow-sm flex items-center justify-center text-xs border border-zinc-100">📋</div>
+                  <span className="flex-1 font-bold text-zinc-900 tracking-tight">{line.replace('• ', '')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return <p className={`leading-relaxed whitespace-pre-wrap ${className}`}>{description}</p>;
+};
+
 // --- Reports View ---
 
 const ReportsView = ({ 
@@ -2841,10 +3016,14 @@ const ReportsView = ({
             </thead>
             <tbody className="divide-y divide-zinc-50">
               {sortedFindings.map((f, index) => {
-                const duration = f.inspectionStartedAt && f.inspectionCompletedAt 
+                const areaDuration = f.inspectionDurationSeconds || (f.inspectionStartedAt && f.inspectionCompletedAt 
                   ? Math.round((f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime()) / 1000) 
-                  : null;
+                  : null);
                 
+                const equipDuration = f.equipmentDurationSeconds || (f.equipmentStartedAt && f.equipmentCompletedAt
+                  ? Math.round((f.equipmentCompletedAt.toDate().getTime() - f.equipmentStartedAt.toDate().getTime()) / 1000)
+                  : null);
+
                 const resolutionTime = f.status === 'Closed' && f.createdAt && f.closedAt
                   ? Math.round((f.closedAt.toDate().getTime() - f.createdAt.toDate().getTime()) / (1000 * 60 * 60) * 10) / 10
                   : null;
@@ -2861,21 +3040,44 @@ const ReportsView = ({
                     <td className="px-6 py-4 font-medium text-zinc-900">
                       <div className="flex flex-col">
                         <span>{f.areaName}</span>
-                        <span className="text-[10px] text-zinc-400 uppercase tracking-tight truncate max-w-[120px]">{f.description}</span>
+                        <FindingDescriptionRenderer 
+                          description={f.description} 
+                          isPreview 
+                          className="text-[10px] text-zinc-400 uppercase tracking-tight truncate max-w-[150px]" 
+                        />
                       </div>
                     </td>
                     <td className="px-6 py-4 text-zinc-500">
                       {f.operatorName || '-'}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col text-[11px] text-zinc-500 font-mono">
-                        <span>{f.inspectionStartedAt?.toDate ? format(f.inspectionStartedAt.toDate(), 'HH:mm:ss') : '--'}</span>
-                        <span className="text-zinc-300">↓</span>
-                        <span>{f.inspectionCompletedAt?.toDate ? format(f.inspectionCompletedAt.toDate(), 'HH:mm:ss') : '--'}</span>
-                        {duration !== null && (
-                          <span className="text-zinc-900 font-bold mt-1 text-[9px] uppercase tracking-tighter">
-                            ⏱ {duration}s
-                          </span>
+                      <div className="flex flex-col gap-2">
+                        {/* Area Duration */}
+                        <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-2 flex items-center justify-between gap-3 min-w-[120px]">
+                           <div className="flex flex-col text-[9px] text-zinc-400 leading-none">
+                              <span className="font-bold uppercase tracking-tighter mb-1">TOTAL ÁREA</span>
+                              <div className="flex items-center gap-1 font-mono">
+                                <span>{f.inspectionStartedAt?.toDate ? format(f.inspectionStartedAt.toDate(), 'HH:mm') : '--:--'}</span>
+                                <span className="opacity-30">→</span>
+                                <span>{f.inspectionCompletedAt?.toDate ? format(f.inspectionCompletedAt.toDate(), 'HH:mm') : '--:--'}</span>
+                              </div>
+                           </div>
+                           {areaDuration !== null && (
+                              <div className="bg-white px-2 py-1 rounded-lg border border-zinc-100 shadow-sm flex flex-col items-center">
+                                 <span className="text-[10px] font-black text-zinc-900 leading-none">{Math.floor(areaDuration / 60)}m</span>
+                                 <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-tighter">{areaDuration % 60}s</span>
+                              </div>
+                           )}
+                        </div>
+
+                        {/* Equipment Duration */}
+                        {equipDuration !== null && (
+                          <div className="flex items-center gap-2 px-2 text-[10px]">
+                            <span className="text-zinc-400 font-bold tracking-tighter uppercase">Equipo:</span>
+                            <span className="font-black text-zinc-900 bg-sky-50 text-sky-600 px-1.5 py-0.5 rounded-md border border-sky-100">
+                              {equipDuration < 60 ? `${equipDuration}s` : `${Math.floor(equipDuration / 60)}m ${equipDuration % 60}s`}
+                            </span>
+                          </div>
                         )}
                       </div>
                     </td>
@@ -2988,9 +3190,9 @@ const ReportsView = ({
                   </div>
 
                   <div className="space-y-4">
-                    <div className="bg-zinc-50 p-4 rounded-2xl">
-                      <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Descripción del Hallazgo</h4>
-                      <p className="text-zinc-800 leading-relaxed text-sm">{selectedFinding.description}</p>
+                    <div className="bg-zinc-50 p-6 rounded-[2rem]">
+                      <h4 className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-[0.2em] mb-4">Descripción del Hallazgo</h4>
+                      <FindingDescriptionRenderer description={selectedFinding.description} className="text-zinc-800" />
                     </div>
 
                     {selectedFinding.supervisorComments && (
@@ -3039,23 +3241,77 @@ const ReportsView = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-100">
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Reportado en</p>
-                      <div className="flex items-center gap-1.5 text-zinc-600 text-sm">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>{selectedFinding.createdAt?.toDate ? format(selectedFinding.createdAt.toDate(), 'dd MMM, HH:mm', { locale: es }) : '--:--'}</span>
-                      </div>
-                    </div>
-                    {selectedFinding.closedAt && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-6 border-t border-zinc-100">
+                    <div className="space-y-4">
                       <div className="space-y-1">
-                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Cerrado en</p>
-                        <div className="flex items-center gap-1.5 text-emerald-600 text-sm">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{selectedFinding.closedAt?.toDate ? format(selectedFinding.closedAt.toDate(), 'dd MMM, HH:mm', { locale: es }) : '--:--'}</span>
+                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                           <Layout className="w-3 h-3" />
+                           Inspección de Área (Total)
+                        </p>
+                        <div className="bg-zinc-50 p-3 rounded-2xl border border-zinc-100 flex items-center justify-between">
+                           <div className="flex flex-col text-xs text-zinc-600 font-mono">
+                              <span>{selectedFinding.inspectionStartedAt?.toDate ? format(selectedFinding.inspectionStartedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
+                              <span className="text-zinc-300">↓</span>
+                              <span>{selectedFinding.inspectionCompletedAt?.toDate ? format(selectedFinding.inspectionCompletedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
+                           </div>
+                           {(selectedFinding.inspectionDurationSeconds || (selectedFinding.inspectionStartedAt && selectedFinding.inspectionCompletedAt)) && (
+                              <div className="text-right">
+                                 <p className="text-lg font-black text-zinc-900 leading-none">
+                                    {Math.floor((selectedFinding.inspectionDurationSeconds || (selectedFinding.inspectionCompletedAt.toDate().getTime() - selectedFinding.inspectionStartedAt.toDate().getTime()) / 1000) / 60)} min
+                                 </p>
+                                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Duración Total</p>
+                              </div>
+                           )}
                         </div>
                       </div>
-                    )}
+
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                           <Box className="w-3 h-3" />
+                           Inspección de Equipo
+                        </p>
+                        <div className="bg-sky-50/30 p-3 rounded-2xl border border-sky-100/50 flex items-center justify-between">
+                           <div className="flex flex-col text-xs text-sky-700/60 font-mono">
+                              <span>{selectedFinding.equipmentStartedAt?.toDate ? format(selectedFinding.equipmentStartedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
+                              <span className="text-sky-200">↓</span>
+                              <span>{selectedFinding.equipmentCompletedAt?.toDate ? format(selectedFinding.equipmentCompletedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
+                           </div>
+                           {(selectedFinding.equipmentDurationSeconds || (selectedFinding.equipmentStartedAt && selectedFinding.equipmentCompletedAt)) && (
+                              <div className="text-right">
+                                 <p className="text-lg font-black text-sky-600 leading-none">
+                                    {(selectedFinding.equipmentDurationSeconds || Math.round((selectedFinding.equipmentCompletedAt.toDate().getTime() - selectedFinding.equipmentStartedAt.toDate().getTime()) / 1000))}s
+                                 </p>
+                                 <p className="text-[10px] font-bold text-sky-400 uppercase tracking-tighter">Tiempo Equipo</p>
+                              </div>
+                           )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Estado y Cierre</p>
+                        <div className="bg-zinc-50 p-3 rounded-2xl border border-zinc-100 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-zinc-500 font-medium">Reportado</span>
+                            <span className="text-xs font-bold text-zinc-900">{selectedFinding.createdAt?.toDate ? format(selectedFinding.createdAt.toDate(), 'dd MMM, HH:mm') : '--:--'}</span>
+                          </div>
+                          {selectedFinding.closedAt && (
+                            <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50">
+                              <span className="text-xs text-emerald-600 font-medium">Resolución</span>
+                              <div className="text-right">
+                                <p className="text-xs font-bold text-emerald-700">{format(selectedFinding.closedAt.toDate(), 'dd MMM, HH:mm')}</p>
+                                {selectedFinding.createdAt && (
+                                  <p className="text-[9px] font-black text-emerald-500 uppercase tracking-tighter">
+                                    En {Math.round((selectedFinding.closedAt.toDate().getTime() - selectedFinding.createdAt.toDate().getTime()) / (1000 * 60 * 60) * 10) / 10} horas
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </motion.div>
