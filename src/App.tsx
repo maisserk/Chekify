@@ -687,20 +687,35 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   // Tracking inspection times
   const [inspectionStartTime, setInspectionStartTime] = useState<Date | null>(null);
 
-  useEffect(() => {
-    // Save current results to the list before resetting for next equipment
+  // Removed problematic useEffect that caused data mismatch
+  
+  const saveCurrentToResults = () => {
     if (currentEquipment) {
+      const currentData = {
+        trad: { ...checkItemStates },
+        voso: { ...vosoResponses }
+      };
       setInspectionResults(prev => ({
         ...prev,
-        [currentEquipment.id]: {
-          trad: { ...checkItemStates },
-          voso: { ...vosoResponses }
-        }
+        [currentEquipment.id]: currentData
       }));
+      return currentData;
     }
-    setCheckItemStates({});
-    setVosoResponses({});
-  }, [currentEquipmentIndex, selectedArea]);
+    return null;
+  };
+
+  const loadEquipmentData = (index: number, resultsOverride?: any) => {
+    const targetEquip = areaEquipment[index];
+    if (targetEquip) {
+      const results = resultsOverride || inspectionResults;
+      const saved = results[targetEquip.id];
+      setCheckItemStates(saved?.trad || {});
+      setVosoResponses(saved?.voso || {});
+    } else {
+      setCheckItemStates({});
+      setVosoResponses({});
+    }
+  };
 
   const handleSetItemState = (itemId: string, state: 'Bueno' | 'Regular' | 'Malo') => {
     setCheckItemStates(prev => ({ ...prev, [itemId]: state }));
@@ -935,35 +950,106 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 
   const currentEquipment = areaEquipment[currentEquipmentIndex];
 
-  const handleNextEquipment = () => {
-    if (currentEquipmentIndex < areaEquipment.length - 1) {
-      setCurrentEquipmentIndex(currentEquipmentIndex + 1);
-    } else {
-      // Final capture for the last equipment
-      const finalResults = {
-        ...inspectionResults,
-        [currentEquipment.id]: {
-          trad: { ...checkItemStates },
-          voso: { ...vosoResponses }
-        }
-      };
+  const handleNextEquipment = async () => {
+    const currentData = {
+      trad: { ...checkItemStates },
+      voso: { ...vosoResponses }
+    };
+    
+    const updatedResults = {
+      ...inspectionResults,
+      [currentEquipment.id]: currentData
+    };
 
+    if (currentEquipmentIndex < areaEquipment.length - 1) {
+      setInspectionResults(updatedResults);
+      // Load next equipment data (or empty if new)
+      const nextIndex = currentEquipmentIndex + 1;
+      const nextEquip = areaEquipment[nextIndex];
+      const nextSaved = updatedResults[nextEquip.id] as { trad: any, voso: any } | undefined;
+      setCheckItemStates(nextSaved?.trad || {});
+      setVosoResponses(nextSaved?.voso || {});
+      setCurrentEquipmentIndex(nextIndex);
+    } else {
       // Finished all equipment
-      addDoc(collection(db, 'inspections'), {
-        areaId: selectedArea!.id,
-        operatorId: user.uid,
-        plantId: selectedArea!.plantId,
-        timestamp: serverTimestamp(),
-        startedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
-        completedAt: serverTimestamp(),
-        status: 'Completed',
-        results: finalResults
-      });
-      setSelectedArea(null);
-      setInspectionStartTime(null);
-      setCurrentEquipmentIndex(0);
-      setInspectionResults({});
-      setMessage({ text: "Inspección de área finalizada correctamente", type: 'success' });
+      setIsSaving(true);
+      try {
+        const hasFindings = Object.values(updatedResults).some(resAny => {
+          const res = resAny as { trad: any, voso: any };
+          return Object.values(res.trad).some(s => s !== 'Bueno') ||
+                 (Object.values(res.voso) as VOSOResponse[]).some(v => v.status === 'Observación' || v.status === 'Crítico');
+        });
+
+        await addDoc(collection(db, 'inspections'), {
+          areaId: selectedArea!.id,
+          operatorId: user.uid,
+          plantId: selectedArea!.plantId,
+          timestamp: serverTimestamp(),
+          startedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
+          completedAt: serverTimestamp(),
+          status: hasFindings ? 'With Findings' : 'Completed',
+          results: updatedResults
+        });
+
+        // Register findings in the 'findings' collection for each equipment that has issues
+        for (const [equipId, resAny] of Object.entries(updatedResults)) {
+          const res = resAny as { trad: any, voso: any };
+          const equip = equipment.find(e => e.id === equipId);
+          const tradIssues = Object.entries(res.trad).filter(([_, s]) => s !== 'Bueno');
+          const vosoIssues = (Object.entries(res.voso) as [string, VOSOResponse][]).filter(([_, v]) => v.status === 'Observación' || v.status === 'Crítico');
+
+          if (tradIssues.length > 0 || vosoIssues.length > 0) {
+            let description = `Reporte autogenerado de inspección VOSO en ${equip?.name || equipId}.\n\n`;
+            
+            if (vosoIssues.length > 0) {
+              description += "HALLAZGOS VOSO:\n";
+              vosoIssues.forEach(([id, v]) => {
+                const allVOSO = [...(equip?.inspeccionVOSO?.ver || []), ...(equip?.inspeccionVOSO?.oir || []), ...(equip?.inspeccionVOSO?.sentir || []), ...(equip?.inspeccionVOSO?.oler || [])];
+                const item = allVOSO.find(i => i.id === id);
+                description += `• ${item?.name || id}: ${v.status}${v.comment ? ` - ${v.comment}` : ''}${v.solvedByOperator ? ' [SOLUCIONADO POR OPERADOR]' : ''}\n`;
+              });
+            }
+
+            if (tradIssues.length > 0) {
+              description += "\nOTROS PUNTOS:\n";
+              tradIssues.forEach(([id, s]) => {
+                const item = equip?.checkItems?.find(i => i.id === id);
+                description += `• ${item?.name || id}: ${s}\n`;
+              });
+            }
+
+            const priority = vosoIssues.some(v => v[1].status === 'Crítico') ? 'Alta' : 'Media';
+            const firstPhoto = vosoIssues.find(v => v[1].photoUrl)?.[1].photoUrl || null;
+
+            await addDoc(collection(db, 'findings'), {
+              areaId: selectedArea!.id,
+              plantId: selectedArea!.plantId,
+              equipmentId: equipId,
+              description: description,
+              status: vosoIssues.every(v => v[1].solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
+              priority,
+              date: serverTimestamp(),
+              operatorId: user.uid,
+              operatorName: user.email,
+              photoUrl: firstPhoto,
+              source: 'Inspection'
+            });
+          }
+        }
+
+        setSelectedArea(null);
+        setInspectionStartTime(null);
+        setCurrentEquipmentIndex(0);
+        setInspectionResults({});
+        setCheckItemStates({});
+        setVosoResponses({});
+        setMessage({ text: "Inspección finalizada y hallazgos registrados correctamente", type: 'success' });
+      } catch (err) {
+        console.error("Error finalizing inspection:", err);
+        setMessage({ text: "Error al registrar la inspección", type: 'error' });
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -1400,7 +1486,26 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 
             <div className="flex items-center justify-between pt-2">
               <button 
-                onClick={() => currentEquipmentIndex > 0 && setCurrentEquipmentIndex(currentEquipmentIndex - 1)}
+                onClick={() => {
+                  if (currentEquipmentIndex > 0) {
+                    const currentData = {
+                      trad: { ...checkItemStates },
+                      voso: { ...vosoResponses }
+                    };
+                    const updatedResults = {
+                      ...inspectionResults,
+                      [currentEquipment.id]: currentData
+                    };
+                    setInspectionResults(updatedResults);
+                    
+                    const prevIndex = currentEquipmentIndex - 1;
+                    const prevEquip = areaEquipment[prevIndex];
+                    const prevSaved = updatedResults[prevEquip.id] as { trad: any, voso: any } | undefined;
+                    setCheckItemStates(prevSaved?.trad || {});
+                    setVosoResponses(prevSaved?.voso || {});
+                    setCurrentEquipmentIndex(prevIndex);
+                  }
+                }}
                 disabled={currentEquipmentIndex === 0}
                 className={`text-xs font-bold uppercase tracking-wider transition-opacity ${currentEquipmentIndex === 0 ? 'opacity-0' : 'opacity-100'}`}
               >
