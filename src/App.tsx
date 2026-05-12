@@ -524,57 +524,88 @@ const VOSOExecutionCategory = ({
 
   if (!items || items.length === 0) return null;
 
+  // Determine border color based on colorClass
+  const borderColor = colorClass.includes('sky') ? 'border-sky-200' :
+                    colorClass.includes('indigo') ? 'border-indigo-200' :
+                    colorClass.includes('emerald') ? 'border-emerald-200' :
+                    colorClass.includes('orange') ? 'border-orange-200' : 'border-zinc-200';
+
   return (
-    <div className={`p-6 rounded-[2.5rem] border border-zinc-100 ${colorClass} space-y-4 shadow-sm`}>
-       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-white rounded-xl shadow-sm">
-            <Icon className="w-5 h-5 text-zinc-600" />
+    <div className={`p-10 rounded-[4rem] border-2 ${borderColor} ${colorClass} space-y-8 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl`}>
+       {/* Background accent */}
+       <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
+       
+       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
+        <div className="flex items-center gap-6">
+          <div className="p-4 bg-white rounded-3xl shadow-md border border-white/50 flex-shrink-0">
+            <Icon className="w-10 h-10 text-zinc-900" />
           </div>
-          <h4 className="font-bold text-zinc-900">{title}</h4>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-4xl font-black text-zinc-900 leading-tight tracking-tighter uppercase mb-0.5">{title.split(' ')[1]}</h4>
+              <div className="w-3 h-3 rounded-full bg-zinc-900 opacity-20 animate-pulse" />
+            </div>
+            <p className="text-xs font-black text-zinc-500 uppercase tracking-[0.3em] opacity-80 flex items-center gap-2">
+              <span className="w-4 h-[1px] bg-zinc-400" />
+              Metodología VOSO
+            </p>
+          </div>
         </div>
-        <span className="text-[8px] font-black text-zinc-300 uppercase tracking-[0.2em]">{items.length} ítems</span>
+        <div className="bg-white/90 backdrop-blur-md px-6 py-3 rounded-2xl border-2 border-white shadow-lg flex items-center gap-3 self-start sm:self-center">
+          <div className="flex -space-x-2">
+            {[1,2,3].map(i => (
+              <div key={i} className="w-5 h-5 rounded-full border-2 border-white bg-zinc-100" />
+            ))}
+          </div>
+          <span className="text-xs font-black text-zinc-900 uppercase tracking-widest">{items.length} Tareas Pendientes</span>
+        </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6 relative z-10">
         {items.map((item) => {
           const res = responses[item.id];
           const hasIssue = res?.status === 'Observación' || res?.status === 'Crítico';
           
           return (
-            <div key={item.id} className="bg-white/60 backdrop-blur-sm p-4 rounded-3xl border border-white/40 space-y-4 transition-all">
-              <div className="flex items-start justify-between gap-4">
+            <div key={item.id} className={`bg-white/80 backdrop-blur-xl p-7 rounded-[3rem] border-2 transition-all duration-500 ${hasIssue ? 'border-amber-400 shadow-2xl scale-[1.03] z-20' : 'border-white shadow-sm hover:border-zinc-200'}`}>
+              <div className="flex items-start justify-between gap-6 mb-6">
                 <div className="flex-1">
-                  <p className="text-sm font-bold text-zinc-800 leading-tight">{item.name}</p>
-                  <div className="flex gap-2 mt-1">
-                    <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded tracking-widest ${
-                      item.type === 'Crítico' ? 'bg-red-50 text-red-500' :
-                      item.type === 'Seguridad' ? 'bg-amber-50 text-amber-600' :
-                      item.type === 'Mantenimiento' ? 'bg-brand-blue/5 text-brand-blue' :
-                      'bg-zinc-100 text-zinc-400'
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-2 h-2 rounded-full bg-zinc-200" />
+                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Punto de Control</span>
+                  </div>
+                  <p className="text-xl font-black text-zinc-900 leading-tight tracking-tight">{item.name}</p>
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-xl tracking-widest flex items-center gap-1.5 ${
+                      item.type === 'Crítico' ? 'bg-red-500 text-white shadow-lg shadow-red-100' :
+                      item.type === 'Seguridad' ? 'bg-amber-500 text-white shadow-lg shadow-amber-100' :
+                      item.type === 'Mantenimiento' ? 'bg-brand-blue text-white shadow-lg shadow-sky-100' :
+                      'bg-zinc-100 text-zinc-500'
                     }`}>
+                      <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                       {item.type}
                     </span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest bg-zinc-50/80 px-3 py-1 rounded-xl border border-zinc-100/50">ID: {item.id.slice(0,6)}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: 'OK', value: 'OK', selectedClasses: 'bg-emerald-500 text-white border-emerald-600 shadow-lg shadow-emerald-200' },
-                  { label: 'Obs.', value: 'Observación', selectedClasses: 'bg-amber-500 text-white border-amber-600 shadow-lg shadow-amber-200' },
-                  { label: 'Crit.', value: 'Crítico', selectedClasses: 'bg-red-500 text-white border-red-600 shadow-lg shadow-red-200' },
-                  { label: 'N/A', value: 'NA', selectedClasses: 'bg-zinc-600 text-white border-zinc-700 shadow-lg shadow-zinc-200' }
+                  { label: 'OK', value: 'OK', selectedClasses: 'bg-emerald-500 text-white border-emerald-600 shadow-2xl shadow-emerald-200 ring-4 ring-emerald-50' },
+                  { label: 'Obs.', value: 'Observación', selectedClasses: 'bg-amber-500 text-white border-amber-600 shadow-2xl shadow-amber-200 ring-4 ring-amber-50' },
+                  { label: 'Crit.', value: 'Crítico', selectedClasses: 'bg-red-500 text-white border-red-600 shadow-2xl shadow-red-200 ring-4 ring-red-50' },
+                  { label: 'N/A', value: 'NA', selectedClasses: 'bg-zinc-800 text-white border-zinc-950 shadow-2xl shadow-zinc-200 ring-4 ring-zinc-50' }
                 ].map((opt) => {
                   const isSelected = res?.status === opt.value;
                   return (
                     <button
                       key={opt.label}
                       onClick={() => onUpdate(item.id, opt.value as any)}
-                      className={`py-3 px-1 rounded-xl text-[9px] font-bold uppercase transition-all border ${
+                      className={`py-5 px-4 rounded-[1.8rem] text-xs font-black uppercase transition-all duration-300 border-2 ${
                         isSelected 
-                          ? `${opt.selectedClasses} scale-[1.05] z-10`
-                          : 'bg-white text-zinc-400 border-zinc-100 hover:border-zinc-200 shadow-sm active:scale-95'
+                          ? `${opt.selectedClasses} scale-[1.1] z-10`
+                          : 'bg-white text-zinc-400 border-zinc-100/80 hover:border-zinc-300 shadow-sm active:scale-90 hover:scale-[1.03] hover:text-zinc-600'
                       }`}
                     >
                       {opt.label}
@@ -1337,52 +1368,70 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             </button>
           </div>
 
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-2">
-                <ChevronRight className="w-4 h-4 text-zinc-900" />
-                {areaEquipment.length > 0 ? 'Equipo Actual' : 'Inspección General'}
+          <div className="space-y-8">
+            <div className="flex items-center justify-between px-2">
+              <h4 className="text-lg font-black text-zinc-900 uppercase tracking-tighter flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-white text-[10px] font-black">
+                   {currentEquipmentIndex + 1}
+                </div>
+                {areaEquipment.length > 0 ? 'Equipo en Revisión' : 'Inspección de Área'}
               </h4>
               {areaEquipment.length > 0 && (
-                <span className="text-[10px] bg-zinc-900 text-white px-2 py-1 rounded-full font-bold">
-                  {currentEquipmentIndex + 1} DE {areaEquipment.length}
-                </span>
+                <div className="flex items-center gap-2 bg-zinc-100 px-4 py-2 rounded-2xl border border-zinc-200/50">
+                  <span className="text-[10px] font-black text-zinc-900 uppercase tracking-[0.2em]">
+                    {currentEquipmentIndex + 1} / {areaEquipment.length}
+                  </span>
+                </div>
               )}
             </div>
             
-            <div className="p-6 bg-gradient-to-br from-brand-blue to-brand-green rounded-[2.5rem] text-white shadow-xl shadow-sky-100 relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
-               <div className="relative z-10 space-y-4">
-                 <div>
-                   <p className="text-[10px] font-bold text-sky-100/90 uppercase tracking-widest mb-1">{areaEquipment.length > 0 ? 'Inspeccionando' : 'Área sin equipos registrados'}</p>
-                   <h2 className="text-2xl font-bold">{currentEquipment?.name || selectedArea.name}</h2>
+            <div className="p-10 bg-zinc-900 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden group">
+               <div className="absolute top-0 right-0 w-80 h-80 bg-brand-blue/20 rounded-full -mr-32 -mt-32 blur-[100px] group-hover:bg-brand-green/20 transition-all duration-1000" />
+               <div className="relative z-10">
+                 <div className="flex items-center gap-4 mb-6">
+                    <div className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full border border-white/10 text-[10px] font-black uppercase tracking-[0.3em] text-sky-400">
+                      {areaEquipment.length > 0 ? 'Ruta de Inspección' : 'Área sin equipos'}
+                    </div>
                  </div>
+
+                 <h2 className="text-5xl font-black tracking-tighter mb-6 leading-none">
+                    {currentEquipment?.name || selectedArea.name}
+                 </h2>
                  
-                 <div className="flex gap-2">
+                 <div className="flex flex-wrap gap-3">
                    {areaEquipment.length > 0 && (
-                     <div className="px-3 py-1 bg-white/10 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                       Ruta: {currentEquipmentIndex + 1}
+                     <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md">
+                       <BarChart3 className="w-4 h-4 text-sky-400" />
+                       <span className="text-xs font-black uppercase tracking-widest text-zinc-300">Orden: {currentEquipmentIndex + 1}</span>
                      </div>
                    )}
-                   <div className="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                     {areaEquipment.length > 0 ? 'Activo' : 'General'}
+                   <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-2xl border border-emerald-500/20 backdrop-blur-md">
+                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                     <span className="text-xs font-black uppercase tracking-widest">
+                       {areaEquipment.length > 0 ? 'Estado: Activo' : 'Inspección General'}
+                     </span>
                    </div>
                  </div>
                </div>
             </div>
 
             {areaEquipment.length > 0 && (
-              <div className="space-y-3">
-                 <div className="flex items-center justify-between text-zinc-400 px-1">
-                   <span className="text-[10px] font-bold uppercase tracking-widest">Progreso de la ruta</span>
-                   <span className="text-[10px] font-bold">{Math.round(((currentEquipmentIndex) / areaEquipment.length) * 100)}%</span>
+              <div className="space-y-4 bg-zinc-50/50 p-6 rounded-[2.5rem] border border-zinc-100 shadow-sm">
+                 <div className="flex items-center justify-between text-zinc-900 px-1">
+                   <div className="flex items-center gap-2">
+                     <span className="text-xs font-black uppercase tracking-[0.2em]">Progreso</span>
+                     <span className="text-xs font-black text-brand-blue">{Math.round(((currentEquipmentIndex) / areaEquipment.length) * 100)}%</span>
+                   </div>
+                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{areaEquipment.length - currentEquipmentIndex} equipos restantes</span>
                  </div>
-                 <div className="flex gap-1.5 h-1.5 px-1">
+                 <div className="flex gap-2 h-3 px-1">
                    {areaEquipment.map((e, idx) => (
                      <div 
                        key={`prog-bar-${e.id}-${idx}`} 
-                       className={`flex-1 rounded-full transition-all duration-500 ${
-                         idx === currentEquipmentIndex ? 'bg-brand-blue scale-y-125' : idx < currentEquipmentIndex ? 'bg-brand-green' : 'bg-zinc-100'
+                       className={`flex-1 rounded-full border transition-all duration-700 ${
+                         idx === currentEquipmentIndex ? 'bg-brand-blue border-brand-blue shadow-lg shadow-sky-100 scale-y-125' : 
+                         idx < currentEquipmentIndex ? 'bg-brand-green border-brand-green opacity-40' : 
+                         'bg-white border-zinc-200'
                        }`} 
                      />
                    ))}
@@ -1391,12 +1440,22 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             )}
 
             {areaEquipment.length > 0 && currentEquipment?.inspeccionVOSO && (
-              <div className="space-y-6 py-2 border-t border-zinc-50 mt-4">
-                <div className="flex items-center justify-between px-1">
-                  <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Inspección Primaria VOSO</h4>
-                  <div className="flex gap-1">
-                    {[Eye, Ear, Hand, Wind].map((Ico, i) => <Ico key={`mini-voso-${i}`} className="w-3 h-3 text-zinc-300" />)}
+              <div className="space-y-10 py-4">
+                <div className="flex flex-col gap-4 px-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-2xl font-black text-zinc-900 tracking-tighter uppercase">Inspección Primaria</h4>
+                    <div className="flex gap-2">
+                      {[Eye, Ear, Hand, Wind].map((Ico, i) => (
+                        <div key={`mini-voso-${i}`} className="w-8 h-8 rounded-full bg-white border border-zinc-100 flex items-center justify-center shadow-sm">
+                          <Ico className="w-4 h-4 text-zinc-400" />
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                  <div className="h-1 w-20 bg-zinc-900 rounded-full" />
+                  <p className="text-sm text-zinc-500 font-medium leading-relaxed max-w-sm">
+                    Utiliza tus sentidos para detectar anomalías tempranas. La metodología <span className="font-black text-zinc-900">VOSO</span> es el estándar para el mantenimiento proactivo.
+                  </p>
                 </div>
                 
                 <div className="space-y-6">
@@ -1405,7 +1464,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     icon={Eye} 
                     items={currentEquipment.inspeccionVOSO.ver || []} 
                     responses={vosoResponses}
-                    colorClass="bg-sky-50/30"
+                    colorClass="bg-sky-50/80"
                     onUpdate={handleSetVOSOResponse}
                   />
                   <VOSOExecutionCategory 
@@ -1413,7 +1472,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     icon={Ear} 
                     items={currentEquipment.inspeccionVOSO.oir || []} 
                     responses={vosoResponses}
-                    colorClass="bg-indigo-50/30"
+                    colorClass="bg-indigo-50/80"
                     onUpdate={handleSetVOSOResponse}
                   />
                   <VOSOExecutionCategory 
@@ -1421,7 +1480,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     icon={Hand} 
                     items={currentEquipment.inspeccionVOSO.sentir || []} 
                     responses={vosoResponses}
-                    colorClass="bg-emerald-50/30"
+                    colorClass="bg-emerald-50/80"
                     onUpdate={handleSetVOSOResponse}
                   />
                   <VOSOExecutionCategory 
@@ -1429,7 +1488,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     icon={Wind} 
                     items={currentEquipment.inspeccionVOSO.oler || []} 
                     responses={vosoResponses}
-                    colorClass="bg-orange-50/30"
+                    colorClass="bg-orange-50/80"
                     onUpdate={handleSetVOSOResponse}
                   />
                 </div>
