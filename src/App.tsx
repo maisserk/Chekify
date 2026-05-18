@@ -429,7 +429,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
   if (!user) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-6 transition-colors duration-200">
-        <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl shadow-xl p-8 text-center border border-zinc-100 dark:border-zinc-800 transition-colors duration-200">
+        <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl shadow-xl dark:shadow-none p-8 text-center border border-zinc-100 dark:border-zinc-800 transition-colors duration-200">
           <div className="flex justify-center mb-6">
             <Logo className="h-16" />
           </div>
@@ -490,7 +490,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
               <button
                 disabled={isLoggingIn}
                 onClick={handleGoogleLogin}
-                className={`w-full py-4 px-6 bg-white border border-zinc-100 text-zinc-900 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all shadow-sm ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:bg-zinc-50'}`}
+                className={`w-full py-4 px-6 bg-white border border-zinc-100 text-zinc-900 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all shadow-sm dark:shadow-none ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:bg-zinc-50'}`}
               >
                 {isLoggingIn ? (
                   <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
@@ -508,8 +508,8 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
             </div>
           )}
 
-          <div className="mt-8 pt-6 border-t border-zinc-50">
-            <p className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">Powered by maisser.cl</p>
+          <div className="mt-8 pt-6 border-t border-zinc-50 dark:border-white/10">
+            <p className="text-[10px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-widest">Powered by maisser.cl</p>
           </div>
         </div>
       </div>
@@ -552,13 +552,13 @@ const VOSOExecutionCategory = ({
                     colorClass.includes('orange') ? 'border-orange-200' : 'border-zinc-200';
 
   return (
-    <div className={`p-10 rounded-[4rem] border-2 ${borderColor} dark:border-white/20 ${colorClass} dark:bg-black/40 space-y-8 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl`}>
+    <div className={`p-10 rounded-[4rem] border-2 ${borderColor} dark:border-white/20 ${colorClass} dark:bg-black/40 space-y-8 shadow-xl dark:shadow-none relative overflow-hidden transition-all hover:shadow-2xl dark:hover:shadow-none`}>
        {/* Background accent */}
        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 dark:bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
        
        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
         <div className="flex items-center gap-6">
-          <div className="p-4 bg-white dark:bg-zinc-900 rounded-3xl shadow-md border border-white/50 dark:border-white/10 flex-shrink-0">
+          <div className="p-4 bg-white dark:bg-black rounded-3xl shadow-md dark:shadow-none border border-white/50 dark:border-white/20 flex-shrink-0">
             <Icon className="w-10 h-10 text-zinc-900 dark:text-white" />
           </div>
           <div>
@@ -572,7 +572,7 @@ const VOSOExecutionCategory = ({
             </p>
           </div>
         </div>
-        <div className="bg-white/90 dark:bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border-2 border-white dark:border-white/20 shadow-lg flex items-center gap-3 self-start sm:self-center">
+        <div className="bg-white/90 dark:bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border-2 border-white dark:border-white/20 shadow-lg dark:shadow-none flex items-center gap-3 self-start sm:self-center">
           <div className="flex -space-x-2">
             {[1,2,3].map(i => (
               <div key={i} className="w-5 h-5 rounded-full border-2 border-white dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-800" />
@@ -588,7 +588,7 @@ const VOSOExecutionCategory = ({
           const hasIssue = res?.status === 'Observación' || res?.status === 'Crítico';
           
           return (
-            <div key={item.id} className={`bg-white/80 dark:bg-black p-7 rounded-[3rem] border-2 transition-all duration-500 ${hasIssue ? 'border-amber-400 shadow-2xl scale-[1.03] z-20' : 'border-white dark:border-white/10 shadow-sm hover:border-zinc-200 dark:hover:border-white/30'}`}>
+            <div key={item.id} className={`bg-white/80 dark:bg-black p-7 rounded-[3rem] border-2 transition-all duration-500 ${hasIssue ? 'border-amber-400 shadow-2xl dark:shadow-none scale-[1.03] z-20' : 'border-white dark:border-white/10 shadow-sm dark:shadow-none hover:border-zinc-200 dark:hover:border-white/30'}`}>
               <div className="flex items-start justify-between gap-6 mb-6">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
@@ -626,7 +626,7 @@ const VOSOExecutionCategory = ({
                       className={`py-5 px-4 rounded-[1.8rem] text-xs font-black uppercase transition-all duration-300 border-2 ${
                         isSelected 
                           ? `${opt.selectedClasses} scale-[1.1] z-10`
-                          : 'bg-white dark:bg-zinc-950/20 text-zinc-400 dark:text-zinc-600 border-zinc-100/80 dark:border-white/5 hover:border-zinc-300 dark:hover:border-white/20 shadow-sm active:scale-90 hover:scale-[1.03] hover:text-zinc-600 dark:hover:text-zinc-300'
+                          : 'bg-white dark:bg-zinc-950/20 text-zinc-400 dark:text-zinc-600 border-zinc-100/80 dark:border-white/5 hover:border-zinc-300 dark:hover:border-white/20 shadow-sm dark:shadow-none active:scale-90 hover:scale-[1.03] hover:text-zinc-600 dark:hover:text-zinc-300'
                       }`}
                     >
                       {opt.label}
@@ -665,7 +665,7 @@ const VOSOExecutionCategory = ({
                       value={res?.comment || ''}
                       onChange={e => onUpdate(item.id, res.status, e.target.value)}
                       placeholder="Escribe el detalle del hallazgo..."
-                      className="w-full p-3 bg-white/80 dark:bg-black/40 border border-zinc-200 dark:border-white/10 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[80px] font-medium text-zinc-700 dark:text-zinc-300 shadow-sm"
+                      className="w-full p-3 bg-white/80 dark:bg-black/40 border border-zinc-200 dark:border-white/10 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[80px] font-medium text-zinc-700 dark:text-zinc-300 shadow-sm dark:shadow-none"
                     />
                     
                     <div className="flex items-center gap-3">
@@ -695,7 +695,7 @@ const VOSOExecutionCategory = ({
                         CAPTURAR EVIDENCIA
                       </button>
                       {res?.photoUrl && (
-                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-2 border-white dark:border-white/20 shadow-sm flex-shrink-0">
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-2 border-white dark:border-white/20 shadow-sm dark:shadow-none flex-shrink-0">
                           <img src={res.photoUrl} className="w-full h-full object-cover" />
                         </div>
                       )}
@@ -1288,7 +1288,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           <motion.div 
             key="operator-feedback-msg"
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-            className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-2xl shadow-xl border text-sm font-bold flex items-center gap-2 ${
+            className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-2xl shadow-xl dark:shadow-none border text-sm font-bold flex items-center gap-2 ${
               message.type === 'success' ? 'bg-brand-green/10 border-brand-green/20 text-brand-green' : 'bg-red-50 border-red-100 text-red-700'
             }`}
           >
@@ -1299,41 +1299,41 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       </AnimatePresence>
       {/* Plant Stats for Operator */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
-        <div className="bg-brand-blue text-white p-4 rounded-3xl shadow-lg shadow-sky-100 border border-sky-400/20">
+        <div className="bg-brand-blue text-white p-4 rounded-3xl shadow-lg shadow-sky-100 dark:shadow-none border border-sky-400/20">
           <p className="text-[10px] font-bold text-sky-100 uppercase tracking-widest mb-1">Cierre Prom.</p>
           <div className="flex items-baseline gap-1">
             <p className="text-xl font-bold">{plantStats.avgResolutionHours}</p>
             <span className="text-[10px] font-bold text-sky-200">hrs</span>
           </div>
         </div>
-        <div className="bg-white text-zinc-900 p-4 rounded-3xl border border-zinc-100 flex flex-col justify-center shadow-sm">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Área Prom.</p>
+        <div className="bg-white dark:bg-black text-zinc-900 dark:text-white p-4 rounded-3xl border border-zinc-100 dark:border-white/20 flex flex-col justify-center shadow-sm dark:shadow-none">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Área Prom.</p>
           <div className="flex items-baseline gap-1">
-            <p className="text-xl font-bold text-zinc-900">{Math.floor(plantStats.avgInspectionSeconds / 60)}m {plantStats.avgInspectionSeconds % 60}s</p>
+            <p className="text-xl font-bold text-zinc-900 dark:text-white">{Math.floor(plantStats.avgInspectionSeconds / 60)}m {plantStats.avgInspectionSeconds % 60}s</p>
           </div>
         </div>
-        <div className="bg-white text-zinc-900 p-4 rounded-3xl border border-zinc-100 flex flex-col justify-center shadow-sm">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Equipo Prom.</p>
+        <div className="bg-white dark:bg-black text-zinc-900 dark:text-white p-4 rounded-3xl border border-zinc-100 dark:border-white/20 flex flex-col justify-center shadow-sm dark:shadow-none">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Equipo Prom.</p>
           <div className="flex items-baseline gap-1">
-            <p className="text-xl font-bold text-sky-600">{(plantStats as any).avgEquipSeconds}s</p>
+            <p className="text-xl font-bold text-sky-600 dark:text-sky-400">{(plantStats as any).avgEquipSeconds}s</p>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-3xl shadow-sm border border-zinc-100 flex flex-col justify-center">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Pendientes</p>
-          <p className="text-xl font-bold text-zinc-900">{plantStats.totalOpen}</p>
+        <div className="bg-white p-4 rounded-3xl shadow-sm dark:shadow-none border border-zinc-100 dark:bg-black dark:border-white/20 flex flex-col justify-center">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Pendientes</p>
+          <p className="text-xl font-bold text-zinc-900 dark:text-white">{plantStats.totalOpen}</p>
         </div>
-        <div className="bg-white p-4 rounded-3xl shadow-sm border border-zinc-100 flex flex-col justify-center">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">En Revisión</p>
-          <p className="text-xl font-bold text-orange-600">{plantStats.totalInReview}</p>
+        <div className="bg-white p-4 rounded-3xl shadow-sm dark:shadow-none border border-zinc-100 dark:bg-black dark:border-white/20 flex flex-col justify-center">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">En Revisión</p>
+          <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{plantStats.totalInReview}</p>
         </div>
-        <div className="bg-white p-4 rounded-3xl shadow-sm border border-zinc-100 hidden sm:flex flex-col justify-center">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Total Cerrados</p>
-          <p className="text-xl font-bold text-zinc-900">{plantStats.totalClosed}</p>
+        <div className="bg-white p-4 rounded-3xl shadow-sm dark:shadow-none border border-zinc-100 dark:bg-black dark:border-white/20 hidden sm:flex flex-col justify-center">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Total Cerrados</p>
+          <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{plantStats.totalClosed}</p>
         </div>
       </div>
 
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Nueva Inspección</h2>
+        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Nueva Inspección</h2>
         <div className="bg-zinc-100 px-3 py-1 rounded-full text-xs font-medium text-zinc-600">
           Operador: {user.name}
         </div>
@@ -1344,16 +1344,16 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={startScanner}
-            className="w-full aspect-square max-w-md mx-auto bg-white border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center gap-4 hover:border-zinc-900 transition-colors group"
+            className="w-full aspect-square max-w-md mx-auto bg-white dark:bg-black border-2 border-dashed border-zinc-200 dark:border-white/20 rounded-3xl flex flex-col items-center justify-center gap-4 hover:border-zinc-900 dark:hover:border-white transition-colors group"
           >
-            <div className="w-20 h-20 bg-zinc-50 rounded-full flex items-center justify-center group-hover:bg-zinc-900 transition-colors">
-              <QrCode className="w-10 h-10 text-zinc-400 group-hover:text-white" />
+            <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center group-hover:bg-zinc-900 dark:group-hover:bg-white transition-colors">
+              <QrCode className="w-10 h-10 text-zinc-400 dark:text-zinc-500 group-hover:text-white dark:group-hover:text-black" />
             </div>
-            <span className="text-zinc-500 font-medium group-hover:text-brand-blue transition-colors text-center px-4">Escanear Código QR de Área</span>
+            <span className="text-zinc-500 dark:text-zinc-400 font-medium group-hover:text-brand-blue dark:group-hover:text-white transition-colors text-center px-4 uppercase tracking-tight text-xs">Escanear Código QR de Área</span>
           </motion.button>
           
           <div className="max-w-md mx-auto">
-            <p className="text-center text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3">O selecciona manualmente</p>
+            <p className="text-center text-xs font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-3">O selecciona manualmente</p>
             <div className="grid gap-2">
               {areas.length > 0 ? (
                 areas.slice(0, 3).map((area, idx) => (
@@ -1364,14 +1364,14 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                       setInspectionStartTime(new Date());
                       setEquipmentStartTime(new Date());
                     }}
-                    className="w-full p-4 bg-white border border-zinc-100 rounded-2xl flex items-center justify-between hover:bg-zinc-50 transition-colors"
+                    className="w-full p-4 bg-white dark:bg-black border border-zinc-100 dark:border-white/20 rounded-2xl flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors shadow-sm dark:shadow-none"
                   >
-                    <span className="font-bold text-zinc-900">{area.name}</span>
-                    <Plus className="w-4 h-4 text-zinc-400" />
+                    <span className="font-bold text-zinc-900 dark:text-white tracking-tight">{area.name}</span>
+                    <Plus className="w-4 h-4 text-zinc-400 dark:text-zinc-600" />
                   </button>
                 ))
               ) : (
-                <p className="text-center text-sm text-zinc-400 py-4 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200 italic">
+                <p className="text-center text-sm text-zinc-400 dark:text-zinc-600 py-4 bg-zinc-50 dark:bg-black rounded-2xl border border-dashed border-zinc-200 dark:border-white/10 italic">
                   Cargando áreas...
                 </p>
               )}
@@ -1408,7 +1408,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-md bg-white dark:bg-black border border-transparent dark:border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col max-h-[80vh] overflow-hidden"
+              className="relative w-full max-w-md bg-white dark:bg-black border border-transparent dark:border-white/10 rounded-[2.5rem] shadow-2xl dark:shadow-none flex flex-col max-h-[80vh] overflow-hidden"
             >
               <div className="p-6 border-b border-zinc-50 dark:border-white/5">
                 <div className="flex items-center justify-between mb-4">
@@ -1468,7 +1468,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           <div id="reader" className="overflow-hidden rounded-3xl border-2 border-zinc-900"></div>
           <button 
             onClick={stopScanner}
-            className="absolute top-4 right-4 bg-white/80 backdrop-blur p-2 rounded-full shadow-lg z-10"
+            className="absolute top-4 right-4 bg-white/80 backdrop-blur p-2 rounded-full shadow-lg dark:shadow-none z-10"
           >
             <X className="w-6 h-6" />
           </button>
@@ -1479,11 +1479,11 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm space-y-6"
+          className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6"
         >
           <div className="flex items-center justify-between border-b border-zinc-50 dark:border-white/5 pb-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-brand-blue to-brand-green rounded-2xl flex items-center justify-center shadow-md">
+              <div className="w-12 h-12 bg-gradient-to-br from-brand-blue to-brand-green rounded-2xl flex items-center justify-center shadow-md dark:shadow-none">
                 <MapPin className="text-white w-6 h-6" />
               </div>
               <div>
@@ -1513,7 +1513,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               )}
             </div>
             
-            <div className="p-10 bg-zinc-900 dark:bg-zinc-950/40 border border-transparent dark:border-white/10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden group">
+            <div className="p-10 bg-zinc-900 dark:bg-zinc-950/40 border border-transparent dark:border-white/10 rounded-[3.5rem] text-white shadow-2xl dark:shadow-none relative overflow-hidden group">
                <div className="absolute top-0 right-0 w-80 h-80 bg-brand-blue/20 rounded-full -mr-32 -mt-32 blur-[100px] group-hover:bg-brand-green/20 transition-all duration-1000" />
                <div className="relative z-10">
                  <div className="flex items-center gap-4 mb-6">
@@ -1522,7 +1522,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     </div>
                  </div>
 
-                 <h2 className="text-5xl font-black tracking-tighter mb-6 leading-none">
+                 <h2 className="text-5xl font-black tracking-tighter mb-6 leading-none text-zinc-900 dark:text-white">
                     {currentEquipment?.name || selectedArea.name}
                  </h2>
                  
@@ -1544,7 +1544,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             </div>
 
             {areaEquipment.length > 0 && (
-              <div className="space-y-4 bg-zinc-50/50 dark:bg-black/20 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-white/5 shadow-sm">
+              <div className="space-y-4 bg-zinc-50/50 dark:bg-black/20 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-white/5 shadow-sm dark:shadow-none">
                  <div className="flex items-center justify-between text-zinc-900 dark:text-white px-1">
                    <div className="flex items-center gap-2">
                      <span className="text-xs font-black uppercase tracking-[0.2em]">Progreso</span>
@@ -1557,7 +1557,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                      <div 
                        key={`prog-bar-${e.id}-${idx}`} 
                        className={`flex-1 rounded-full border transition-all duration-700 ${
-                         idx === currentEquipmentIndex ? 'bg-brand-blue border-brand-blue shadow-lg shadow-sky-100 scale-y-125' : 
+                         idx === currentEquipmentIndex ? 'bg-brand-blue border-brand-blue shadow-lg shadow-sky-100 dark:shadow-none scale-y-125' : 
                          idx < currentEquipmentIndex ? 'bg-brand-green border-brand-green opacity-40' : 
                          'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-white/10'
                        }`} 
@@ -1574,7 +1574,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     <h4 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tighter uppercase">Inspección Primaria</h4>
                     <div className="flex gap-2">
                       {[Eye, Ear, Hand, Wind, Sparkles].map((Ico, i) => (
-                        <div key={`mini-voso-${i}`} className="w-8 h-8 rounded-full bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 flex items-center justify-center shadow-sm">
+                        <div key={`mini-voso-${i}`} className="w-8 h-8 rounded-full bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 flex items-center justify-center shadow-sm dark:shadow-none">
                           <Ico className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />
                         </div>
                       ))}
@@ -1645,9 +1645,9 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                             onClick={() => handleSetItemState(item.id, state)}
                             className={`py-2 px-3 rounded-xl text-[10px] font-bold uppercase transition-all border ${
                               checkItemStates[item.id] === state 
-                                ? state === 'Bueno' ? 'bg-brand-green text-white border-brand-green shadow-md shadow-emerald-100' 
-                                : state === 'Regular' ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-100'
-                                : 'bg-red-500 text-white border-red-500 shadow-md shadow-red-100'
+                                ? state === 'Bueno' ? 'bg-brand-green text-white border-brand-green shadow-md shadow-emerald-100 dark:shadow-none' 
+                                : state === 'Regular' ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-100 dark:shadow-none'
+                                : 'bg-red-500 text-white border-red-500 shadow-md shadow-red-100 dark:shadow-none'
                                 : 'bg-white text-zinc-400 border-zinc-200 hover:border-zinc-300'
                             }`}
                           >
@@ -1667,7 +1667,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                 disabled={!allItemsChecked()}
                 className={`w-full py-6 rounded-3xl font-bold flex items-center justify-center gap-3 transition-all border ${
                   allItemsChecked() 
-                    ? 'bg-zinc-900 text-white shadow-xl shadow-zinc-200 active:scale-[0.98]' 
+                    ? 'bg-zinc-900 text-white shadow-xl shadow-zinc-200 dark:shadow-none active:scale-[0.98]' 
                     : 'bg-zinc-100 text-zinc-300 border-zinc-200 grayscale cursor-not-allowed'
                 }`}
               >
@@ -1721,7 +1721,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-3xl p-6 border border-zinc-100 shadow-xl space-y-6"
+          className="bg-white dark:bg-black rounded-3xl p-6 border border-zinc-100 dark:border-white/10 shadow-xl dark:shadow-none space-y-6"
         >
           <h3 className="text-xl font-bold text-zinc-900">Detalle del Hallazgo</h3>
           
@@ -1779,7 +1779,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     <img src={findingPhoto} className="w-20 h-20 object-cover rounded-2xl border border-zinc-200" alt="Preview" />
                     <button 
                       onClick={() => setFindingPhoto('')}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg dark:shadow-none opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -1822,7 +1822,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             <button 
               onClick={() => handleSubmitFinding(false)}
               disabled={!findingDescription || isSaving}
-              className="flex-[2] py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors disabled:opacity-50 shadow-lg shadow-sky-100 flex items-center justify-center gap-2"
+              className="flex-[2] py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors disabled:opacity-50 shadow-lg shadow-sky-100 dark:shadow-none flex items-center justify-center gap-2"
             >
               {isSaving ? (
                 <>
@@ -1841,13 +1841,13 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0, y: 20 }} 
                 animate={{ scale: 1, opacity: 1, y: 0 }}
-                className="relative bg-white p-6 rounded-[2.5rem] shadow-2xl max-w-sm w-full space-y-4"
+                className="relative bg-white dark:bg-black p-6 rounded-[2.5rem] shadow-2xl dark:shadow-none max-w-sm w-full space-y-4 border border-transparent dark:border-white/20"
               >
-                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                <div className="w-12 h-12 bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto">
                   <AlertTriangle className="w-6 h-6" />
                 </div>
                 <div className="text-center">
-                  <h4 className="text-lg font-bold text-zinc-900">Posible Duplicado</h4>
+                  <h4 className="text-lg font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Posible Duplicado</h4>
                   <p className="text-xs text-zinc-500 mt-1">
                     Ya existe un hallazgo activo para esta ubicación. Revisa si es el mismo:
                   </p>
@@ -1863,7 +1863,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                 <div className="flex flex-col gap-2 pt-2">
                   <button 
                     onClick={() => { setDuplicateFinding(null); handleSubmitFinding(true); }}
-                    className="w-full py-4 bg-brand-blue text-white rounded-2xl font-bold text-sm active:scale-95 transition-all shadow-lg shadow-sky-100"
+                    className="w-full py-4 bg-brand-blue text-white rounded-2xl font-bold text-sm active:scale-95 transition-all shadow-lg shadow-sky-100 dark:shadow-none"
                   >
                     No es el mismo, reportar nuevo
                   </button>
@@ -1895,15 +1895,15 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               animate={{ y: 0 }} 
               exit={{ y: "100%" }} 
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="relative w-full max-w-lg bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+              className="relative w-full max-w-lg bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl dark:shadow-none flex flex-col max-h-[90vh] overflow-hidden border-t sm:border border-zinc-100 dark:border-white/20"
             >
-              <div className="p-8 border-b border-zinc-50 flex items-center justify-between">
+              <div className="p-8 border-b border-zinc-50 dark:border-white/10 flex items-center justify-between">
                 <div>
-                  <h3 className="text-xl font-bold text-zinc-900">Resumen de Inspección</h3>
-                  <p className="text-sm text-zinc-500">{currentEquipment.name}</p>
+                  <h3 className="text-xl font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Resumen de Inspección</h3>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">{currentEquipment.name}</p>
                 </div>
-                <button onClick={() => setShowEquipmentSummary(false)} className="p-2 bg-zinc-50 rounded-full">
-                  <X className="w-5 h-5 text-zinc-400" />
+                <button onClick={() => setShowEquipmentSummary(false)} className="p-2 bg-zinc-50 dark:bg-zinc-900 rounded-full">
+                  <X className="w-5 h-5 text-zinc-400 dark:text-zinc-500" />
                 </button>
               </div>
               
@@ -1911,7 +1911,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-emerald-50 p-4 rounded-3xl border border-emerald-100 flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-xl shadow-sm text-emerald-500">
+                      <div className="p-2 bg-white dark:bg-zinc-800 rounded-xl shadow-sm dark:shadow-none text-emerald-500">
                         <CheckCircle2 className="w-5 h-5" />
                       </div>
                       <div>
@@ -1923,7 +1923,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                       </div>
                     </div>
                     <div className="bg-amber-50 p-4 rounded-3xl border border-amber-100 flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-xl shadow-sm text-amber-500">
+                      <div className="p-2 bg-white dark:bg-zinc-800 rounded-xl shadow-sm dark:shadow-none text-amber-500">
                          <AlertTriangle className="w-5 h-5" />
                       </div>
                       <div>
@@ -1965,7 +1965,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                                )}
                              </div>
                              {r.photoUrl && (
-                               <div className="w-10 h-10 rounded-lg overflow-hidden border border-white shadow-sm flex-shrink-0">
+                               <div className="w-10 h-10 rounded-lg overflow-hidden border border-white dark:border-white/20 shadow-sm dark:shadow-none flex-shrink-0">
                                  <img src={r.photoUrl} className="w-full h-full object-cover" />
                                </div>
                              )}
@@ -1995,7 +1995,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                      {((Object.values(vosoResponses) as VOSOResponse[]).every(r => r.status === 'OK' || r.status === 'NA') && 
                       Object.values(checkItemStates).every(s => s === 'Bueno')) && (
                        <div className="py-12 text-center bg-zinc-50 rounded-[2.5rem] border border-dashed border-zinc-200">
-                         <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                         <div className="w-16 h-16 bg-white dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm dark:shadow-none">
                            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
                          </div>
                          <p className="text-sm font-bold text-zinc-900">Sin hallazgos reportados</p>
@@ -2012,7 +2012,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     setShowEquipmentSummary(false);
                     handleNextEquipment();
                   }}
-                  className="w-full py-4 bg-zinc-900 text-white rounded-2xl font-bold shadow-lg shadow-zinc-200 active:scale-95 transition-all flex items-center justify-center gap-3"
+                  className="w-full py-4 bg-zinc-900 dark:bg-white dark:text-black text-white rounded-2xl font-bold shadow-lg shadow-zinc-200 dark:shadow-none active:scale-95 transition-all flex items-center justify-center gap-3"
                 >
                   <span className="uppercase tracking-widest">
                     {currentEquipmentIndex < areaEquipment.length - 1 ? 'Siguiente Equipo' : 'Finalizar y Guardar'}
@@ -2065,7 +2065,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
   }, [filteredByDate, groupBy]);
 
   return (
-    <div className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm space-y-6">
+    <div className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-zinc-900 dark:text-white" />
@@ -2074,13 +2074,13 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
         <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
           <button 
             onClick={() => setGroupBy('area')}
-            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'area' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500'}`}
+            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'area' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm dark:shadow-none' : 'text-zinc-500'}`}
           >
             Por Área
           </button>
           <button 
             onClick={() => setGroupBy('operador')}
-            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'operador' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500'}`}
+            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'operador' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm dark:shadow-none' : 'text-zinc-500'}`}
           >
             Por Operador
           </button>
@@ -2328,18 +2328,18 @@ const SupervisorDashboard = ({
     <div className="space-y-6">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Gestión de Hallazgos</h2>
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Gestión de Hallazgos</h2>
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setShowStats(!showStats)}
-              className={`p-2 rounded-xl transition-all ${showStats ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'bg-zinc-100 text-zinc-500 hover:text-zinc-900'}`}
+              className={`p-2 rounded-xl transition-all ${showStats ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'bg-zinc-100 text-zinc-500 hover:text-zinc-900'}`}
               title="Estadísticas"
             >
               <BarChart3 className="w-5 h-5" />
             </button>
             <button 
               onClick={() => setShowFilters(!showFilters)}
-              className={`p-2 rounded-xl transition-all ${showFilters || startDate || endDate || operatorFilter !== 'All' ? 'bg-brand-green text-white shadow-md shadow-emerald-100' : 'bg-zinc-100 text-zinc-500 hover:text-zinc-900'}`}
+              className={`p-2 rounded-xl transition-all ${showFilters || startDate || endDate || operatorFilter !== 'All' ? 'bg-brand-green text-white shadow-md shadow-emerald-100 dark:shadow-none' : 'bg-zinc-100 text-zinc-500 hover:text-zinc-900'}`}
               title="Filtros Avanzados"
             >
               <Filter className="w-5 h-5" />
@@ -2350,7 +2350,7 @@ const SupervisorDashboard = ({
                   key={`filter-tab-${f}-${fIdx}`}
                   onClick={() => setFilter(f)}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    filter === f ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+                    filter === f ? 'bg-white text-zinc-900 shadow-sm dark:shadow-none' : 'text-zinc-500 hover:text-zinc-700'
                   }`}
                 >
                   {f === 'Open' ? 'Pendientes' : f === 'InReview' ? 'En Revisión' : f === 'Closed' ? 'Cerrados' : 'Todos'}
@@ -2367,7 +2367,7 @@ const SupervisorDashboard = ({
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm space-y-4 mb-4"
+              className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm dark:shadow-none space-y-4 mb-4"
             >
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-widest">Filtros Avanzados</h4>
@@ -2450,7 +2450,7 @@ const SupervisorDashboard = ({
               placeholder="Buscar por área, descripción u operador..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-white border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue shadow-sm transition-all text-sm"
+              className="w-full pl-11 pr-4 py-3 bg-white border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue shadow-sm dark:shadow-none transition-all text-sm"
             />
           </div>
           {(startDate || endDate || operatorFilter !== 'All') && !showFilters && (
@@ -2479,7 +2479,7 @@ const SupervisorDashboard = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               onClick={() => setSelectedFinding(finding)}
-              className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+              className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none hover:shadow-md dark:hover:shadow-none transition-all cursor-pointer group"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -2505,7 +2505,7 @@ const SupervisorDashboard = ({
               <div className="mt-4 pt-3 border-t border-zinc-50 dark:border-white/5 flex items-center justify-between gap-4">
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-600 truncate flex-1">Por: {finding.operatorName}</span>
                 {finding.photoUrl && (
-                  <div className="w-12 h-12 rounded-xl bg-zinc-900 dark:bg-zinc-800 overflow-hidden shrink-0 shadow-sm border border-zinc-100 dark:border-white/10">
+                  <div className="w-12 h-12 rounded-xl bg-zinc-900 dark:bg-zinc-800 overflow-hidden shrink-0 shadow-sm dark:shadow-none border border-zinc-100 dark:border-white/10">
                     <img src={finding.photoUrl} className="w-full h-full object-contain" alt="" />
                   </div>
                 )}
@@ -2536,7 +2536,7 @@ const SupervisorDashboard = ({
               initial={{ y: '100%' }} 
               animate={{ y: 0 }} 
               exit={{ y: '100%' }}
-              className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
+              className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
             >
               <div className="min-h-[200px] max-h-[400px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 dark:bg-black flex items-center justify-center">
                 <img 
@@ -2547,7 +2547,7 @@ const SupervisorDashboard = ({
                 />
                 <button 
                   onClick={() => setSelectedFinding(null)}
-                  className="absolute top-4 right-4 bg-white/80 dark:bg-black/60 backdrop-blur p-2 rounded-full hover:bg-white dark:hover:bg-black transition-colors shadow-md z-10 border border-transparent dark:border-white/10"
+                  className="absolute top-4 right-4 bg-white/80 dark:bg-black/60 backdrop-blur p-2 rounded-full hover:bg-white dark:hover:bg-black transition-colors shadow-md dark:shadow-none z-10 border border-transparent dark:border-white/10"
                 >
                   <X className="w-5 h-5 dark:text-white" />
                 </button>
@@ -2623,7 +2623,7 @@ const SupervisorDashboard = ({
                         <div className="flex gap-2">
                           <button 
                             onClick={handleDeleteFinding}
-                            className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold text-sm shadow-md shadow-red-100 active:scale-95 transition-all"
+                            className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold text-sm shadow-md shadow-red-100 dark:shadow-none active:scale-95 transition-all"
                           >
                             Sí, Eliminar
                           </button>
@@ -2700,9 +2700,9 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
     return (
       <div className={`space-y-8 ${className}`}>
         {/* Header - Location */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-zinc-900 p-4 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-xl relative overflow-hidden group">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-zinc-900 p-4 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-xl dark:shadow-none relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-48 h-48 bg-sky-500/10 rounded-full -mr-24 -mt-24 blur-3xl opacity-50" />
-          <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0 backdrop-blur-md border border-white/20 shadow-inner">
+          <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0 backdrop-blur-md border border-white/20 shadow-inner dark:shadow-none">
             <LayoutDashboard className="w-8 h-8 text-sky-400" />
           </div>
           <div className="relative z-10 flex-1 min-w-0">
@@ -2719,14 +2719,14 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
         {(criticalCount > 0 || observationCount > 0) && (
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <div className={`p-4 rounded-3xl border-2 flex flex-col items-center justify-center text-center transition-all ${criticalCount > 0 ? 'bg-red-50 border-red-100' : 'bg-zinc-50 border-zinc-100 opacity-50'}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${criticalCount > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-100' : 'bg-zinc-200 text-zinc-400'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${criticalCount > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-100 dark:shadow-none' : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800'}`}>
                 <AlertCircle className="w-6 h-6" />
               </div>
               <p className={`text-2xl font-black ${criticalCount > 0 ? 'text-red-600' : 'text-zinc-400'}`}>{criticalCount}</p>
               <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Críticos</p>
             </div>
             <div className={`p-4 rounded-3xl border-2 flex flex-col items-center justify-center text-center transition-all ${observationCount > 0 ? 'bg-amber-50 border-amber-100' : 'bg-zinc-50 border-zinc-100 opacity-50'}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${observationCount > 0 ? 'bg-amber-500 text-white shadow-lg shadow-amber-100' : 'bg-zinc-200 text-zinc-400'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${observationCount > 0 ? 'bg-amber-500 text-white shadow-lg shadow-amber-100 dark:shadow-none' : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800'}`}>
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <p className={`text-2xl font-black ${observationCount > 0 ? 'text-amber-600' : 'text-zinc-400'}`}>{observationCount}</p>
@@ -2759,7 +2759,7 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
                 const comment = status ? detail.replace(status, '').replace(/^-/, '').trim().replace('[SOLUCIONADO]', '') : detail.replace('[SOLUCIONADO]', '');
 
                 return (
-                  <div key={i} className={`flex flex-col gap-4 p-6 bg-white border rounded-[2.5rem] shadow-sm transition-all hover:shadow-lg hover:border-zinc-200 relative overflow-hidden group ${isSolved ? 'border-emerald-100 bg-emerald-50/10' : 'border-zinc-100'}`}>
+                  <div key={i} className={`flex flex-col gap-4 p-6 bg-white dark:bg-black border rounded-[2.5rem] shadow-sm dark:shadow-none transition-all hover:shadow-lg dark:hover:shadow-none hover:border-zinc-200 dark:hover:border-white/20 relative overflow-hidden group ${isSolved ? 'border-emerald-100 dark:border-emerald-500/20 bg-emerald-50/10 dark:bg-emerald-500/5' : 'border-zinc-100 dark:border-white/10'}`}>
                     {/* Decorative accent */}
                     <div className={`absolute top-0 left-0 w-2 h-full ${
                       category === 'VER' ? 'bg-sky-500' :
@@ -2770,7 +2770,7 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
                     }`} />
 
                     <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-                      <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-[1.5rem] flex items-center justify-center flex-shrink-0 border-2 ${colorStyles} shadow-sm group-hover:scale-105 transition-transform`}>
+                      <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-[1.5rem] flex items-center justify-center flex-shrink-0 border-2 ${colorStyles} shadow-sm dark:shadow-none group-hover:scale-105 transition-transform`}>
                         <IconComp className="w-8 h-8 sm:w-9 sm:h-9" />
                       </div>
                       
@@ -2783,7 +2783,7 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
                           
                           {status && (
                             <span className={`text-[10px] font-black px-3 py-1 rounded-xl border-2 uppercase tracking-[0.15em] ${
-                              status === 'Crítico' ? 'bg-red-500 text-white border-red-500 shadow-sm shadow-red-100' :
+                              status === 'Crítico' ? 'bg-red-500 text-white border-red-500 shadow-sm shadow-red-100 dark:shadow-none' :
                               status === 'Observación' ? 'bg-amber-100 text-amber-700 border-amber-200' :
                               'bg-zinc-100 text-zinc-500 border-zinc-200'
                             }`}>
@@ -2792,7 +2792,7 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
                           )}
 
                           {isSolved && (
-                            <span className="text-[10px] font-black bg-emerald-500 text-white px-3 py-1 rounded-xl uppercase tracking-widest flex items-center gap-1.5 shadow-sm shadow-emerald-200">
+                            <span className="text-[10px] font-black bg-emerald-500 text-white px-3 py-1 rounded-xl uppercase tracking-widest flex items-center gap-1.5 shadow-sm shadow-emerald-200 dark:shadow-none">
                                <CheckCircle2 className="w-3.5 h-3.5" />
                                SUBSANADO
                             </span>
@@ -2825,13 +2825,13 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
         {tradPart && (
           <div className="space-y-4 pt-6 border-t border-zinc-100 border-dashed">
             <h5 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.25em] px-1 flex items-center gap-2">
-               <div className="w-2 h-2 rounded-full bg-zinc-200 shadow-inner" />
+               <div className="w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800 shadow-inner dark:shadow-none" />
                Controles Estándar Adicionales
             </h5>
             <div className="grid gap-3">
               {tradPart[1].split('\n').filter(l => l.trim()).map((line, i) => (
-                <div key={i} className="flex gap-4 items-center text-xs text-zinc-600 bg-white p-4 px-6 rounded-3xl border border-zinc-100 shadow-sm transition-all hover:bg-zinc-50 hover:border-zinc-200 hover:shadow-md">
-                  <div className="w-10 h-10 rounded-xl bg-zinc-50 shadow-inner flex items-center justify-center text-xs border border-zinc-100 shrink-0">
+                <div key={i} className="flex gap-4 items-center text-xs text-zinc-600 dark:text-zinc-400 bg-white dark:bg-black p-4 px-6 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none transition-all hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-white/20 hover:shadow-md dark:hover:shadow-none">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-50 dark:bg-zinc-900 shadow-inner dark:shadow-none flex items-center justify-center text-xs border border-zinc-100 dark:border-white/10 shrink-0">
                     <FileSearch className="w-5 h-5 text-zinc-400" />
                   </div>
                   <div className="flex-1">
@@ -3032,28 +3032,28 @@ const ReportsView = ({
 
   return (
     <div className="space-y-8">
-      <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Reportes Históricos</h2>
+      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Reportes Históricos</h2>
       
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm">
+        <div className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none">
           <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase mb-1">Total</p>
           <p className="text-2xl font-bold text-zinc-900 dark:text-white">{stats.total}</p>
         </div>
-        <div className="bg-amber-50 dark:bg-amber-500/10 p-4 rounded-2xl border border-amber-100 dark:border-amber-500/20 shadow-sm">
+        <div className="bg-amber-50 dark:bg-amber-500/10 p-4 rounded-2xl border border-amber-100 dark:border-amber-500/20 shadow-sm dark:shadow-none">
           <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase mb-1">Pendientes</p>
           <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{stats.open}</p>
         </div>
-        <div className="bg-orange-50 dark:bg-orange-500/10 p-4 rounded-2xl border border-orange-100 dark:border-orange-500/20 shadow-sm">
+        <div className="bg-orange-50 dark:bg-orange-500/10 p-4 rounded-2xl border border-orange-100 dark:border-orange-500/20 shadow-sm dark:shadow-none">
           <p className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase mb-1">En Revisión</p>
           <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">{stats.inReview}</p>
         </div>
-        <div className="bg-emerald-50 dark:bg-emerald-500/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 shadow-sm">
+        <div className="bg-emerald-50 dark:bg-emerald-500/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 shadow-sm dark:shadow-none">
           <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1">Cerrados</p>
           <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{stats.closed}</p>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-black rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-black rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none overflow-hidden">
         <div className="p-3 sm:p-4 border-b border-zinc-50 dark:border-white/5 bg-zinc-50/50 dark:bg-white/5 flex items-center justify-between">
           <h3 className="font-bold text-zinc-900 dark:text-white text-sm sm:text-base uppercase tracking-tight">Historial de Hallazgos</h3>
           <button 
@@ -3134,29 +3134,29 @@ const ReportsView = ({
                   <tr 
                     key={`rep-row-${f.id}-${index}`} 
                     onClick={() => setSelectedFinding(f)}
-                    className="hover:bg-zinc-50/50 transition-colors group cursor-pointer"
+                    className="hover:bg-zinc-50/50 dark:hover:bg-white/5 transition-colors group cursor-pointer"
                   >
-                    <td className="px-4 py-4 text-zinc-500 whitespace-nowrap">
+                    <td className="px-4 py-4 text-zinc-500 dark:text-zinc-600 whitespace-nowrap">
                       {f.createdAt?.toDate ? format(f.createdAt.toDate(), 'dd/MM/yy') : '-'}
                     </td>
-                    <td className="px-4 py-4 font-medium text-zinc-900">
+                    <td className="px-4 py-4 font-medium text-zinc-900 dark:text-white">
                       <div className="flex flex-col">
                         <span>{f.areaName}</span>
                         <FindingDescriptionRenderer 
                           description={f.description} 
                           isPreview 
-                          className="text-[10px] text-zinc-400 uppercase tracking-tight truncate max-w-[150px]" 
+                          className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase tracking-tight truncate max-w-[150px]" 
                         />
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-zinc-500">
+                    <td className="px-4 py-4 text-zinc-500 dark:text-zinc-500">
                       {f.operatorName || '-'}
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex flex-col gap-2">
                         {/* Area Duration */}
-                        <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-2 flex items-center justify-between gap-3 min-w-[120px]">
-                           <div className="flex flex-col text-[9px] text-zinc-400 leading-none">
+                        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 rounded-xl p-2 flex items-center justify-between gap-3 min-w-[120px]">
+                           <div className="flex flex-col text-[9px] text-zinc-400 dark:text-zinc-500 leading-none">
                               <span className="font-bold uppercase tracking-tighter mb-1">TOTAL ÁREA</span>
                               <div className="flex items-center gap-1 font-mono">
                                 <span>{f.inspectionStartedAt?.toDate ? format(f.inspectionStartedAt.toDate(), 'HH:mm') : '--:--'}</span>
@@ -3165,9 +3165,9 @@ const ReportsView = ({
                               </div>
                            </div>
                            {areaDuration !== null && (
-                              <div className="bg-white px-2 py-1 rounded-lg border border-zinc-100 shadow-sm flex flex-col items-center">
-                                 <span className="text-[10px] font-black text-zinc-900 leading-none">{Math.floor(areaDuration / 60)}m</span>
-                                 <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-tighter">{areaDuration % 60}s</span>
+                              <div className="bg-white dark:bg-black px-2 py-1 rounded-lg border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none flex flex-col items-center">
+                                 <span className="text-[10px] font-black text-zinc-900 dark:text-white leading-none">{Math.floor(areaDuration / 60)}m</span>
+                                 <span className="text-[8px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-tighter">{areaDuration % 60}s</span>
                               </div>
                            )}
                         </div>
@@ -3175,8 +3175,8 @@ const ReportsView = ({
                         {/* Equipment Duration */}
                         {equipDuration !== null && (
                           <div className="flex items-center gap-2 px-2 text-[10px]">
-                            <span className="text-zinc-400 font-bold tracking-tighter uppercase">Equipo:</span>
-                            <span className="font-black text-zinc-900 bg-sky-50 text-sky-600 px-1.5 py-0.5 rounded-md border border-sky-100">
+                            <span className="text-zinc-400 dark:text-zinc-600 font-bold tracking-tighter uppercase">Equipo:</span>
+                            <span className="font-black text-zinc-900 dark:text-white bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 py-0.5 rounded-md border border-sky-100 dark:border-sky-500/20">
                               {equipDuration < 60 ? `${equipDuration}s` : `${Math.floor(equipDuration / 60)}m ${equipDuration % 60}s`}
                             </span>
                           </div>
@@ -3186,11 +3186,11 @@ const ReportsView = ({
                     <td className="px-4 py-4">
                       {resolutionTime !== null ? (
                         <div className="flex flex-col">
-                          <span className="text-zinc-900 font-bold">{resolutionTime} hrs</span>
-                          <span className="text-[9px] text-zinc-400 uppercase tracking-tighter">Tiempo Cierre</span>
+                          <span className="text-zinc-900 dark:text-white font-bold">{resolutionTime} hrs</span>
+                          <span className="text-[9px] text-zinc-400 dark:text-zinc-600 uppercase tracking-tighter">Tiempo Cierre</span>
                         </div>
                       ) : (
-                        <span className="text-zinc-300 italic text-xs">Pendiente</span>
+                        <span className="text-zinc-300 dark:text-zinc-700 italic text-xs">Pendiente</span>
                       )}
                     </td>
                     <td className="px-4 py-4">
@@ -3210,7 +3210,7 @@ const ReportsView = ({
                               <span className="text-[10px] font-bold text-red-600 px-2">¿Seguro?</span>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleDelete(f.id); }}
-                                className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm"
+                                className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm dark:shadow-none"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -3257,7 +3257,7 @@ const ReportsView = ({
                 initial={{ y: '100%' }} 
                 animate={{ y: 0 }} 
                 exit={{ y: '100%' }}
-                className="relative w-full max-w-lg sm:max-w-5xl bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col sm:flex-row max-h-[90vh]"
+                className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
               >
                 <div className="min-h-[200px] max-h-[400px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 flex items-center justify-center">
                   <img 
@@ -3268,7 +3268,7 @@ const ReportsView = ({
                   />
                   <button 
                     onClick={() => setSelectedFinding(null)}
-                    className="absolute top-4 right-4 bg-white/80 backdrop-blur p-2 rounded-full hover:bg-white transition-colors shadow-md z-10"
+                    className="absolute top-4 right-4 bg-white/80 dark:bg-black/60 backdrop-blur p-2 rounded-full hover:bg-white dark:hover:bg-black transition-colors shadow-md dark:shadow-none z-10 border border-transparent dark:border-white/10"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -3434,7 +3434,8 @@ const NotificationCenter = ({
   onDismiss,
   onRead,
   onAction,
-  readIds
+  readIds,
+  user
 }: { 
   show: boolean, 
   onClose: () => void, 
@@ -3442,7 +3443,8 @@ const NotificationCenter = ({
   onDismiss: (id: string) => void,
   onRead: (id: string) => void,
   onAction: (n: Notification) => void,
-  readIds: string[]
+  readIds: string[],
+  user: UserProfile
 }) => {
   return (
     <AnimatePresence>
@@ -3460,29 +3462,31 @@ const NotificationCenter = ({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 w-full max-w-sm h-screen bg-white shadow-2xl z-50 flex flex-col"
+            className="fixed top-0 right-0 w-full max-w-sm h-screen bg-white dark:bg-black shadow-2xl dark:shadow-none z-50 flex flex-col border-l border-transparent dark:border-white/20"
           >
-            <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
+            <div className="p-6 border-b border-zinc-100 dark:border-white/10 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <BellRing className="w-5 h-5 text-brand-blue" />
-                <h3 className="font-bold text-zinc-900">Notificaciones</h3>
+                <BellRing className="w-5 h-5 text-brand-blue dark:text-sky-400" />
+                <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Notificaciones</h3>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
-                <X className="w-5 h-5 text-zinc-400" />
+              <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-full transition-colors text-zinc-400 dark:text-zinc-600">
+                <X className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar dark:bg-black">
               {notifications.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-zinc-400 gap-4 opacity-50">
-                  <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center">
-                    <Bell className="w-8 h-8" />
+                  <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center border dark:border-white/10">
+                    <Bell className="w-8 h-8 text-zinc-400 dark:text-white" />
                   </div>
-                  <p className="font-medium text-sm">No tienes notificaciones</p>
+                  <p className="font-medium text-sm dark:text-white">No tienes notificaciones</p>
                 </div>
               ) : (
                 notifications.map((n, idx) => {
                   const isRead = readIds.includes(n.id);
+                  const isAdmin = user.role === 'Administrador';
+                  
                   return (
                     <div 
                       key={`${n.id}-${idx}`} 
@@ -3490,49 +3494,69 @@ const NotificationCenter = ({
                         if (!isRead) onRead(n.id);
                         onAction(n);
                       }}
-                      className={`p-4 rounded-2xl border transition-all cursor-pointer relative group ${
+                      className={`p-5 rounded-[2rem] border transition-all cursor-pointer relative group ${
                         isRead 
-                          ? 'bg-white border-zinc-100 opacity-60' 
-                          : 'bg-zinc-50 border-zinc-100 hover:bg-white hover:shadow-md hover:border-brand-blue/30'
+                          ? 'bg-zinc-50/50 dark:bg-black border-zinc-100 dark:border-white/10 opacity-60' 
+                          : 'bg-white dark:bg-black border-zinc-200 dark:border-white/20 hover:border-brand-blue/30 dark:hover:border-white shadow-sm dark:shadow-none'
                       }`}
                     >
                       {!isRead && (
-                        <div className="absolute top-4 right-4 w-2 h-2 bg-brand-blue rounded-full shadow-[0_0_8px_rgba(14,165,233,0.5)]" />
+                        <div className="absolute top-5 right-5 w-2 h-2 bg-brand-blue dark:bg-sky-400 rounded-full shadow-[0_0_8px_rgba(14,165,233,0.5)] dark:shadow-none" />
                       )}
                       
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDismiss(n.id);
-                        }}
-                        className="absolute bottom-2 right-2 p-1.5 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all rounded-lg hover:bg-red-50"
-                        title="Eliminar notificación"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="absolute bottom-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        {isAdmin && (
+                          <button 
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (window.confirm('¿ELIMINAR ESTA NOTIFICACIÓN GLOBALMENTE?')) {
+                                try {
+                                  await deleteDoc(doc(db, 'notifications', n.id));
+                                } catch (err) {
+                                  console.error("Error deleting notification:", err);
+                                }
+                              }
+                            }}
+                            className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10 border border-transparent hover:border-red-100 dark:hover:border-red-500/20"
+                            title="Eliminar globalmente (Admin)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDismiss(n.id);
+                          }}
+                          className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 border border-transparent hover:border-zinc-200 dark:hover:border-white/10"
+                          title="Ocultar"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
 
-                      <div className="flex items-center justify-between pr-6 mb-2">
-                         <span className={`text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                           n.type === 'Finding' ? 'bg-red-100 text-red-600' : 
-                           n.type === 'System' ? 'bg-brand-blue/10 text-brand-blue' : 
-                           'bg-amber-100 text-amber-600'
+                      <div className="flex items-center justify-between pr-8 mb-3">
+                         <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-full ${
+                           n.type === 'Finding' ? 'bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400' : 
+                           n.type === 'System' ? 'bg-sky-100 dark:bg-sky-500/10 text-brand-blue dark:text-sky-400' : 
+                           'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
                          }`}>
                            {n.type === 'Finding' ? 'Hallazgo' : n.type === 'System' ? 'Sistema' : 'Anuncio'}
                          </span>
-                         <span className="text-[10px] text-zinc-400 font-medium">
-                           {n.createdAt?.toDate ? format(n.createdAt.toDate(), 'EEE dd/MM, HH:mm', { locale: es }) : '--:--'}
+                         <span className="text-[10px] text-zinc-400 dark:text-zinc-600 font-bold italic">
+                           {n.createdAt?.toDate ? format(n.createdAt.toDate(), 'dd/MM, HH:mm', { locale: es }) : '--:--'}
                          </span>
                       </div>
-                      <p className={`font-bold text-sm leading-tight ${isRead ? 'text-zinc-600' : 'text-zinc-900'}`}>{n.title}</p>
-                      <p className={`text-xs leading-relaxed mt-1 ${isRead ? 'text-zinc-400' : 'text-zinc-600'}`}>{n.message}</p>
+                      <p className={`font-black text-sm uppercase tracking-tight leading-tighter ${isRead ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-900 dark:text-white'}`}>{n.title}</p>
+                      <p className={`text-xs leading-relaxed mt-1 font-medium ${isRead ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-600 dark:text-zinc-300'}`}>{n.message}</p>
                     </div>
                   );
                 })
               )}
             </div>
             
-            <div className="p-6 border-t border-zinc-100 bg-zinc-50/50">
-               <p className="text-[10px] text-zinc-400 text-center font-bold uppercase tracking-[0.2em]">Chekify Hub</p>
+            <div className="p-8 border-t border-zinc-100 dark:border-white/10 bg-zinc-50/50 dark:bg-black">
+               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 text-center font-black uppercase tracking-[0.3em]">Chekify Hub 2024</p>
             </div>
           </motion.div>
         </>
@@ -3653,7 +3677,7 @@ const AdminNotificationManagement = () => {
 
       <div className="grid gap-3">
         {notifications.map((n, nIdx) => (
-          <div key={`notif-admin-list-${n.id}-${nIdx}`} className="bg-white dark:bg-black border border-zinc-100 dark:border-white/10 p-4 rounded-2xl group relative hover:shadow-md transition-all">
+          <div key={`notif-admin-list-${n.id}-${nIdx}`} className="bg-white dark:bg-black border border-zinc-100 dark:border-white/10 p-4 rounded-2xl group relative hover:shadow-md dark:hover:shadow-none transition-all">
             <div className="flex justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-1">
@@ -3686,38 +3710,38 @@ const AdminNotificationManagement = () => {
       {showForm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
            <div onClick={resetForm} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-           <div className="relative bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl">
-              <h3 className="text-xl font-bold mb-6">{editingId ? 'Editar' : 'Programar'} Notificación</h3>
+           <div className="relative bg-white dark:bg-black w-full max-w-lg rounded-[2.5rem] p-8 shadow-2xl dark:shadow-none border border-transparent dark:border-white/10">
+              <h3 className="text-xl font-bold mb-6 text-zinc-900 dark:text-white uppercase tracking-tight">{editingId ? 'Editar' : 'Programar'} Notificación</h3>
               <div className="space-y-4">
-                <input value={title} onChange={e => setTitle(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none" placeholder="Título" />
-                <textarea value={message} onChange={e => setMessage(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none" placeholder="Mensaje..." />
+                <input value={title} onChange={e => setTitle(e.target.value)} className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all dark:text-white font-bold" placeholder="Título" />
+                <textarea value={message} onChange={e => setMessage(e.target.value)} className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all dark:text-white font-medium" placeholder="Mensaje..." rows={3} />
                 <div className="grid grid-cols-2 gap-4">
-                  <select value={targetRole} onChange={e => setTargetRole(e.target.value as any)} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none">
-                    <option value="All">Todos los Roles</option>
-                    <option value="Administrador">Solo Admins</option>
-                    <option value="Supervisor">Solo Supervisores</option>
-                    <option value="Operador">Solo Operadores</option>
+                  <select value={targetRole} onChange={e => setTargetRole(e.target.value as any)} className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none dark:text-white font-bold text-xs uppercase tracking-tight">
+                    <option value="All" className="dark:bg-black">Todos los Roles</option>
+                    <option value="Administrador" className="dark:bg-black">Solo Admins</option>
+                    <option value="Supervisor" className="dark:bg-black">Solo Supervisores</option>
+                    <option value="Operador" className="dark:bg-black">Solo Operadores</option>
                   </select>
-                  <select value={selectedPlantId} onChange={e => setSelectedPlantId(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none">
-                    <option value="">Todas las Plantas (Global)</option>
+                  <select value={selectedPlantId} onChange={e => setSelectedPlantId(e.target.value)} className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none dark:text-white font-bold text-xs uppercase tracking-tight">
+                    <option value="" className="dark:bg-black">Todas las Plantas (Global)</option>
                     {plants.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                      <option key={p.id} value={p.id} className="dark:bg-black">{p.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
-                    <label className="block text-[8px] font-bold text-zinc-400 uppercase mb-1 ml-1">Fecha Programada (Opcional)</label>
-                    <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="w-full p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-xs" />
+                    <label className="block text-[8px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-1 ml-1 leading-none">Fecha Programada (Opcional)</label>
+                    <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="w-full p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs dark:text-white font-bold" />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-[8px] font-bold text-zinc-400 uppercase mb-1 ml-1">Hora Programada</label>
-                    <input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} className="w-full p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-xs" />
+                    <label className="block text-[8px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-1 ml-1 leading-none">Hora Programada</label>
+                    <input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} className="w-full p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs dark:text-white font-bold" />
                   </div>
                 </div>
                 <div className="flex gap-3 pt-4">
-                  <button onClick={handleSave} disabled={isSaving} className="flex-1 py-4 bg-zinc-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2">
-                    {isSaving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>}
+                  <button onClick={handleSave} disabled={isSaving} className="flex-1 py-4 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-xl shadow-zinc-200 dark:shadow-none">
+                    {isSaving && <div className="w-4 h-4 border-2 border-white/30 dark:border-black/30 border-t-white dark:border-t-black rounded-full animate-spin"/>}
                     {editingId ? 'Actualizar' : 'Enviar/Programar'}
                   </button>
                 </div>
@@ -3781,7 +3805,7 @@ const AdminReportSettings = () => {
   );
 
   return (
-    <div className="bg-white dark:bg-black p-8 rounded-[2rem] border border-zinc-100 dark:border-white/10 shadow-sm space-y-8">
+    <div className="bg-white dark:bg-black p-8 rounded-[2rem] border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-8">
       <div className="flex items-center gap-3">
         <FileText className="w-6 h-6 text-zinc-900 dark:text-white" />
         <h3 className="text-xl font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Configuración de Reportes PDF</h3>
@@ -4076,7 +4100,7 @@ const BulkUpload = ({
   return (
     <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-white dark:bg-black rounded-xl shadow-sm flex items-center justify-center text-zinc-400 dark:text-zinc-600">
+        <div className="w-10 h-10 bg-white dark:bg-black rounded-xl shadow-sm dark:shadow-none flex items-center justify-center text-zinc-400 dark:text-zinc-600">
           <Upload className="w-5 h-5" />
         </div>
         <div>
@@ -4141,7 +4165,7 @@ const AdminManagement = () => {
             key={`admin-tab-${tab}-${tIdx}`}
             onClick={() => setActiveSubTab(tab)}
             className={`flex-1 min-w-[100px] px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeSubTab === tab ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-600 hover:text-zinc-700 dark:hover:text-zinc-400'
+              activeSubTab === tab ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm dark:shadow-none' : 'text-zinc-500 dark:text-zinc-600 hover:text-zinc-700 dark:hover:text-zinc-400'
             }`}
           >
             {tab === 'Users' ? 'Usuarios' : 
@@ -4229,7 +4253,7 @@ const AdminPlantManagement = () => {
 
       <div className="grid gap-3">
         {plants.filter(p => (p as any).status !== 'deleted').map((p, pIdx) => (
-          <div key={`pl-${p.id}-${pIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex justify-between items-center hover:shadow-sm transition-all">
+          <div key={`pl-${p.id}-${pIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex justify-between items-center hover:shadow-sm dark:hover:shadow-none transition-all">
             <div>
               <span className="font-bold text-zinc-900 dark:text-white">{p.name}</span>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-black tracking-widest">{p.id}</p>
@@ -4245,7 +4269,7 @@ const AdminPlantManagement = () => {
         {message && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-            className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-2xl shadow-xl border text-sm font-bold flex items-center gap-2 ${
+            className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-2xl shadow-xl dark:shadow-none border text-sm font-bold flex items-center gap-2 ${
               message.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'
             }`}
           >
@@ -4257,20 +4281,20 @@ const AdminPlantManagement = () => {
         {confirmDeleteId && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl space-y-6"
+              className="bg-white dark:bg-black rounded-3xl p-8 max-w-sm w-full shadow-2xl dark:shadow-none space-y-6 border border-zinc-100 dark:border-white/10"
             >
-              <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 mx-auto">
+              <div className="w-12 h-12 bg-red-50 dark:bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mx-auto">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-xl font-bold text-zinc-900">¿Eliminar planta?</h3>
-                <p className="text-zinc-500 text-sm leading-relaxed">
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white">¿Eliminar planta?</h3>
+                <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
                   Esta acción desactivará la planta. Los datos históricos se mantendrán pero la planta ya no aparecerá en las selecciones.
                 </p>
               </div>
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-3 rounded-2xl bg-zinc-100 text-zinc-600 font-bold text-sm hover:bg-zinc-200 transition-all">Cancelar</button>
-                <button onClick={() => handleDelete(confirmDeleteId)} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200">Eliminar</button>
+                <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-3 rounded-2xl bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all">Cancelar</button>
+                <button onClick={() => handleDelete(confirmDeleteId)} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200 dark:shadow-none">Eliminar</button>
               </div>
             </motion.div>
           </div>
@@ -4279,17 +4303,17 @@ const AdminPlantManagement = () => {
         {showForm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowForm(false)} className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-              <div className="p-8 border-b border-zinc-50">
-                <h3 className="text-xl font-bold text-zinc-900">{editingPlant ? 'Editar Planta' : 'Nueva Planta'}</h3>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-md bg-white dark:bg-black rounded-[2.5rem] shadow-2xl dark:shadow-none flex flex-col max-h-[90vh] overflow-hidden border border-zinc-100 dark:border-white/10">
+              <div className="p-8 border-b border-zinc-50 dark:border-white/5">
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{editingPlant ? 'Editar Planta' : 'Nueva Planta'}</h3>
               </div>
               <div className="flex-1 overflow-y-auto p-8 pt-4 custom-scrollbar">
-                <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la planta" className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl mb-4 outline-none focus:ring-2 focus:ring-brand-blue" />
+                <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la planta" className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl mb-4 outline-none focus:ring-2 focus:ring-brand-blue" />
               </div>
-              <div className="p-8 border-t border-zinc-50 bg-zinc-50/50">
+              <div className="p-8 border-t border-zinc-50 dark:border-white/5 bg-zinc-50 dark:bg-zinc-900/20">
                 <div className="flex gap-3">
-                  <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-zinc-100 text-zinc-600 rounded-2xl font-bold hover:bg-zinc-200 transition-colors">Cancelar</button>
-                  <button onClick={handleSave} className="flex-1 py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors shadow-lg shadow-sky-100">Guardar</button>
+                  <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-2xl font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">Cancelar</button>
+                  <button onClick={handleSave} className="flex-1 py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors shadow-lg shadow-sky-100 dark:shadow-none">Guardar</button>
                 </div>
               </div>
             </motion.div>
@@ -4349,8 +4373,8 @@ const AdminAreaManagement = () => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold text-zinc-900">Áreas de Inspección</h3>
-        <button onClick={() => { setEditingArea(null); setFormData({name:'', plantId:'', qrCode:''}); setShowForm(true); }} className="p-2 bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 transition-colors"><Plus className="w-4 h-4" /></button>
+        <h3 className="font-bold text-zinc-900 dark:text-white">Áreas de Inspección</h3>
+        <button onClick={() => { setEditingArea(null); setFormData({name:'', plantId:'', qrCode:''}); setShowForm(true); }} className="p-2 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"><Plus className="w-4 h-4" /></button>
       </div>
 
       <BulkUpload 
@@ -4362,15 +4386,15 @@ const AdminAreaManagement = () => {
 
       <div className="grid gap-3">
         {areas.filter(a => (a as any).status !== 'deleted').map((a, aIdx) => (
-          <div key={`ar-${a.id}-${aIdx}`} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
+          <div key={`ar-${a.id}-${aIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex justify-between items-center hover:shadow-sm dark:hover:shadow-none transition-all">
             <div>
-              <p className="font-bold text-zinc-900">{a.name}</p>
-              <p className="text-[10px] text-zinc-400 uppercase font-bold">Planta: {plants.find(p => p.id === (a as any).plantId)?.name || (a as any).plantId}</p>
+              <p className="font-bold text-zinc-900 dark:text-white">{a.name}</p>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-bold">Planta: {plants.find(p => p.id === (a as any).plantId)?.name || (a as any).plantId}</p>
             </div>
             <div className="flex gap-2 items-center">
-              <span className="text-[10px] text-zinc-400 uppercase font-bold mr-2 tracking-wider">QR: {a.qrCode}</span>
-              <button onClick={() => { setEditingArea(a); setFormData({name: a.name, plantId: (a as any).plantId, qrCode: a.qrCode}); setShowForm(true); }} className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"><FileText className="w-4 h-4" /></button>
-              <button onClick={() => setConfirmDeleteId(a.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-bold mr-2 tracking-wider">QR: {a.qrCode}</span>
+              <button onClick={() => { setEditingArea(a); setFormData({name: a.name, plantId: (a as any).plantId, qrCode: a.qrCode}); setShowForm(true); }} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white transition-colors"><FileText className="w-4 h-4" /></button>
+              <button onClick={() => setConfirmDeleteId(a.id)} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
             </div>
           </div>
         ))}
@@ -4379,7 +4403,7 @@ const AdminAreaManagement = () => {
         {message && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-            className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-2xl shadow-xl border text-sm font-bold flex items-center gap-2 ${
+            className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-2xl shadow-xl dark:shadow-none border text-sm font-bold flex items-center gap-2 ${
               message.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'
             }`}
           >
@@ -4391,20 +4415,20 @@ const AdminAreaManagement = () => {
         {confirmDeleteId && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl space-y-6"
+              className="bg-white dark:bg-black rounded-3xl p-8 max-w-sm w-full shadow-2xl dark:shadow-none space-y-6 border border-zinc-100 dark:border-white/10"
             >
-              <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 mx-auto">
+              <div className="w-12 h-12 bg-red-50 dark:bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mx-auto">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-xl font-bold text-zinc-900">¿Eliminar área?</h3>
-                <p className="text-zinc-500 text-sm leading-relaxed">
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white">¿Eliminar área?</h3>
+                <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
                   Esta acción desactivará el área. Los datos históricos de inspecciones y hallazgos se mantendrán.
                 </p>
               </div>
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-3 rounded-2xl bg-zinc-100 text-zinc-600 font-bold text-sm hover:bg-zinc-200 transition-all">Cancelar</button>
-                <button onClick={() => handleDelete(confirmDeleteId)} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200">Eliminar</button>
+                <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-3 rounded-2xl bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all">Cancelar</button>
+                <button onClick={() => handleDelete(confirmDeleteId)} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200 dark:shadow-none">Eliminar</button>
               </div>
             </motion.div>
           </div>
@@ -4413,24 +4437,24 @@ const AdminAreaManagement = () => {
         {showForm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowForm(false)} className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-              <div className="p-8 border-b border-zinc-50">
-                <h3 className="text-xl font-bold text-zinc-900">{editingArea ? 'Editar Área' : 'Nueva Área'}</h3>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-md bg-white dark:bg-black rounded-[2.5rem] shadow-2xl dark:shadow-none flex flex-col max-h-[90vh] overflow-hidden border-t sm:border border-zinc-100 dark:border-white/20">
+              <div className="p-8 border-b border-zinc-50 dark:border-white/5">
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{editingArea ? 'Editar Área' : 'Nueva Área'}</h3>
               </div>
               <div className="flex-1 overflow-y-auto p-8 pt-4 custom-scrollbar">
                 <div className="space-y-4">
-                  <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre del área" className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" />
-                  <select value={formData.plantId} onChange={e => setFormData({...formData, plantId: e.target.value})} className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue">
+                  <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre del área" className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" />
+                  <select value={formData.plantId} onChange={e => setFormData({...formData, plantId: e.target.value})} className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue">
                     <option value="">Seleccionar Planta</option>
                     {plants.map((p, idx) => <option key={`pl-opt-1-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
                   </select>
-                  <input value={formData.qrCode} onChange={e => setFormData({...formData, qrCode: e.target.value})} placeholder="Código QR (opcional)" className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" />
+                  <input value={formData.qrCode} onChange={e => setFormData({...formData, qrCode: e.target.value})} placeholder="Código QR (opcional)" className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" />
                 </div>
               </div>
-              <div className="p-8 border-t border-zinc-50 bg-zinc-50/50">
+              <div className="p-8 border-t border-zinc-50 dark:border-white/5 bg-zinc-50 dark:bg-zinc-900/20">
                 <div className="flex gap-3 mt-0">
-                  <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-zinc-100 text-zinc-600 rounded-2xl font-bold hover:bg-zinc-200 transition-colors">Cancelar</button>
-                  <button onClick={handleSave} className="flex-1 py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors shadow-lg shadow-sky-100">Guardar</button>
+                  <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-2xl font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">Cancelar</button>
+                  <button onClick={handleSave} className="flex-1 py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors shadow-lg shadow-sky-100 dark:shadow-none">Guardar</button>
                 </div>
               </div>
             </motion.div>
@@ -4480,24 +4504,24 @@ const VOSOEditorCategory = ({
   };
 
   return (
-    <div className={`p-6 rounded-[2rem] border border-zinc-100 ${colorClass} space-y-4`}>
+    <div className={`p-6 rounded-[2rem] border border-zinc-100 dark:border-white/10 ${colorClass} dark:bg-black/40 space-y-4`}>
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-white rounded-xl shadow-sm">
-          <Icon className="w-5 h-5 text-zinc-600" />
+        <div className="p-2 bg-white dark:bg-black rounded-xl shadow-sm dark:shadow-none border border-transparent dark:border-white/5">
+          <Icon className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
         </div>
-        <h4 className="font-bold text-zinc-900">{title}</h4>
+        <h4 className="font-bold text-zinc-900 dark:text-white">{title}</h4>
       </div>
 
       <div className="space-y-2">
         {items.map((item, idx) => (
-          <div key={item.id} className="bg-white/60 backdrop-blur-sm p-3 rounded-2xl border border-white/40 flex flex-col gap-2 group">
+          <div key={item.id} className="bg-white/60 dark:bg-black/60 backdrop-blur-sm p-3 rounded-2xl border border-white/40 dark:border-white/10 flex flex-col gap-2 group">
             <div className="flex items-center gap-2">
               <input 
                 value={item.name} 
                 onChange={e => updateItemName(item.id, e.target.value)}
-                className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-zinc-800 focus:ring-0" 
+                className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-zinc-800 dark:text-zinc-200 focus:ring-0" 
               />
-              <button onClick={() => removeItem(item.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+              <button onClick={() => removeItem(item.id)} className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
                 <X className="w-3 h-3" />
               </button>
             </div>
@@ -4508,8 +4532,8 @@ const VOSOEditorCategory = ({
                   onClick={() => updateItemType(item.id, t as VOSOPreference)}
                   className={`text-[8px] font-bold uppercase px-2 py-1 rounded-full whitespace-nowrap transition-all ${
                     item.type === t 
-                      ? 'bg-zinc-900 text-white' 
-                      : 'bg-white text-zinc-400 hover:bg-zinc-100'
+                      ? 'bg-zinc-900 dark:bg-white text-white dark:text-black shadow-sm dark:shadow-none' 
+                      : 'bg-white dark:bg-zinc-950 text-zinc-400 dark:text-zinc-600 border border-zinc-100 dark:border-white/5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors'
                   }`}
                 >
                   {t}
@@ -4525,10 +4549,10 @@ const VOSOEditorCategory = ({
           value={newItemName} 
           onChange={e => setNewItemName(e.target.value)}
           placeholder={`Agregar a ${title.toLowerCase()}...`}
-          className="flex-1 p-3 bg-white/80 border border-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+          className="flex-1 p-3 bg-white/80 dark:bg-zinc-950 border border-white dark:border-white/10 text-zinc-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue"
           onKeyPress={e => e.key === 'Enter' && addItem()}
         />
-        <button onClick={addItem} className="p-3 bg-zinc-900 text-white rounded-xl active:scale-95 transition-all">
+        <button onClick={addItem} className="p-3 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-xl active:scale-95 transition-all">
           <Plus className="w-4 h-4" />
         </button>
       </div>
@@ -4608,78 +4632,78 @@ const AdminEquipmentManagement = () => {
       <motion.div 
         initial={{ opacity: 0, x: 20 }} 
         animate={{ opacity: 1, x: 0 }} 
-        className="fixed inset-0 z-[100] bg-zinc-50 flex flex-col h-screen overflow-hidden"
+        className="fixed inset-0 z-[100] bg-zinc-50 dark:bg-zinc-950 flex flex-col h-screen overflow-hidden"
       >
-        <div className="bg-white border-b border-zinc-100 p-4 sm:px-8 sm:py-6 flex items-center justify-between shadow-sm sticky top-0 z-10">
+        <div className="bg-white dark:bg-black border-b border-zinc-100 dark:border-white/10 p-4 sm:px-8 sm:py-6 flex items-center justify-between shadow-sm dark:shadow-none sticky top-0 z-10 transition-colors duration-200">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setShowForm(false)} 
-              className="p-2 hover:bg-zinc-100 rounded-xl transition-colors text-zinc-500"
+              className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl transition-colors text-zinc-500 dark:text-zinc-600"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h3 className="text-xl font-bold text-zinc-900 leading-tight">
+              <h3 className="text-xl font-bold text-zinc-900 dark:text-white leading-tight">
                 {editingEquip ? 'Editar Equipo Industrial' : 'Configurar Nuevo Equipo'}
               </h3>
-              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Administración de Activos</p>
+              <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Administración de Activos</p>
             </div>
           </div>
           <div className="flex gap-3">
             <button 
               onClick={() => setShowForm(false)} 
-              className="hidden sm:block px-6 py-2.5 bg-zinc-100 text-zinc-600 rounded-xl font-bold text-sm hover:bg-zinc-200 transition-all"
+              className="hidden sm:block px-6 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-xl font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
             >
               Cancelar
             </button>
             <button 
               onClick={handleSave} 
-              className="px-8 py-2.5 bg-brand-blue text-white rounded-xl font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-sky-200"
+              className="px-8 py-2.5 bg-brand-blue text-white rounded-xl font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-sky-100 dark:shadow-none"
             >
               {editingEquip ? 'Actualizar' : 'Guardar Equipo'}
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar pb-24">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar pb-24 dark:bg-zinc-950 transition-colors duration-200">
           <div className="max-w-4xl mx-auto space-y-8">
             {/* General Info Card */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm space-y-6">
+            <div className="bg-white dark:bg-black rounded-[2.5rem] p-8 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6">
               <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-brand-blue/5 rounded-xl">
+                <div className="p-2 bg-brand-blue/5 dark:bg-brand-blue/10 rounded-xl">
                   <Settings2 className="w-5 h-5 text-brand-blue" />
                 </div>
-                <h4 className="font-bold text-zinc-900">Información General</h4>
+                <h4 className="font-bold text-zinc-900 dark:text-white">Información General</h4>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Nombre del Equipo</label>
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest ml-1">Nombre del Equipo</label>
                   <input 
                     value={formData.name} 
                     onChange={e => setFormData({...formData, name: e.target.value})} 
                     placeholder="Ej: Motor Principal 45KW" 
-                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                    className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Orden de Inspección</label>
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest ml-1">Orden de Inspección</label>
                   <input 
                     type="number"
                     value={formData.inspectionOrder} 
                     onChange={e => setFormData({...formData, inspectionOrder: parseInt(e.target.value) || 0})} 
                     placeholder="Ej: 1" 
-                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                    className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Planta</label>
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest ml-1">Planta</label>
                   <select 
                     value={formData.plantId} 
                     onChange={e => setFormData({...formData, plantId: e.target.value, areaId: ''})} 
-                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
+                    className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
                   >
                     <option value="">Seleccionar Planta</option>
                     {plants.map((p, idx) => <option key={`pl-opt-3-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
@@ -4687,11 +4711,11 @@ const AdminEquipmentManagement = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Área</label>
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest ml-1">Área</label>
                   <select 
                     value={formData.areaId} 
                     onChange={e => setFormData({...formData, areaId: e.target.value})} 
-                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                    className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
                     disabled={!formData.plantId}
                   >
                     <option value="">{formData.plantId ? 'Seleccionar Área' : 'Primero selecciona una Planta'}</option>
@@ -4702,15 +4726,15 @@ const AdminEquipmentManagement = () => {
             </div>
 
             {/* VOSO Methodology Card */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm space-y-6">
+            <div className="bg-white dark:bg-black rounded-[2.5rem] p-8 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-sky-50 rounded-xl">
+                  <div className="p-2 bg-sky-50 dark:bg-sky-500/10 rounded-xl">
                     <ShieldCheck className="w-5 h-5 text-brand-blue" />
                   </div>
-                  <h4 className="font-bold text-zinc-900">Configuración VOSO (Inspección Primaria)</h4>
+                  <h4 className="font-bold text-zinc-900 dark:text-white">Configuración VOSO (Inspección Primaria)</h4>
                 </div>
-                <span className="text-[10px] bg-sky-50 text-brand-blue px-3 py-1 rounded-full font-bold uppercase tracking-wider">Estándar Klist</span>
+                <span className="text-[10px] bg-sky-50 dark:bg-sky-500/10 text-brand-blue dark:text-sky-400 px-3 py-1 rounded-full font-bold uppercase tracking-wider">Estándar Klist</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -4753,18 +4777,18 @@ const AdminEquipmentManagement = () => {
             </div>
 
             {/* CheckItems Card */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm space-y-6">
+            <div className="bg-white dark:bg-black rounded-[2.5rem] p-8 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-zinc-50 rounded-xl">
-                  <ListChecks className="w-5 h-5 text-zinc-600" />
+                <div className="p-2 bg-zinc-50 dark:bg-zinc-900 rounded-xl">
+                  <ListChecks className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
                 </div>
-                <h4 className="font-bold text-zinc-900">Otros Puntos de Revisión</h4>
+                <h4 className="font-bold text-zinc-900 dark:text-white">Otros Puntos de Revisión</h4>
               </div>
 
               <div className="space-y-3">
                 {formData.checkItems.map((item, idx) => (
-                  <div key={`edit-item-${item.id}-${idx}`} className="flex items-center gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 group transition-all">
-                    <div className="w-8 h-8 rounded-xl bg-white border border-zinc-100 flex items-center justify-center text-[10px] font-bold text-zinc-400">
+                  <div key={`edit-item-${item.id}-${idx}`} className="flex items-center gap-4 bg-zinc-50/50 dark:bg-zinc-900/50 p-4 rounded-2xl border border-zinc-100 dark:border-white/10 group transition-all">
+                    <div className="w-8 h-8 rounded-xl bg-white dark:bg-black border border-zinc-100 dark:border-white/10 flex items-center justify-center text-[10px] font-bold text-zinc-400">
                       {idx + 1}
                     </div>
                     <input 
@@ -4774,14 +4798,14 @@ const AdminEquipmentManagement = () => {
                         newItems[idx].name = e.target.value;
                         setFormData({...formData, checkItems: newItems});
                       }}
-                      className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-zinc-900 focus:ring-0" 
+                      className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-zinc-900 dark:text-white focus:ring-0" 
                     />
                     <button 
                       onClick={() => {
                         const newItems = formData.checkItems.filter(i => i.id !== item.id);
                         setFormData({...formData, checkItems: newItems});
                       }}
-                      className="p-2 text-red-100 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                      className="p-2 text-red-100 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -4804,7 +4828,7 @@ const AdminEquipmentManagement = () => {
                       setNewCheckItemName('');
                     }
                   }}
-                  className="flex-1 p-4 bg-zinc-100 border border-zinc-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                  className="flex-1 p-4 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl text-sm outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
                 />
                 <button 
                   onClick={() => {
@@ -4817,7 +4841,7 @@ const AdminEquipmentManagement = () => {
                     }
                   }}
                   type="button"
-                  className="px-6 bg-zinc-900 text-white rounded-2xl shadow-xl active:scale-95 transition-all outline-none"
+                  className="px-6 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl shadow-xl dark:shadow-none active:scale-95 transition-all outline-none"
                 >
                   <Plus className="w-5 h-5 transition-transform group-active:scale-90" />
                 </button>
@@ -4830,7 +4854,7 @@ const AdminEquipmentManagement = () => {
           {message && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-              className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[110] px-6 py-4 rounded-[2rem] shadow-2xl border text-sm font-bold flex items-center gap-3 ${
+              className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[110] px-6 py-4 rounded-[2rem] shadow-2xl dark:shadow-none border text-sm font-bold flex items-center gap-3 ${
                 message.type === 'success' ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-red-500 border-red-400 text-white'
               }`}
             >
@@ -4860,7 +4884,7 @@ const AdminEquipmentManagement = () => {
             setEditingEquip(null); 
             setFormData({name:'', areaId:'', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO}); 
             setShowForm(true); 
-          }} className="p-2 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100">
+          }} className="p-2 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100 dark:shadow-none">
             <Plus className="w-4 h-4" />
           </button>
         </div>
@@ -4882,7 +4906,7 @@ const AdminEquipmentManagement = () => {
             return isNotDeleted && matchesPlant;
           })
           .map((e, eIdx) => (
-          <div key={`equip-${e.id}-${eIdx}`} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
+          <div key={`equip-${e.id}-${eIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex justify-between items-center hover:shadow-sm dark:hover:shadow-none transition-all">
             <div>
               <p className="font-bold text-zinc-900">
                 <span className="text-zinc-400 mr-2 text-xs">#{e.inspectionOrder || '0'}</span>
@@ -4928,7 +4952,7 @@ const AdminEquipmentManagement = () => {
         {message && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-            className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-2xl shadow-xl border text-sm font-bold flex items-center gap-2 ${
+            className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-2xl shadow-xl dark:shadow-none border text-sm font-bold flex items-center gap-2 ${
               message.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'
             }`}
           >
@@ -4940,7 +4964,7 @@ const AdminEquipmentManagement = () => {
         {confirmDeleteId && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl space-y-6"
+              className="bg-white dark:bg-black rounded-3xl p-8 max-w-sm w-full shadow-2xl dark:shadow-none space-y-6"
             >
               <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 mx-auto">
                 <AlertCircle className="w-6 h-6" />
@@ -4953,7 +4977,7 @@ const AdminEquipmentManagement = () => {
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-3 rounded-2xl bg-zinc-100 text-zinc-600 font-bold text-sm hover:bg-zinc-200 transition-all">Cancelar</button>
-                <button onClick={() => handleDelete(confirmDeleteId)} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200">Eliminar</button>
+                <button onClick={() => handleDelete(confirmDeleteId)} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200 dark:shadow-none">Eliminar</button>
               </div>
             </motion.div>
           </div>
@@ -5144,7 +5168,7 @@ const AdminUserManagement = () => {
 
       <div className="grid gap-4">
         {users.map((u, index) => (
-          <div key={`user-row-${u.uid || index}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm flex items-center justify-between">
+          <div key={`user-row-${u.uid || index}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-sky-50 dark:bg-sky-500/10 rounded-full flex items-center justify-center text-brand-blue dark:text-sky-400 font-black">
                 {u.name ? u.name[0] : '?'}
@@ -5204,7 +5228,7 @@ const AdminUserManagement = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-2xl shadow-xl border text-sm font-bold flex items-center gap-2 ${
+            className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-2xl shadow-xl dark:shadow-none border text-sm font-bold flex items-center gap-2 ${
               message.type === 'success' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'
             }`}
           >
@@ -5225,26 +5249,26 @@ const AdminUserManagement = () => {
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-zinc-100"
+            className="bg-white dark:bg-black rounded-3xl p-6 w-full max-w-sm shadow-2xl dark:shadow-none border border-zinc-100 dark:border-white/20"
           >
-            <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 mb-4">
+            <div className="w-12 h-12 bg-amber-50 dark:bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-500 dark:text-amber-400 mb-4">
               <RotateCcw className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-zinc-900 mb-1">Cambiar Contraseña</h3>
-            <p className="text-xs text-zinc-500 mb-6 font-medium leading-relaxed">
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white uppercase tracking-tight mb-1">Cambiar Contraseña</h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6 font-medium leading-relaxed">
               Ingresa una nueva contraseña para <b>{resetPasswordFor.name}</b>. 
               El cambio es instantáneo y se aplicará en el próximo inicio de sesión.
             </p>
             
             <div className="space-y-4 mb-6">
               <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1 ml-1">Nueva Contraseña</label>
+                <label className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1 ml-1">Nueva Contraseña</label>
                 <input 
                   type="password"
                   placeholder="Mínimo 6 caracteres"
                   value={newAdminPassword}
                   onChange={(e) => setNewAdminPassword(e.target.value)}
-                  className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
+                  className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
                   autoFocus
                 />
               </div>
@@ -5253,7 +5277,7 @@ const AdminUserManagement = () => {
             <div className="flex gap-3">
               <button 
                 onClick={() => { setResetPasswordFor(null); setNewAdminPassword(''); }}
-                className="flex-1 py-4 text-xs font-bold text-zinc-400 hover:text-zinc-900 transition-colors"
+                className="flex-1 py-4 text-xs font-bold text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
                 disabled={isResetting}
               >
                 Cancelar
@@ -5261,16 +5285,16 @@ const AdminUserManagement = () => {
               <button 
                 onClick={handleResetPasswordDirectly}
                 disabled={isResetting || newAdminPassword.length < 6}
-                className="flex-1 py-4 bg-zinc-900 text-white rounded-2xl text-xs font-bold hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 disabled:opacity-50"
+                className="flex-1 py-4 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl text-xs font-bold hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 dark:shadow-none disabled:opacity-50"
               >
                 {isResetting ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white dark:border-t-black rounded-full animate-spin mx-auto" />
                 ) : 'Aplicar Cambio Solicitado'}
               </button>
             </div>
 
-            <div className="mt-4 pt-4 border-t border-zinc-50">
-              <p className="text-[9px] text-zinc-400 text-center mb-3">¿Problemas con el servidor? Prueba la alternativa:</p>
+            <div className="mt-4 pt-4 border-t border-zinc-50 dark:border-white/10">
+              <p className="text-[9px] text-zinc-400 dark:text-zinc-600 text-center mb-3">¿Problemas con el servidor? Prueba la alternativa:</p>
               <button 
                 onClick={async () => {
                   if (!resetPasswordFor) return;
@@ -5282,7 +5306,7 @@ const AdminUserManagement = () => {
                     setMessage({ text: "Error: " + e.message, type: 'error' });
                   }
                 }}
-                className="w-full py-3 bg-brand-blue/5 text-brand-blue rounded-xl text-[10px] font-bold hover:bg-brand-blue/10 transition-all"
+                className="w-full py-3 bg-brand-blue/5 dark:bg-sky-500/10 text-brand-blue dark:text-sky-400 rounded-xl text-[10px] font-bold hover:bg-brand-blue/10 dark:hover:bg-sky-500/20 transition-all"
               >
                 Enviar Correo de Recuperación
               </button>
@@ -5303,14 +5327,14 @@ const AdminUserManagement = () => {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl space-y-6"
+              className="bg-white dark:bg-black rounded-3xl p-8 max-w-sm w-full shadow-2xl dark:shadow-none space-y-6 border border-transparent dark:border-white/20"
             >
-              <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 mx-auto">
+              <div className="w-12 h-12 bg-red-50 dark:bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 dark:text-red-400 mx-auto">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-xl font-bold text-zinc-900">¿Eliminar usuario?</h3>
-                <p className="text-zinc-500 text-sm leading-relaxed">
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white uppercase tracking-tight">¿Eliminar usuario?</h3>
+                <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
                   Esta acción es permanente y eliminará todos los datos asociados al perfil de este usuario en la base de datos.
                 </p>
               </div>
@@ -5323,7 +5347,7 @@ const AdminUserManagement = () => {
                 </button>
                 <button 
                   onClick={() => handleDeleteUser(confirmDeleteUid!)}
-                  className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200"
+                  className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200 dark:shadow-none"
                 >
                   Eliminar
                 </button>
@@ -5340,50 +5364,50 @@ const AdminUserManagement = () => {
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
             <motion.div onClick={() => setShowForm(false)} className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-              <div className="p-8 border-b border-zinc-50">
-                <h3 className="text-xl font-bold text-zinc-900">{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h3>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-md bg-white dark:bg-black rounded-[2.5rem] shadow-2xl dark:shadow-none flex flex-col max-h-[90vh] overflow-hidden border border-transparent dark:border-white/20">
+              <div className="p-8 border-b border-zinc-50 dark:border-white/10">
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white uppercase tracking-tight">{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h3>
               </div>
               <div className="flex-1 overflow-y-auto p-8 pt-4 custom-scrollbar">
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-zinc-700 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Nombre</label>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-500 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Nombre</label>
                     <input 
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
+                      className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-700 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Usuario</label>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-500 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Usuario</label>
                     <input 
                       type="text"
                       value={formData.email}
                       onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
+                      className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
                       disabled={!!editingUser}
                       placeholder="ej. juan.perez"
                     />
                   </div>
                   {!editingUser && (
                     <div>
-                      <label className="block text-sm font-medium text-zinc-700 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Contraseña Inicial</label>
+                      <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-500 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Contraseña Inicial</label>
                       <input 
                         type="password"
                         value={formData.password}
                         onChange={(e) => setFormData({...formData, password: e.target.value})}
-                        className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
+                        className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
                         placeholder="Mínimo 6 caracteres"
                       />
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-zinc-700 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Planta</label>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-500 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Planta</label>
                     <select 
                       value={formData.plantId}
                       onChange={(e) => setFormData({...formData, plantId: e.target.value})}
-                      className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
+                      className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
                     >
                       <option value="">Seleccionar Planta</option>
                       {plants.map((p, idx) => (
@@ -5392,11 +5416,11 @@ const AdminUserManagement = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-700 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Rol</label>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-500 mb-1 font-bold lowercase tracking-wider text-[10px] uppercase">Rol</label>
                     <select 
                       value={formData.role}
                       onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
-                      className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
+                      className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue"
                     >
                       <option value="Operador">Operador</option>
                       <option value="Supervisor">Supervisor</option>
@@ -5405,13 +5429,13 @@ const AdminUserManagement = () => {
                   </div>
                 </div>
               </div>
-              <div className="p-8 border-t border-zinc-50 bg-zinc-50/50">
+              <div className="p-8 border-t border-zinc-50 dark:border-white/10 bg-zinc-50 dark:bg-zinc-900/20">
                 <div className="flex gap-3">
-                  <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-zinc-100 text-zinc-600 rounded-2xl font-bold hover:bg-zinc-200 transition-colors">Cancelar</button>
+                  <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-2xl font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">Cancelar</button>
                   <button 
                     disabled={isSaving}
                     onClick={handleSaveUser} 
-                    className={`flex-1 py-4 bg-brand-blue text-white rounded-2xl font-bold transition-colors shadow-lg shadow-sky-100 flex items-center justify-center gap-2 ${isSaving ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
+                    className={`flex-1 py-4 bg-brand-blue text-white rounded-2xl font-bold transition-colors shadow-lg shadow-sky-100 dark:shadow-none flex items-center justify-center gap-2 ${isSaving ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
                   >
                     {isSaving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                     {isSaving ? 'Guardando...' : 'Guardar'}
@@ -5693,7 +5717,7 @@ const AppLayout = ({
               )}
               <div className={`px-4 py-4 bg-zinc-50 dark:bg-zinc-900 rounded-2xl ${isSidebarCollapsed ? 'flex justify-center' : ''} border border-transparent dark:border-white/5`}>
                 {isSidebarCollapsed ? (
-                  <div className="w-10 h-10 rounded-full bg-zinc-900 dark:bg-black flex items-center justify-center text-[10px] text-white font-black border-2 border-white dark:border-white/20 shadow-sm shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-zinc-900 dark:bg-black flex items-center justify-center text-[10px] text-white font-black border-2 border-white dark:border-white/20 shadow-sm dark:shadow-none shrink-0">
                     {user.name?.charAt(0) || user.email.charAt(0)}
                   </div>
                 ) : (
@@ -5790,6 +5814,7 @@ const AppLayout = ({
                 onRead={handleMarkAsRead}
                 onAction={handleNotificationAction}
                 readIds={user.readNotifications || []}
+                user={user}
               />
               <AnimatePresence mode="wait">
                 {activeTab === 'Home' && (
