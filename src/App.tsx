@@ -80,7 +80,9 @@ import {
   Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
-  Menu
+  Menu,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 const DEFAULT_VOSO: VOSOInspection = {
@@ -282,7 +284,7 @@ interface ReportSettings {
 
 // --- Components ---
 
-const AuthWrapper = ({ children }: { children: (user: AppUser) => React.ReactNode }) => {
+const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.ReactNode, theme: 'light' | 'dark' }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [loginMode, setLoginMode] = useState<'Google' | 'Password'>('Password');
@@ -414,11 +416,11 @@ const AuthWrapper = ({ children }: { children: (user: AppUser) => React.ReactNod
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 transition-colors duration-200">
         <motion.div 
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="w-12 h-12 border-4 border-zinc-900 border-t-transparent rounded-full"
+          className="w-12 h-12 border-4 border-zinc-900 dark:border-zinc-100 border-t-transparent rounded-full"
         />
       </div>
     );
@@ -426,12 +428,12 @@ const AuthWrapper = ({ children }: { children: (user: AppUser) => React.ReactNod
 
   if (!user) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center border border-zinc-100">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-6 transition-colors duration-200">
+        <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl shadow-xl p-8 text-center border border-zinc-100 dark:border-zinc-800 transition-colors duration-200">
           <div className="flex justify-center mb-6">
             <Logo className="h-16" />
           </div>
-          <p className="text-zinc-500 mb-8 font-medium">Gestión avanzada de inspecciones industriales.</p>
+          <p className="text-zinc-500 dark:text-zinc-400 mb-8 font-medium">Gestión avanzada de inspecciones industriales.</p>
           
           {loginMode === 'Password' ? (
             <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
@@ -441,7 +443,7 @@ const AuthWrapper = ({ children }: { children: (user: AppUser) => React.ReactNod
                   type="text" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
+                  className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
                   placeholder="nombre.usuario"
                   required
                 />
@@ -453,7 +455,7 @@ const AuthWrapper = ({ children }: { children: (user: AppUser) => React.ReactNod
                     type={showPassword ? "text" : "password"} 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all pr-12"
+                    className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all pr-12"
                     placeholder="••••••••"
                     required
                   />
@@ -470,7 +472,7 @@ const AuthWrapper = ({ children }: { children: (user: AppUser) => React.ReactNod
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className={`w-full py-4 px-6 bg-gradient-to-r from-brand-blue to-brand-green text-white rounded-2xl font-bold transition-all shadow-lg shadow-sky-100 flex items-center justify-center gap-3 ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:opacity-90'}`}
+                className={`w-full py-4 px-6 bg-gradient-to-r from-brand-blue to-brand-green text-white rounded-2xl font-bold transition-all shadow-lg shadow-sky-100 dark:shadow-none flex items-center justify-center gap-3 ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:opacity-90'}`}
               >
                 {isLoggingIn && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                 {isLoggingIn ? "Iniciando sesión..." : "Entrar al Sistema"}
@@ -550,33 +552,33 @@ const VOSOExecutionCategory = ({
                     colorClass.includes('orange') ? 'border-orange-200' : 'border-zinc-200';
 
   return (
-    <div className={`p-10 rounded-[4rem] border-2 ${borderColor} ${colorClass} space-y-8 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl`}>
+    <div className={`p-10 rounded-[4rem] border-2 ${borderColor} dark:border-white/20 ${colorClass} dark:bg-black/40 space-y-8 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl`}>
        {/* Background accent */}
-       <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
+       <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 dark:bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
        
        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
         <div className="flex items-center gap-6">
-          <div className="p-4 bg-white rounded-3xl shadow-md border border-white/50 flex-shrink-0">
-            <Icon className="w-10 h-10 text-zinc-900" />
+          <div className="p-4 bg-white dark:bg-zinc-900 rounded-3xl shadow-md border border-white/50 dark:border-white/10 flex-shrink-0">
+            <Icon className="w-10 h-10 text-zinc-900 dark:text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h4 className="text-4xl font-black text-zinc-900 leading-tight tracking-tighter uppercase mb-0.5">{title.split(' ')[1]}</h4>
-              <div className="w-3 h-3 rounded-full bg-zinc-900 opacity-20 animate-pulse" />
+              <h4 className="text-4xl font-black text-zinc-900 dark:text-white leading-tight tracking-tighter uppercase mb-0.5">{title.split(' ')[1]}</h4>
+              <div className="w-3 h-3 rounded-full bg-zinc-900 dark:bg-white opacity-20 animate-pulse" />
             </div>
-            <p className="text-xs font-black text-zinc-500 uppercase tracking-[0.3em] opacity-80 flex items-center gap-2">
-              <span className="w-4 h-[1px] bg-zinc-400" />
+            <p className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.3em] opacity-80 flex items-center gap-2">
+              <span className="w-4 h-[1px] bg-zinc-400 dark:bg-zinc-600" />
               Metodología VOSO
             </p>
           </div>
         </div>
-        <div className="bg-white/90 backdrop-blur-md px-6 py-3 rounded-2xl border-2 border-white shadow-lg flex items-center gap-3 self-start sm:self-center">
+        <div className="bg-white/90 dark:bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border-2 border-white dark:border-white/20 shadow-lg flex items-center gap-3 self-start sm:self-center">
           <div className="flex -space-x-2">
             {[1,2,3].map(i => (
-              <div key={i} className="w-5 h-5 rounded-full border-2 border-white bg-zinc-100" />
+              <div key={i} className="w-5 h-5 rounded-full border-2 border-white dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-800" />
             ))}
           </div>
-          <span className="text-xs font-black text-zinc-900 uppercase tracking-widest">{items.length} Tareas Pendientes</span>
+          <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">{items.length} Tareas Pendientes</span>
         </div>
       </div>
 
@@ -586,35 +588,35 @@ const VOSOExecutionCategory = ({
           const hasIssue = res?.status === 'Observación' || res?.status === 'Crítico';
           
           return (
-            <div key={item.id} className={`bg-white/80 backdrop-blur-xl p-7 rounded-[3rem] border-2 transition-all duration-500 ${hasIssue ? 'border-amber-400 shadow-2xl scale-[1.03] z-20' : 'border-white shadow-sm hover:border-zinc-200'}`}>
+            <div key={item.id} className={`bg-white/80 dark:bg-black p-7 rounded-[3rem] border-2 transition-all duration-500 ${hasIssue ? 'border-amber-400 shadow-2xl scale-[1.03] z-20' : 'border-white dark:border-white/10 shadow-sm hover:border-zinc-200 dark:hover:border-white/30'}`}>
               <div className="flex items-start justify-between gap-6 mb-6">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="w-2 h-2 rounded-full bg-zinc-200" />
-                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Punto de Control</span>
+                    <span className="w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                    <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none">Punto de Control</span>
                   </div>
-                  <p className="text-xl font-black text-zinc-900 leading-tight tracking-tight">{item.name}</p>
+                  <p className="text-xl font-black text-zinc-900 dark:text-white leading-tight tracking-tight">{item.name}</p>
                   <div className="flex flex-wrap gap-2 mt-4">
                     <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-xl tracking-widest flex items-center gap-1.5 ${
-                      item.type === 'Crítico' ? 'bg-red-500 text-white shadow-lg shadow-red-100' :
-                      item.type === 'Seguridad' ? 'bg-amber-500 text-white shadow-lg shadow-amber-100' :
-                      item.type === 'Mantenimiento' ? 'bg-brand-blue text-white shadow-lg shadow-sky-100' :
-                      'bg-zinc-100 text-zinc-500'
+                      item.type === 'Crítico' ? 'bg-red-500 text-white shadow-lg shadow-red-100 dark:shadow-none' :
+                      item.type === 'Seguridad' ? 'bg-amber-500 text-white shadow-lg shadow-amber-100 dark:shadow-none' :
+                      item.type === 'Mantenimiento' ? 'bg-brand-blue text-white shadow-lg shadow-sky-100 dark:shadow-none' :
+                      'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-500'
                     }`}>
                       <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                       {item.type}
                     </span>
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest bg-zinc-50/80 px-3 py-1 rounded-xl border border-zinc-100/50">ID: {item.id.slice(0,6)}</span>
+                    <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-700 uppercase tracking-widest bg-zinc-50/80 dark:bg-zinc-900/40 px-3 py-1 rounded-xl border border-zinc-100/50 dark:border-white/10">ID: {item.id.slice(0,6)}</span>
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: 'OK', value: 'OK', selectedClasses: 'bg-emerald-500 text-white border-emerald-600 shadow-2xl shadow-emerald-200 ring-4 ring-emerald-50' },
-                  { label: 'Obs.', value: 'Observación', selectedClasses: 'bg-amber-500 text-white border-amber-600 shadow-2xl shadow-amber-200 ring-4 ring-amber-50' },
-                  { label: 'Crit.', value: 'Crítico', selectedClasses: 'bg-red-500 text-white border-red-600 shadow-2xl shadow-red-200 ring-4 ring-red-50' },
-                  { label: 'N/A', value: 'NA', selectedClasses: 'bg-zinc-800 text-white border-zinc-950 shadow-2xl shadow-zinc-200 ring-4 ring-zinc-50' }
+                  { label: 'OK', value: 'OK', selectedClasses: 'bg-emerald-500 text-white border-emerald-600 shadow-2xl shadow-emerald-200 dark:shadow-none ring-4 ring-emerald-50 dark:ring-emerald-500/10' },
+                  { label: 'Obs.', value: 'Observación', selectedClasses: 'bg-amber-500 text-white border-amber-600 shadow-2xl shadow-amber-200 dark:shadow-none ring-4 ring-amber-50 dark:ring-amber-500/10' },
+                  { label: 'Crit.', value: 'Crítico', selectedClasses: 'bg-red-500 text-white border-red-600 shadow-2xl shadow-red-200 dark:shadow-none ring-4 ring-red-50 dark:ring-red-500/10' },
+                  { label: 'N/A', value: 'NA', selectedClasses: 'bg-zinc-800 dark:bg-black text-white border-zinc-950 dark:border-white shadow-2xl shadow-zinc-200 dark:shadow-none ring-4 ring-zinc-50 dark:ring-zinc-500/10' }
                 ].map((opt) => {
                   const isSelected = res?.status === opt.value;
                   return (
@@ -624,7 +626,7 @@ const VOSOExecutionCategory = ({
                       className={`py-5 px-4 rounded-[1.8rem] text-xs font-black uppercase transition-all duration-300 border-2 ${
                         isSelected 
                           ? `${opt.selectedClasses} scale-[1.1] z-10`
-                          : 'bg-white text-zinc-400 border-zinc-100/80 hover:border-zinc-300 shadow-sm active:scale-90 hover:scale-[1.03] hover:text-zinc-600'
+                          : 'bg-white dark:bg-zinc-950/20 text-zinc-400 dark:text-zinc-600 border-zinc-100/80 dark:border-white/5 hover:border-zinc-300 dark:hover:border-white/20 shadow-sm active:scale-90 hover:scale-[1.03] hover:text-zinc-600 dark:hover:text-zinc-300'
                       }`}
                     >
                       {opt.label}
@@ -639,21 +641,21 @@ const VOSOExecutionCategory = ({
                     initial={{ height: 0, opacity: 0 }} 
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="space-y-3 pt-2 overflow-hidden border-t border-zinc-100/50 mt-2"
+                    className="space-y-3 pt-2 overflow-hidden border-t border-zinc-100/50 dark:border-white/10 mt-2"
                   >
-                    <div className="flex items-center justify-between bg-zinc-50/50 p-3 rounded-2xl border border-zinc-100/50">
+                    <div className="flex items-center justify-between bg-zinc-50/50 dark:bg-black/20 p-3 rounded-2xl border border-zinc-100/50 dark:border-white/10">
                       <div className="flex items-center gap-3">
-                        <div className={`p-1.5 rounded-lg ${res?.solvedByOperator ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'}`}>
+                        <div className={`p-1.5 rounded-lg ${res?.solvedByOperator ? 'bg-emerald-500 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500'}`}>
                           <ShieldCheck className="w-4 h-4" />
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold text-zinc-900 leading-none">Solucionado en sitio</p>
-                          <p className="text-[8px] text-zinc-400 mt-0.5">Acción correctiva inmediata</p>
+                          <p className="text-[10px] font-bold text-zinc-900 dark:text-white leading-none">Solucionado en sitio</p>
+                          <p className="text-[8px] text-zinc-400 dark:text-zinc-500 mt-0.5">Acción correctiva inmediata</p>
                         </div>
                       </div>
                       <button 
                          onClick={() => onUpdate(item.id, res.status, res.comment, res.photoUrl, !res?.solvedByOperator)}
-                         className={`w-12 h-6 rounded-full transition-all relative ${res?.solvedByOperator ? 'bg-emerald-500' : 'bg-zinc-200'}`}
+                         className={`w-12 h-6 rounded-full transition-all relative ${res?.solvedByOperator ? 'bg-emerald-500' : 'bg-zinc-200 dark:bg-zinc-700'}`}
                       >
                         <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${res?.solvedByOperator ? 'left-7' : 'left-1'}`} />
                       </button>
@@ -663,7 +665,7 @@ const VOSOExecutionCategory = ({
                       value={res?.comment || ''}
                       onChange={e => onUpdate(item.id, res.status, e.target.value)}
                       placeholder="Escribe el detalle del hallazgo..."
-                      className="w-full p-3 bg-white/80 border border-zinc-200 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[80px] font-medium text-zinc-700 shadow-sm"
+                      className="w-full p-3 bg-white/80 dark:bg-black/40 border border-zinc-200 dark:border-white/10 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[80px] font-medium text-zinc-700 dark:text-zinc-300 shadow-sm"
                     />
                     
                     <div className="flex items-center gap-3">
@@ -687,13 +689,13 @@ const VOSOExecutionCategory = ({
                       />
                       <button 
                         onClick={() => document.getElementById(`photo-${item.id}`)?.click()}
-                        className="flex-1 py-3 bg-zinc-900 text-white rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-zinc-200"
+                        className="flex-1 py-3 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-zinc-200 dark:shadow-none"
                       >
                         <Camera className="w-4 h-4" />
                         CAPTURAR EVIDENCIA
                       </button>
                       {res?.photoUrl && (
-                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 border-2 border-white shadow-sm flex-shrink-0">
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-2 border-white dark:border-white/20 shadow-sm flex-shrink-0">
                           <img src={res.photoUrl} className="w-full h-full object-cover" />
                         </div>
                       )}
@@ -1296,7 +1298,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         )}
       </AnimatePresence>
       {/* Plant Stats for Operator */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
         <div className="bg-brand-blue text-white p-4 rounded-3xl shadow-lg shadow-sky-100 border border-sky-400/20">
           <p className="text-[10px] font-bold text-sky-100 uppercase tracking-widest mb-1">Cierre Prom.</p>
           <div className="flex items-baseline gap-1">
@@ -1342,7 +1344,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={startScanner}
-            className="w-full aspect-square max-w-sm mx-auto bg-white border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center gap-4 hover:border-zinc-900 transition-colors group"
+            className="w-full aspect-square max-w-md mx-auto bg-white border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center gap-4 hover:border-zinc-900 transition-colors group"
           >
             <div className="w-20 h-20 bg-zinc-50 rounded-full flex items-center justify-center group-hover:bg-zinc-900 transition-colors">
               <QrCode className="w-10 h-10 text-zinc-400 group-hover:text-white" />
@@ -1350,7 +1352,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             <span className="text-zinc-500 font-medium group-hover:text-brand-blue transition-colors text-center px-4">Escanear Código QR de Área</span>
           </motion.button>
           
-          <div className="max-w-sm mx-auto">
+          <div className="max-w-md mx-auto">
             <p className="text-center text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3">O selecciona manualmente</p>
             <div className="grid gap-2">
               {areas.length > 0 ? (
@@ -1406,28 +1408,28 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[80vh] overflow-hidden"
+              className="relative w-full max-w-md bg-white dark:bg-black border border-transparent dark:border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col max-h-[80vh] overflow-hidden"
             >
-              <div className="p-6 border-b border-zinc-50">
+              <div className="p-6 border-b border-zinc-50 dark:border-white/5">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-zinc-900">Seleccionar Área</h3>
-                  <button onClick={() => setSearchingArea(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
-                    <X className="w-5 h-5 text-zinc-400" />
+                  <h3 className="text-xl font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Seleccionar Área</h3>
+                  <button onClick={() => setSearchingArea(false)} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-full transition-colors text-zinc-400 dark:text-zinc-600">
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
                 <div className="relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-600" />
                   <input 
                     autoFocus
                     value={areaSearchQuery}
                     onChange={(e) => setAreaSearchQuery(e.target.value)}
                     placeholder="Buscar por nombre o QR..."
-                    className="w-full pl-11 pr-4 py-3 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 transition-all font-medium"
+                    className="w-full pl-11 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all font-bold dark:text-white uppercase tracking-tight text-xs"
                   />
                 </div>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar dark:bg-zinc-950/20">
                 <div className="grid gap-2">
                   {areas
                     .filter(a => 
@@ -1445,13 +1447,13 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                           setSearchingArea(false);
                           setAreaSearchQuery('');
                         }}
-                        className="w-full p-4 hover:bg-zinc-50 rounded-2xl border border-transparent hover:border-zinc-100 transition-all text-left flex items-center justify-between group"
+                        className="w-full p-4 hover:bg-zinc-50 dark:hover:bg-white/5 rounded-2xl border border-transparent hover:border-zinc-100 dark:hover:border-white/10 transition-all text-left flex items-center justify-between group"
                       >
                         <div>
-                          <p className="font-bold text-zinc-900">{area.name}</p>
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest uppercase">ID: {area.id}</p>
+                          <p className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">{area.name}</p>
+                          <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-700 uppercase tracking-widest mt-0.5">ID: {area.id}</p>
                         </div>
-                        <Plus className="w-4 h-4 text-zinc-300 group-hover:text-zinc-900 transition-colors" />
+                        <Plus className="w-4 h-4 text-zinc-300 dark:text-zinc-800 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors" />
                       </button>
                     ))}
                 </div>
@@ -1477,41 +1479,41 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-3xl p-6 border border-zinc-100 shadow-sm space-y-6"
+          className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm space-y-6"
         >
-          <div className="flex items-center justify-between border-b border-zinc-50 pb-4">
+          <div className="flex items-center justify-between border-b border-zinc-50 dark:border-white/5 pb-4">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-gradient-to-br from-brand-blue to-brand-green rounded-2xl flex items-center justify-center shadow-md">
                 <MapPin className="text-white w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Área Seleccionada</p>
-                <h3 className="text-xl font-bold text-zinc-900">{selectedArea.name}</h3>
+                <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Área Seleccionada</p>
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{selectedArea.name}</h3>
               </div>
             </div>
-            <button onClick={() => setSelectedArea(null)} className="p-2 bg-zinc-50 text-zinc-400 rounded-full hover:bg-zinc-100">
+            <button onClick={() => setSelectedArea(null)} className="p-2 bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <X className="w-5 h-5" />
             </button>
           </div>
 
           <div className="space-y-8">
             <div className="flex items-center justify-between px-2">
-              <h4 className="text-lg font-black text-zinc-900 uppercase tracking-tighter flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-white text-[10px] font-black">
+              <h4 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tighter flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-zinc-900 dark:bg-white flex items-center justify-center text-white dark:text-black text-[10px] font-black">
                    {currentEquipmentIndex + 1}
                 </div>
                 {areaEquipment.length > 0 ? 'Equipo en Revisión' : 'Inspección de Área'}
               </h4>
               {areaEquipment.length > 0 && (
-                <div className="flex items-center gap-2 bg-zinc-100 px-4 py-2 rounded-2xl border border-zinc-200/50">
-                  <span className="text-[10px] font-black text-zinc-900 uppercase tracking-[0.2em]">
+                <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 rounded-2xl border border-zinc-200/50 dark:border-white/5">
+                  <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-[0.2em]">
                     {currentEquipmentIndex + 1} / {areaEquipment.length}
                   </span>
                 </div>
               )}
             </div>
             
-            <div className="p-10 bg-zinc-900 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden group">
+            <div className="p-10 bg-zinc-900 dark:bg-zinc-950/40 border border-transparent dark:border-white/10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden group">
                <div className="absolute top-0 right-0 w-80 h-80 bg-brand-blue/20 rounded-full -mr-32 -mt-32 blur-[100px] group-hover:bg-brand-green/20 transition-all duration-1000" />
                <div className="relative z-10">
                  <div className="flex items-center gap-4 mb-6">
@@ -1542,13 +1544,13 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             </div>
 
             {areaEquipment.length > 0 && (
-              <div className="space-y-4 bg-zinc-50/50 p-6 rounded-[2.5rem] border border-zinc-100 shadow-sm">
-                 <div className="flex items-center justify-between text-zinc-900 px-1">
+              <div className="space-y-4 bg-zinc-50/50 dark:bg-black/20 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-white/5 shadow-sm">
+                 <div className="flex items-center justify-between text-zinc-900 dark:text-white px-1">
                    <div className="flex items-center gap-2">
                      <span className="text-xs font-black uppercase tracking-[0.2em]">Progreso</span>
                      <span className="text-xs font-black text-brand-blue">{Math.round(((currentEquipmentIndex) / areaEquipment.length) * 100)}%</span>
                    </div>
-                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{areaEquipment.length - currentEquipmentIndex} equipos restantes</span>
+                   <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">{areaEquipment.length - currentEquipmentIndex} equipos restantes</span>
                  </div>
                  <div className="flex gap-2 h-3 px-1">
                    {areaEquipment.map((e, idx) => (
@@ -1557,7 +1559,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                        className={`flex-1 rounded-full border transition-all duration-700 ${
                          idx === currentEquipmentIndex ? 'bg-brand-blue border-brand-blue shadow-lg shadow-sky-100 scale-y-125' : 
                          idx < currentEquipmentIndex ? 'bg-brand-green border-brand-green opacity-40' : 
-                         'bg-white border-zinc-200'
+                         'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-white/10'
                        }`} 
                      />
                    ))}
@@ -1569,18 +1571,18 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               <div className="space-y-10 py-4">
                 <div className="flex flex-col gap-4 px-2">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-2xl font-black text-zinc-900 tracking-tighter uppercase">Inspección Primaria</h4>
+                    <h4 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tighter uppercase">Inspección Primaria</h4>
                     <div className="flex gap-2">
                       {[Eye, Ear, Hand, Wind, Sparkles].map((Ico, i) => (
-                        <div key={`mini-voso-${i}`} className="w-8 h-8 rounded-full bg-white border border-zinc-100 flex items-center justify-center shadow-sm">
-                          <Ico className="w-4 h-4 text-zinc-400" />
+                        <div key={`mini-voso-${i}`} className="w-8 h-8 rounded-full bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 flex items-center justify-center shadow-sm">
+                          <Ico className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="h-1 w-20 bg-zinc-900 rounded-full" />
-                  <p className="text-sm text-zinc-500 font-medium leading-relaxed max-w-sm">
-                    Utiliza tus sentidos para detectar anomalías tempranas. La metodología <span className="font-black text-zinc-900">VOSO</span> es el estándar para el mantenimiento proactivo.
+                  <div className="h-1 w-20 bg-zinc-900 dark:bg-white rounded-full" />
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium leading-relaxed max-w-sm">
+                    Utiliza tus sentidos para detectar anomalías tempranas. La metodología <span className="font-black text-zinc-900 dark:text-white">VOSO</span> es el estándar para el mantenimiento proactivo.
                   </p>
                 </div>
                 
@@ -2063,22 +2065,22 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
   }, [filteredByDate, groupBy]);
 
   return (
-    <div className="bg-white rounded-3xl p-6 border border-zinc-100 shadow-sm space-y-6">
+    <div className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-zinc-900" />
-          <h3 className="font-bold text-zinc-900">Estadísticas de Hallazgos</h3>
+          <BarChart3 className="w-5 h-5 text-zinc-900 dark:text-white" />
+          <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Estadísticas de Hallazgos</h3>
         </div>
-        <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-xl">
+        <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
           <button 
             onClick={() => setGroupBy('area')}
-            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'area' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}
+            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'area' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500'}`}
           >
             Por Área
           </button>
           <button 
             onClick={() => setGroupBy('operador')}
-            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'operador' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}
+            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'operador' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500'}`}
           >
             Por Operador
           </button>
@@ -2087,26 +2089,26 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-[10px] font-bold text-zinc-400 uppercase ml-1">Desde</label>
+          <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase ml-1">Desde</label>
           <div className="relative">
-            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600" />
             <input 
               type="date" 
               value={dateRange.start}
               onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="w-full pl-9 pr-4 py-2 bg-zinc-50 border border-zinc-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+              className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue font-bold dark:text-white"
             />
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] font-bold text-zinc-400 uppercase ml-1">Hasta</label>
+          <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase ml-1">Hasta</label>
           <div className="relative">
-            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600" />
             <input 
               type="date" 
               value={dateRange.end}
               onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="w-full pl-9 pr-4 py-2 bg-zinc-50 border border-zinc-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+              className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue font-bold dark:text-white"
             />
           </div>
         </div>
@@ -2115,7 +2117,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart id="stats-summary-chart" data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#1f2937' : '#f0f0f0'} />
             <XAxis 
               dataKey="name" 
               axisLine={false} 
@@ -2129,8 +2131,8 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
               tick={{ fontSize: 10, fill: '#a1a1aa' }}
             />
             <Tooltip 
-              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-              cursor={{ fill: '#f4f4f5' }}
+              contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: theme === 'dark' ? '#000' : '#fff', color: theme === 'dark' ? '#fff' : '#000', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+              cursor={{ fill: theme === 'dark' ? '#111' : '#f4f4f5' }}
             />
             <Bar dataKey="open" name="Pendientes" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
             <Bar dataKey="inReview" name="En Revisión" fill="#f59e0b" radius={[4, 4, 0, 0]} />
@@ -2477,33 +2479,33 @@ const SupervisorDashboard = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               onClick={() => setSelectedFinding(finding)}
-              className="bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+              className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm hover:shadow-md transition-all cursor-pointer group"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                    finding.status === 'Open' ? 'bg-amber-50 text-amber-600' : 
-                    finding.status === 'InReview' ? 'bg-orange-50 text-orange-600' :
-                    'bg-emerald-50 text-emerald-600'
+                    finding.status === 'Open' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400' : 
+                    finding.status === 'InReview' ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400' :
+                    'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                   }`}>
                     {finding.status === 'Open' ? <AlertCircle className="w-5 h-5" /> : 
                      finding.status === 'InReview' ? <Clock className="w-5 h-5" /> :
                      <CheckCircle2 className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h4 className="font-bold text-zinc-900">{finding.areaName}</h4>
-                    <p className="text-xs text-zinc-400 italic">
+                    <h4 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight leading-tighter">{finding.areaName}</h4>
+                    <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mt-0.5">
                       {finding.createdAt?.toDate ? format(finding.createdAt.toDate(), 'EEE dd MMM, HH:mm', { locale: es }) : 'Recién'}
                     </p>
                   </div>
                 </div>
-                <ChevronRight className="w-5 h-5 text-zinc-300 group-hover:text-zinc-900 transition-colors" />
+                <ChevronRight className="w-5 h-5 text-zinc-300 dark:text-zinc-800 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors" />
               </div>
-              <p className="text-sm text-zinc-600 line-clamp-2">{finding.description}</p>
-              <div className="mt-4 pt-3 border-t border-zinc-50 flex items-center justify-between gap-4">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 truncate flex-1">Por: {finding.operatorName}</span>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2 font-medium">{finding.description}</p>
+              <div className="mt-4 pt-3 border-t border-zinc-50 dark:border-white/5 flex items-center justify-between gap-4">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-600 truncate flex-1">Por: {finding.operatorName}</span>
                 {finding.photoUrl && (
-                  <div className="w-12 h-12 rounded-xl bg-zinc-900 overflow-hidden shrink-0 shadow-sm">
+                  <div className="w-12 h-12 rounded-xl bg-zinc-900 dark:bg-zinc-800 overflow-hidden shrink-0 shadow-sm border border-zinc-100 dark:border-white/10">
                     <img src={finding.photoUrl} className="w-full h-full object-contain" alt="" />
                   </div>
                 )}
@@ -2534,9 +2536,9 @@ const SupervisorDashboard = ({
               initial={{ y: '100%' }} 
               animate={{ y: 0 }} 
               exit={{ y: '100%' }}
-              className="relative w-full max-w-lg sm:max-w-5xl bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col sm:flex-row max-h-[90vh]"
+              className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
             >
-              <div className="min-h-[200px] max-h-[400px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 flex items-center justify-center">
+              <div className="min-h-[200px] max-h-[400px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 dark:bg-black flex items-center justify-center">
                 <img 
                   src={selectedFinding.photoUrl} 
                   className="w-full h-full object-contain" 
@@ -2545,36 +2547,36 @@ const SupervisorDashboard = ({
                 />
                 <button 
                   onClick={() => setSelectedFinding(null)}
-                  className="absolute top-4 right-4 bg-white/80 backdrop-blur p-2 rounded-full hover:bg-white transition-colors shadow-md z-10"
+                  className="absolute top-4 right-4 bg-white/80 dark:bg-black/60 backdrop-blur p-2 rounded-full hover:bg-white dark:hover:bg-black transition-colors shadow-md z-10 border border-transparent dark:border-white/10"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 dark:text-white" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-6 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-6 custom-scrollbar dark:bg-zinc-950/20">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      selectedFinding.status === 'Open' ? 'bg-amber-100 text-amber-700' : 
-                      selectedFinding.status === 'InReview' ? 'bg-orange-100 text-orange-700' :
-                      'bg-emerald-100 text-emerald-700'
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${
+                      selectedFinding.status === 'Open' ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' : 
+                      selectedFinding.status === 'InReview' ? 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400' :
+                      'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                     }`}>
                       {selectedFinding.status === 'Open' ? 'Abierto' : 
                        selectedFinding.status === 'InReview' ? 'En Revisión' : 
                        'Cerrado'}
                     </span>
-                    <span className="text-xs text-zinc-400">{selectedFinding.areaName}</span>
+                    <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none">{selectedFinding.areaName}</span>
                   </div>
-                  <h3 className="text-2xl font-bold text-zinc-900">{selectedFinding.description}</h3>
+                  <h3 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tight leading-tighter">{selectedFinding.description}</h3>
                 </div>
 
                 {selectedFinding.status !== 'Closed' ? (
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-zinc-700 mb-1">Comentarios del Supervisor</label>
+                      <label className="block text-[10px] font-black text-zinc-700 dark:text-zinc-500 uppercase tracking-widest mb-1 ml-1">Comentarios del Supervisor</label>
                       <textarea 
                         value={supervisorComments}
                         onChange={(e) => setSupervisorComments(e.target.value)}
-                        className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-brand-blue outline-none transition-all"
+                        className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 rounded-2xl focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white outline-none transition-all dark:text-white font-medium"
                         placeholder="Instrucciones o notas de cierre..."
                       />
                     </div>
@@ -2582,32 +2584,32 @@ const SupervisorDashboard = ({
                       <button 
                         onClick={handleSetInReview}
                         disabled={selectedFinding.status === 'InReview'}
-                        className={`py-4 rounded-2xl font-bold transition-all border ${
+                        className={`py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all border ${
                           selectedFinding.status === 'InReview' 
-                            ? 'bg-zinc-100 text-zinc-400 border-transparent cursor-not-allowed'
-                            : 'bg-white border-orange-200 text-orange-600 hover:bg-orange-50'
+                            ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-700 border-transparent cursor-not-allowed'
+                            : 'bg-white dark:bg-black border-orange-200 dark:border-orange-500/20 text-orange-600 dark:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10'
                         }`}
                       >
                         Poner en Revisión
                       </button>
                       <button 
                         onClick={handleCloseFinding}
-                        className="py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors shadow-lg shadow-sky-100"
+                        className="py-4 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl font-black uppercase tracking-widest text-xs hover:opacity-90 transition-colors shadow-lg shadow-zinc-200 dark:shadow-none"
                       >
                         Cerrar Hallazgo
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-zinc-50 p-4 rounded-2xl space-y-3">
+                  <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-2xl space-y-3 border border-zinc-100 dark:border-white/5">
                     <div>
-                      <p className="text-[10px] font-bold text-zinc-400 uppercase">Solución Aplicada</p>
-                      <p className="text-zinc-700">{selectedFinding.solution || 'Cerrado por supervisor'}</p>
+                      <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Solución Aplicada</p>
+                      <p className="text-zinc-700 dark:text-zinc-300 font-medium">{selectedFinding.solution || 'Cerrado por supervisor'}</p>
                     </div>
                     {selectedFinding.supervisorComments && (
                       <div>
-                        <p className="text-[10px] font-bold text-zinc-400 uppercase">Comentarios de Supervisión</p>
-                        <p className="text-zinc-700 italic">"{selectedFinding.supervisorComments}"</p>
+                        <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Comentarios de Supervisión</p>
+                        <p className="text-zinc-700 dark:text-zinc-400 italic">"{selectedFinding.supervisorComments}"</p>
                       </div>
                     )}
                   </div>
@@ -2698,7 +2700,7 @@ const FindingDescriptionRenderer = ({ description, className = "", isPreview = f
     return (
       <div className={`space-y-8 ${className}`}>
         {/* Header - Location */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-zinc-900 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-zinc-900 p-4 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-48 h-48 bg-sky-500/10 rounded-full -mr-24 -mt-24 blur-3xl opacity-50" />
           <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0 backdrop-blur-md border border-white/20 shadow-inner">
             <LayoutDashboard className="w-8 h-8 text-sky-400" />
@@ -3033,30 +3035,30 @@ const ReportsView = ({
       <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Reportes Históricos</h2>
       
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase mb-1">Total</p>
-          <p className="text-2xl font-bold text-zinc-900">{stats.total}</p>
+        <div className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase mb-1">Total</p>
+          <p className="text-2xl font-bold text-zinc-900 dark:text-white">{stats.total}</p>
         </div>
-        <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 shadow-sm">
-          <p className="text-[10px] font-bold text-amber-600 uppercase mb-1">Pendientes</p>
-          <p className="text-2xl font-bold text-amber-700">{stats.open}</p>
+        <div className="bg-amber-50 dark:bg-amber-500/10 p-4 rounded-2xl border border-amber-100 dark:border-amber-500/20 shadow-sm">
+          <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase mb-1">Pendientes</p>
+          <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{stats.open}</p>
         </div>
-        <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 shadow-sm">
-          <p className="text-[10px] font-bold text-orange-600 uppercase mb-1">En Revisión</p>
-          <p className="text-2xl font-bold text-orange-700">{stats.inReview}</p>
+        <div className="bg-orange-50 dark:bg-orange-500/10 p-4 rounded-2xl border border-orange-100 dark:border-orange-500/20 shadow-sm">
+          <p className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase mb-1">En Revisión</p>
+          <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">{stats.inReview}</p>
         </div>
-        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm">
-          <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Cerrados</p>
-          <p className="text-2xl font-bold text-emerald-700">{stats.closed}</p>
+        <div className="bg-emerald-50 dark:bg-emerald-500/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 shadow-sm">
+          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1">Cerrados</p>
+          <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{stats.closed}</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl border border-zinc-100 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-zinc-50 bg-zinc-50/50 flex items-center justify-between">
-          <h3 className="font-bold text-zinc-900">Historial de Hallazgos</h3>
+      <div className="bg-white dark:bg-black rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm overflow-hidden">
+        <div className="p-3 sm:p-4 border-b border-zinc-50 dark:border-white/5 bg-zinc-50/50 dark:bg-white/5 flex items-center justify-between">
+          <h3 className="font-bold text-zinc-900 dark:text-white text-sm sm:text-base uppercase tracking-tight">Historial de Hallazgos</h3>
           <button 
             onClick={exportToPDF}
-            className="text-xs font-bold text-zinc-500 hover:text-zinc-900 flex items-center gap-1 bg-white border border-zinc-100 px-3 py-1.5 rounded-xl hover:bg-zinc-50 transition-colors"
+            className="text-xs font-bold text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white flex items-center gap-1 bg-white dark:bg-black border border-zinc-100 dark:border-white/10 px-3 py-1.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors uppercase tracking-widest"
           >
             <FileText className="w-3 h-3" /> Exportar PDF
           </button>
@@ -3064,9 +3066,9 @@ const ReportsView = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm min-w-[800px]">
             <thead>
-              <tr className="text-zinc-400 border-b border-zinc-50">
+              <tr className="text-zinc-400 dark:text-zinc-500 border-b border-zinc-50 dark:border-white/5">
                 <th 
-                  className="px-6 py-4 font-medium cursor-pointer hover:text-zinc-900 transition-colors"
+                  className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
                   onClick={() => handleSort('createdAt')}
                 >
                   <div className="flex items-center gap-1">
@@ -3077,7 +3079,7 @@ const ReportsView = ({
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 font-medium cursor-pointer hover:text-zinc-900 transition-colors"
+                  className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
                   onClick={() => handleSort('areaName')}
                 >
                   <div className="flex items-center gap-1">
@@ -3088,7 +3090,7 @@ const ReportsView = ({
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 font-medium cursor-pointer hover:text-zinc-900 transition-colors"
+                  className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
                   onClick={() => handleSort('operatorName')}
                 >
                   <div className="flex items-center gap-1">
@@ -3098,10 +3100,10 @@ const ReportsView = ({
                     )}
                   </div>
                 </th>
-                <th className="px-6 py-4 font-medium">Inspección (Inicio/Fin)</th>
-                <th className="px-6 py-4 font-medium">Resuelto en</th>
+                <th className="px-4 py-4 font-bold uppercase tracking-widest">Inspección</th>
+                <th className="px-4 py-4 font-bold uppercase tracking-widest">Cierre</th>
                 <th 
-                  className="px-6 py-4 font-medium cursor-pointer hover:text-zinc-900 transition-colors"
+                  className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
                   onClick={() => handleSort('status')}
                 >
                   <div className="flex items-center gap-1">
@@ -3111,10 +3113,10 @@ const ReportsView = ({
                     )}
                   </div>
                 </th>
-                {user.role === 'Administrador' && <th className="px-6 py-4 font-medium text-right">Acciones</th>}
+                {user.role === 'Administrador' && <th className="px-4 py-4 font-bold uppercase tracking-widest text-right">Acciones</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-50">
+            <tbody className="divide-y divide-zinc-50 dark:divide-white/5">
               {sortedFindings.map((f, index) => {
                 const areaDuration = f.inspectionDurationSeconds || (f.inspectionStartedAt && f.inspectionCompletedAt 
                   ? Math.round((f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime()) / 1000) 
@@ -3134,10 +3136,10 @@ const ReportsView = ({
                     onClick={() => setSelectedFinding(f)}
                     className="hover:bg-zinc-50/50 transition-colors group cursor-pointer"
                   >
-                    <td className="px-6 py-4 text-zinc-500 whitespace-nowrap">
+                    <td className="px-4 py-4 text-zinc-500 whitespace-nowrap">
                       {f.createdAt?.toDate ? format(f.createdAt.toDate(), 'dd/MM/yy') : '-'}
                     </td>
-                    <td className="px-6 py-4 font-medium text-zinc-900">
+                    <td className="px-4 py-4 font-medium text-zinc-900">
                       <div className="flex flex-col">
                         <span>{f.areaName}</span>
                         <FindingDescriptionRenderer 
@@ -3147,10 +3149,10 @@ const ReportsView = ({
                         />
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-zinc-500">
+                    <td className="px-4 py-4 text-zinc-500">
                       {f.operatorName || '-'}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
                       <div className="flex flex-col gap-2">
                         {/* Area Duration */}
                         <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-2 flex items-center justify-between gap-3 min-w-[120px]">
@@ -3181,7 +3183,7 @@ const ReportsView = ({
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
                       {resolutionTime !== null ? (
                         <div className="flex flex-col">
                           <span className="text-zinc-900 font-bold">{resolutionTime} hrs</span>
@@ -3191,7 +3193,7 @@ const ReportsView = ({
                         <span className="text-zinc-300 italic text-xs">Pendiente</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
                       f.status === 'Open' ? 'bg-amber-100 text-amber-700' : 
                       f.status === 'InReview' ? 'bg-orange-100 text-orange-700' :
@@ -3201,7 +3203,7 @@ const ReportsView = ({
                     </span>
                     </td>
                     {user.role === 'Administrador' && (
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-4 py-4 text-right">
                         <div className="flex justify-end items-center gap-1">
                           {confirmingDelete === f.id ? (
                             <div className="flex items-center gap-1 bg-red-50 p-1 rounded-xl border border-red-100">
@@ -3296,15 +3298,15 @@ const ReportsView = ({
                     </div>
 
                     {selectedFinding.supervisorComments && (
-                      <div className="bg-brand-blue/5 p-4 rounded-2xl border border-brand-blue/10">
-                        <h4 className="text-[10px] font-bold text-brand-blue uppercase tracking-widest mb-2">Respuesta del Supervisor</h4>
-                        <p className="text-brand-blue/80 text-sm italic">{selectedFinding.supervisorComments}</p>
+                      <div className="bg-brand-blue/5 dark:bg-sky-500/10 p-4 rounded-2xl border border-brand-blue/10 dark:border-sky-500/20">
+                        <h4 className="text-[10px] font-black text-brand-blue dark:text-sky-400 uppercase tracking-widest mb-2">Respuesta del Supervisor</h4>
+                        <p className="text-brand-blue/80 dark:text-sky-300/80 text-sm italic font-medium">"{selectedFinding.supervisorComments}"</p>
                       </div>
                     )}
 
                     {selectedFinding.history && selectedFinding.history.length > 0 && (
-                      <div className="bg-zinc-50 p-4 rounded-2xl">
-                        <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-white/5">
+                        <h4 className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-4 flex items-center gap-2">
                           <History className="w-3 h-3" />
                           Historial de Cambios
                         </h4>
@@ -3312,26 +3314,26 @@ const ReportsView = ({
                           {selectedFinding.history.map((entry, i) => (
                             <div key={`hist-${i}`} className="relative flex gap-4">
                               {i !== selectedFinding.history!.length - 1 && (
-                                <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-zinc-200" />
+                                <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-zinc-200 dark:bg-zinc-800" />
                               )}
                               <div className={`mt-1.5 w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 z-10 ${
-                                entry.status === 'Open' ? 'bg-amber-50 border-amber-200 text-amber-600' :
-                                entry.status === 'InReview' ? 'bg-orange-50 border-orange-200 text-orange-600' :
-                                'bg-emerald-50 border-emerald-200 text-emerald-600'
+                                entry.status === 'Open' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400' :
+                                entry.status === 'InReview' ? 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20 text-orange-600 dark:text-orange-400' :
+                                'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
                               }`}>
                                 <div className="w-2 h-2 rounded-full bg-current" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2 mb-1">
-                                  <span className="text-xs font-bold text-zinc-900">{entry.action}</span>
-                                  <span className="text-[10px] text-zinc-400 font-mono">
+                                  <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">{entry.action}</span>
+                                  <span className="text-[10px] text-zinc-400 dark:text-zinc-600 font-black">
                                     {entry.timestamp?.toDate ? format(entry.timestamp.toDate(), 'dd/MM HH:mm') : 
                                      entry.timestamp instanceof Date ? format(entry.timestamp, 'dd/MM HH:mm') : '--/--'}
                                   </span>
                                 </div>
-                                <p className="text-[11px] text-zinc-500 font-medium">Por: {entry.userName}</p>
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-500 font-bold uppercase tracking-tight">Por: {entry.userName}</p>
                                 {entry.comment && (
-                                  <p className="mt-1 text-[11px] text-zinc-600 italic">"{entry.comment}"</p>
+                                  <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400 italic font-medium leading-relaxed">"{entry.comment}"</p>
                                 )}
                               </div>
                             </div>
@@ -3637,44 +3639,44 @@ const AdminNotificationManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-zinc-900">Mensajes Push & Segmentación</h3>
+        <h3 className="text-xl font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Mensajes Push & Segmentación</h3>
         <button 
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-zinc-900 text-white px-4 py-2 rounded-2xl font-bold text-xs hover:bg-zinc-800"
+          className="flex items-center gap-2 bg-zinc-900 dark:bg-white text-white dark:text-black px-4 py-2 rounded-2xl font-bold text-xs hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all uppercase tracking-widest shadow-lg shadow-zinc-200 dark:shadow-none"
         >
           <Plus className="w-4 h-4" />
           Nueva Notificación
         </button>
       </div>
 
-      {feedback && <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest">{feedback.text}</p>}
+      {feedback && <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest ml-1">{feedback.text}</p>}
 
       <div className="grid gap-3">
         {notifications.map((n, nIdx) => (
-          <div key={`notif-admin-list-${n.id}-${nIdx}`} className="bg-white border border-zinc-100 p-4 rounded-2xl group relative">
+          <div key={`notif-admin-list-${n.id}-${nIdx}`} className="bg-white dark:bg-black border border-zinc-100 dark:border-white/10 p-4 rounded-2xl group relative hover:shadow-md transition-all">
             <div className="flex justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${n.status === 'Sent' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                  <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${n.status === 'Sent' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
                     {n.status === 'Sent' ? 'Enviado' : 'Programado'}
                   </span>
-                  <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest">{n.targetRole}</span>
+                  <span className="text-[8px] text-zinc-400 dark:text-zinc-600 font-black uppercase tracking-[0.2em]">{n.targetRole}</span>
                   {n.plantId && (
-                    <span className="text-[8px] text-brand-blue font-bold uppercase tracking-widest bg-sky-50 px-2 py-0.5 rounded-full">
+                    <span className="text-[8px] text-brand-blue dark:text-sky-400 font-bold uppercase tracking-widest bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded-full">
                       {plants.find(p => p.id === n.plantId)?.name || 'Planta'}
                     </span>
                   )}
                 </div>
-                <h4 className="font-bold text-zinc-900 text-sm">{n.title}</h4>
-                <p className="text-xs text-zinc-500">{n.message}</p>
-                <div className="flex items-center gap-1 mt-2 text-[9px] text-zinc-400 font-bold">
+                <h4 className="font-bold text-zinc-900 dark:text-white text-sm uppercase tracking-tight">{n.title}</h4>
+                <p className="text-xs text-zinc-500 dark:text-zinc-500 font-medium">{n.message}</p>
+                <div className="flex items-center gap-1 mt-2 text-[9px] text-zinc-400 dark:text-zinc-600 font-bold">
                   <Clock className="w-3 h-3" />
                   {n.scheduledAt?.toDate ? format(n.scheduledAt.toDate(), "dd MMM, HH:mm", { locale: es }) : 'Instantáneo'}
                 </div>
               </div>
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => handleEdit(n)} className="p-2 text-zinc-400 hover:text-zinc-900"><Edit3 className="w-4 h-4"/></button>
-                <button onClick={() => handleDelete(n.id)} className="p-2 text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                <button onClick={() => handleEdit(n)} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white transition-colors"><Edit3 className="w-4 h-4"/></button>
+                <button onClick={() => handleDelete(n.id)} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
               </div>
             </div>
           </div>
@@ -3774,21 +3776,21 @@ const AdminReportSettings = () => {
 
   if (loading) return (
     <div className="flex items-center justify-center p-12">
-      <div className="w-8 h-8 border-4 border-zinc-900 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-4 border-zinc-400 dark:border-white/10 border-t-zinc-900 dark:border-t-white rounded-full animate-spin" />
     </div>
   );
 
   return (
-    <div className="bg-white p-8 rounded-[2rem] border border-zinc-100 shadow-sm space-y-8">
+    <div className="bg-white dark:bg-black p-8 rounded-[2rem] border border-zinc-100 dark:border-white/10 shadow-sm space-y-8">
       <div className="flex items-center gap-3">
-        <FileText className="w-6 h-6 text-zinc-900" />
-        <h3 className="text-xl font-bold text-zinc-900">Configuración de Reportes PDF</h3>
+        <FileText className="w-6 h-6 text-zinc-900 dark:text-white" />
+        <h3 className="text-xl font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Configuración de Reportes PDF</h3>
       </div>
       
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Logo de la Empresa</label>
+            <label className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-[0.2em] ml-1">Logo de la Empresa</label>
             <div className="flex items-center gap-4">
               <input 
                 type="file" 
@@ -3814,35 +3816,35 @@ const AdminReportSettings = () => {
               />
               <label 
                 htmlFor="reportLogoInput"
-                className="flex-1 p-4 bg-zinc-50 border border-zinc-100 rounded-2xl flex items-center justify-center gap-2 cursor-pointer hover:bg-zinc-100 transition-all border-dashed"
+                className="flex-1 p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl flex items-center justify-center gap-2 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all border-dashed"
               >
-                <Camera className="w-5 h-5 text-zinc-400" />
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Subir Logo</span>
+                <Camera className="w-5 h-5 text-zinc-400 dark:text-zinc-600" />
+                <span className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Subir Logo</span>
               </label>
             </div>
             <textarea 
               value={settings.logoUrl} 
               onChange={e => setSettings({...settings, logoUrl: e.target.value})}
-              className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 transition-all font-mono text-[8px] text-zinc-300"
+              className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all font-mono text-[8px] text-zinc-300 dark:text-zinc-700"
               placeholder="O pega el Data URL (Base64) aquí..."
               rows={2}
             />
           </div>
           <div className="space-y-2">
-             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Nombre de la Empresa</label>
+             <label className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-[0.2em] ml-1">Nombre de la Empresa</label>
              <input 
               type="text"
               value={settings.companyName} 
               onChange={e => setSettings({...settings, companyName: e.target.value})}
-              className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+              className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all dark:text-white font-bold"
               placeholder="Ej: Industrial Corp S.A."
             />
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mt-4 ml-1">Vista Previa Logo</label>
-            <div className="w-full h-24 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200 flex items-center justify-center overflow-hidden">
+            <label className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-[0.2em] mt-4 ml-1">Vista Previa Logo</label>
+            <div className="w-full h-24 bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-dashed border-zinc-200 dark:border-white/10 flex items-center justify-center overflow-hidden">
                {settings.logoUrl ? (
                  <img src={settings.logoUrl} className="max-h-full max-w-full object-contain" alt="Logo Preview" />
                ) : (
-                 <p className="text-[10px] text-zinc-300 font-bold uppercase tracking-widest">Sin Logo</p>
+                 <p className="text-[10px] text-zinc-300 dark:text-zinc-700 font-bold uppercase tracking-widest">Sin Logo</p>
                )}
             </div>
           </div>
@@ -3850,22 +3852,22 @@ const AdminReportSettings = () => {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-1 ml-1">Texto del Encabezado</label>
+            <label className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-[0.2em] mb-1 ml-1">Texto del Encabezado</label>
             <input 
               type="text"
               value={settings.headerText} 
               onChange={e => setSettings({...settings, headerText: e.target.value})}
-              className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+              className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all dark:text-white font-bold"
               placeholder="Texto secundario en el encabezado"
             />
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-1 ml-1">Texto del Pie de Página</label>
+            <label className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-[0.2em] mb-1 ml-1">Texto del Pie de Página</label>
             <input 
               type="text"
               value={settings.footerText} 
               onChange={e => setSettings({...settings, footerText: e.target.value})}
-              className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+              className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all dark:text-white font-bold"
               placeholder="Notas legales o pies de página personalizados..."
             />
           </div>
@@ -3878,7 +3880,7 @@ const AdminReportSettings = () => {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className={`text-xs font-bold uppercase tracking-widest text-center ${message.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}
+            className={`text-xs font-black uppercase tracking-widest text-center ${message.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
           >
             {message.text}
           </motion.p>
@@ -3888,7 +3890,7 @@ const AdminReportSettings = () => {
       <button 
         onClick={handleSave}
         disabled={saving}
-        className="w-full py-4 bg-zinc-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200 disabled:opacity-50"
+        className="w-full py-4 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all shadow-xl shadow-zinc-200 dark:shadow-none disabled:opacity-50 uppercase tracking-[0.2em]"
       >
         {saving ? 'Guardando...' : 'Guardar Configuración de Reportes'}
       </button>
@@ -4072,18 +4074,18 @@ const BulkUpload = ({
   };
 
   return (
-    <div className="bg-zinc-50 border border-zinc-100 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-zinc-400">
+        <div className="w-10 h-10 bg-white dark:bg-black rounded-xl shadow-sm flex items-center justify-center text-zinc-400 dark:text-zinc-600">
           <Upload className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-xs font-bold text-zinc-900">Carga Masiva de {
+          <p className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">Carga Masiva de {
             entityType === 'Users' ? 'Usuarios' :
             entityType === 'Plants' ? 'Plantas' :
             entityType === 'Areas' ? 'Áreas' : 'Equipos'
           }</p>
-          <p className="text-[10px] text-zinc-400 font-medium tracking-tight">Sube un archivo CSV con los datos</p>
+          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold tracking-tight uppercase">Sube un archivo CSV con los datos</p>
         </div>
       </div>
       
@@ -4097,7 +4099,7 @@ const BulkUpload = ({
             a.download = `plantilla_${entityType.toLowerCase()}.csv`;
             a.click();
           }}
-          className="flex-1 sm:flex-none px-3 py-2 text-[10px] font-bold text-brand-blue hover:bg-white rounded-lg transition-all border border-transparent hover:border-brand-blue/10"
+          className="flex-1 sm:flex-none px-3 py-2 text-[10px] font-black uppercase text-brand-blue dark:text-sky-400 hover:bg-white dark:hover:bg-black rounded-lg transition-all border border-transparent hover:border-brand-blue/10 dark:hover:border-sky-400/10"
         >
           Descargar Plantilla
         </button>
@@ -4115,10 +4117,10 @@ const BulkUpload = ({
           <button 
             disabled={isProcessing}
             onClick={() => fileInputRef.current?.click()}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl text-[10px] font-bold hover:bg-zinc-800 transition-all disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all shadow-lg shadow-zinc-200 dark:shadow-none disabled:opacity-50"
           >
             {isProcessing ? (
-              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="w-3 h-3 border-2 border-white/30 dark:border-black/30 border-t-white dark:border-t-black rounded-full animate-spin" />
             ) : <Upload className="w-3 h-3" />}
             Subir CSV
           </button>
@@ -4133,13 +4135,13 @@ const AdminManagement = () => {
   
   return (
     <div className="space-y-6">
-      <div className="flex bg-zinc-100 p-1 rounded-2xl overflow-x-auto no-scrollbar">
+      <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl overflow-x-auto no-scrollbar border border-transparent dark:border-white/5">
         {(['Users', 'Plants', 'Areas', 'Equipment'] as const).map((tab, tIdx) => (
           <button
             key={`admin-tab-${tab}-${tIdx}`}
             onClick={() => setActiveSubTab(tab)}
             className={`flex-1 min-w-[100px] px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeSubTab === tab ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+              activeSubTab === tab ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-600 hover:text-zinc-700 dark:hover:text-zinc-400'
             }`}
           >
             {tab === 'Users' ? 'Usuarios' : 
@@ -4215,8 +4217,8 @@ const AdminPlantManagement = () => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold text-zinc-900">Plantas Industriales</h3>
-        <button onClick={() => { setEditingPlant(null); setName(''); setShowForm(true); }} className="p-2 bg-brand-blue text-white rounded-xl hover:opacity-90 transition-all shadow-md shadow-sky-100"><Plus className="w-4 h-4" /></button>
+        <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Plantas Industriales</h3>
+        <button onClick={() => { setEditingPlant(null); setName(''); setShowForm(true); }} className="p-2 bg-brand-blue text-white rounded-xl hover:opacity-90 transition-all shadow-md shadow-sky-100 dark:shadow-none"><Plus className="w-4 h-4" /></button>
       </div>
 
       <BulkUpload 
@@ -4227,14 +4229,14 @@ const AdminPlantManagement = () => {
 
       <div className="grid gap-3">
         {plants.filter(p => (p as any).status !== 'deleted').map((p, pIdx) => (
-          <div key={`pl-${p.id}-${pIdx}`} className="bg-white p-4 rounded-2xl border border-zinc-100 flex justify-between items-center hover:shadow-sm transition-all">
+          <div key={`pl-${p.id}-${pIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex justify-between items-center hover:shadow-sm transition-all">
             <div>
-              <span className="font-bold text-zinc-900">{p.name}</span>
-              <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">{p.id}</p>
+              <span className="font-bold text-zinc-900 dark:text-white">{p.name}</span>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-black tracking-widest">{p.id}</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { setEditingPlant(p); setName(p.name); setShowForm(true); }} className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"><FileText className="w-4 h-4" /></button>
-              <button onClick={() => setConfirmDeleteId(p.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+              <button onClick={() => { setEditingPlant(p); setName(p.name); setShowForm(true); }} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white transition-colors"><FileText className="w-4 h-4" /></button>
+              <button onClick={() => setConfirmDeleteId(p.id)} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
             </div>
           </div>
         ))}
@@ -5124,10 +5126,10 @@ const AdminUserManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Gestión de Usuarios</h2>
+        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Gestión de Usuarios</h2>
         <button 
           onClick={() => { setShowForm(true); setEditingUser(null); }}
-          className="p-2 bg-brand-blue text-white rounded-xl hover:opacity-90 transition-all shadow-md shadow-sky-100"
+          className="p-2 bg-brand-blue text-white rounded-xl hover:opacity-90 transition-all shadow-md shadow-sky-100 dark:shadow-none"
         >
           <Plus className="w-5 h-5" />
         </button>
@@ -5142,17 +5144,17 @@ const AdminUserManagement = () => {
 
       <div className="grid gap-4">
         {users.map((u, index) => (
-          <div key={`user-row-${u.uid || index}`} className="bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm flex items-center justify-between">
+          <div key={`user-row-${u.uid || index}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-sky-50 rounded-full flex items-center justify-center text-brand-blue font-bold">
+              <div className="w-10 h-10 bg-sky-50 dark:bg-sky-500/10 rounded-full flex items-center justify-center text-brand-blue dark:text-sky-400 font-black">
                 {u.name ? u.name[0] : '?'}
               </div>
               <div>
-                <h4 className="font-bold text-zinc-900">{u.name}</h4>
-                <p className="text-xs text-zinc-400">
-                  {u.email.replace('@chekify.local', '')} • <span className="text-zinc-900 font-semibold">{u.role}</span>
+                <h4 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">{u.name}</h4>
+                <p className="text-xs text-zinc-400 dark:text-zinc-600 italic">
+                  {u.email.replace('@chekify.local', '')} • <span className="text-zinc-900 dark:text-zinc-400 font-black">{u.role}</span>
                   {u.plantId && (
-                    <span className="ml-2 text-zinc-500">• {plants.find(p => p.id === u.plantId)?.name}</span>
+                    <span className="ml-2 text-zinc-500 dark:text-zinc-700 font-bold tracking-tight">• {plants.find(p => p.id === u.plantId)?.name}</span>
                   )}
                 </p>
               </div>
@@ -5170,23 +5172,23 @@ const AdminUserManagement = () => {
                   }); 
                   setShowForm(true); 
                 }}
-                className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
+                className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white transition-colors"
               >
                 <FileText className="w-4 h-4" />
               </button>
               <button 
                 onClick={() => setResetPasswordFor(u)}
-                className="p-2 text-zinc-400 hover:text-brand-blue transition-colors rounded-xl hover:bg-brand-blue/5"
+                className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-brand-blue dark:hover:text-sky-400 transition-colors rounded-xl hover:bg-brand-blue/5 dark:hover:bg-sky-500/5"
                 title="Reestablecer contraseña"
               >
                 <div className="flex items-center gap-1.5">
                   <RotateCcw className="w-4 h-4" />
-                  <span className="text-[10px] font-bold">Reseteo</span>
+                  <span className="text-[10px] font-bold uppercase">Reseteo</span>
                 </div>
               </button>
               <button 
                 onClick={() => setConfirmDeleteUid(u.uid)}
-                className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
+                className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-red-500 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -5426,6 +5428,24 @@ const AdminUserManagement = () => {
 
 // --- Error Boundary ---
 export default function App() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.colorScheme = 'dark';
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.style.colorScheme = 'light';
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
   const [activeTab, setActiveTab] = useState<'Home' | 'History' | 'Admin'>('Home');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -5433,7 +5453,7 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(false);
 
   return (
-    <AuthWrapper>
+    <AuthWrapper theme={theme}>
       {(user) => (
         <AppLayout 
           user={user} 
@@ -5443,6 +5463,8 @@ export default function App() {
           setShowNotificationCenter={setShowNotificationCenter}
           isOffline={isOffline}
           setIsOffline={setIsOffline}
+          theme={theme}
+          setTheme={setTheme}
         />
       )}
     </AuthWrapper>
@@ -5456,18 +5478,23 @@ const AppLayout = ({
   showNotificationCenter, 
   setShowNotificationCenter,
   isOffline,
-  setIsOffline
+  setIsOffline,
+  theme,
+  setTheme
 }: { 
   user: AppUser, 
   notifications: Notification[], 
-  setNotifications: (n: Notification[]) => void,
-  showNotificationCenter: boolean,
+  setNotifications: (n: Notification[]) => void, 
+  showNotificationCenter: boolean, 
   setShowNotificationCenter: (s: boolean) => void,
   isOffline: boolean,
-  setIsOffline: (o: boolean) => void
+  setIsOffline: (s: boolean) => void,
+  theme: 'light' | 'dark',
+  setTheme: (t: 'light' | 'dark') => void
 }) => {
   const [activeTab, setActiveTab] = useState<'Home' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig'>('Home');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
 
@@ -5570,18 +5597,27 @@ const AppLayout = ({
   }, []);
 
   return (
-    <div className="min-h-screen bg-zinc-50 bg-concrete flex flex-col md:flex-row">
+    <div data-theme={theme} className="min-h-screen bg-zinc-50 dark:bg-black bg-concrete flex flex-col md:flex-row transition-colors duration-200">
           {/* Sidebar Navigation (Desktop & Tablet) */}
-          <aside className={`hidden md:flex flex-col ${isSidebarCollapsed ? 'w-24' : 'w-64'} bg-white border-r border-zinc-100 h-screen sticky top-0 z-40 p-6 transition-all duration-300 ease-in-out`}>
+          <aside className={`hidden md:flex flex-col ${isSidebarCollapsed ? 'w-24' : 'w-64'} bg-white dark:bg-black border-r border-zinc-100 dark:border-white/10 h-screen sticky top-0 z-40 p-6 transition-all duration-300 ease-in-out`}>
             <div className={`flex flex-col mb-10 gap-6 ${isSidebarCollapsed ? 'items-center' : ''}`}>
               <div className="flex items-center justify-between w-full">
                 <button 
                   onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                  className={`p-2 hover:bg-zinc-50 rounded-xl text-zinc-400 transition-colors flex shrink-0 ${isSidebarCollapsed ? 'mx-auto' : ''}`}
+                  className={`p-2 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-zinc-400 transition-colors flex shrink-0 ${isSidebarCollapsed ? 'mx-auto' : ''}`}
                   title={isSidebarCollapsed ? "Expandir" : "Contraer"}
                 >
                   {isSidebarCollapsed ? <PanelLeftOpen className="w-6 h-6" /> : <PanelLeftClose className="w-5 h-5" />}
                 </button>
+                {!isSidebarCollapsed && (
+                  <button
+                    onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                    className="p-2 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-zinc-400 transition-colors"
+                    title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
+                  >
+                    {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                  </button>
+                )}
               </div>
               <div className={isSidebarCollapsed ? 'w-full flex justify-center' : 'px-2'}>
                 <Logo isCollapsed={isSidebarCollapsed} className={isSidebarCollapsed ? 'h-24 px-2' : 'h-12'} />
@@ -5592,7 +5628,7 @@ const AppLayout = ({
               <button 
                 onClick={() => setActiveTab('Home')}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                  activeTab === 'Home' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
+                  activeTab === 'Home' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                 }`}
                 title={isSidebarCollapsed ? "Panel" : undefined}
               >
@@ -5602,7 +5638,7 @@ const AppLayout = ({
               <button 
                 onClick={() => setActiveTab('History')}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                  activeTab === 'History' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
+                  activeTab === 'History' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                 }`}
                 title={isSidebarCollapsed ? "Historial" : undefined}
               >
@@ -5614,7 +5650,7 @@ const AppLayout = ({
                   <button 
                     onClick={() => setActiveTab('Admin')}
                     className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                      activeTab === 'Admin' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
+                      activeTab === 'Admin' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                     }`}
                     title={isSidebarCollapsed ? "Administración" : undefined}
                   >
@@ -5624,7 +5660,7 @@ const AppLayout = ({
                   <button 
                     onClick={() => setActiveTab('Notifications')}
                     className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                      activeTab === 'Notifications' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
+                      activeTab === 'Notifications' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                     }`}
                     title={isSidebarCollapsed ? "Notificaciones" : undefined}
                   >
@@ -5634,7 +5670,7 @@ const AppLayout = ({
                   <button 
                     onClick={() => setActiveTab('PDFConfig')}
                     className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                      activeTab === 'PDFConfig' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
+                      activeTab === 'PDFConfig' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                     }`}
                     title={isSidebarCollapsed ? "Configuración PDF" : undefined}
                   >
@@ -5646,9 +5682,18 @@ const AppLayout = ({
             </div>
 
             <div className="mt-auto space-y-4">
-              <div className={`px-4 py-4 bg-zinc-50 rounded-2xl ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
+              {isSidebarCollapsed && (
+                <button
+                  onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                  className="w-full flex items-center justify-center p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-2xl text-zinc-400 transition-colors"
+                  title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
+                >
+                  {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                </button>
+              )}
+              <div className={`px-4 py-4 bg-zinc-50 dark:bg-zinc-900 rounded-2xl ${isSidebarCollapsed ? 'flex justify-center' : ''} border border-transparent dark:border-white/5`}>
                 {isSidebarCollapsed ? (
-                  <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center text-[10px] text-white font-black border-2 border-white shadow-sm shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-zinc-900 dark:bg-black flex items-center justify-center text-[10px] text-white font-black border-2 border-white dark:border-white/20 shadow-sm shrink-0">
                     {user.name?.charAt(0) || user.email.charAt(0)}
                   </div>
                 ) : (
@@ -5656,14 +5701,14 @@ const AppLayout = ({
                     <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-1">
                       {user.role}
                     </p>
-                    <p className="text-xs font-bold text-zinc-900 truncate">{user.name}</p>
-                    <p className="text-[10px] text-zinc-400 truncate mt-1">{user.email.replace('@chekify.local', '')}</p>
+                    <p className="text-xs font-bold text-zinc-900 dark:text-white transition-colors truncate">{user.name}</p>
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate mt-1">{user.email.replace('@chekify.local', '')}</p>
                   </>
                 )}
               </div>
               <button 
                 onClick={() => signOut(auth)}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl text-red-500 hover:bg-red-50 transition-all font-bold text-sm`}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all font-bold text-sm`}
                 title={isSidebarCollapsed ? "Cerrar Sesión" : undefined}
               >
                 <LogOut className="w-5 h-5 shrink-0" />
@@ -5671,7 +5716,7 @@ const AppLayout = ({
               </button>
               {!isSidebarCollapsed && (
                 <div className="text-center pt-2">
-                  <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Powered by maisser.cl</p>
+                  <p className="text-[8px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-[0.2em]">Powered by maisser.cl</p>
                 </div>
               )}
             </div>
@@ -5680,8 +5725,8 @@ const AppLayout = ({
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Header (Mobile & Sticky desktop header) */}
-            <header className="bg-white border-b border-zinc-100 px-6 py-4 sticky top-0 z-40 backdrop-blur-md bg-white/80">
-              <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <header className="bg-white/80 dark:bg-black/80 border-b border-zinc-100 dark:border-white/10 px-4 md:px-8 py-4 sticky top-0 z-40 backdrop-blur-md transition-colors duration-200">
+              <div className="max-w-7xl mx-auto flex items-center justify-between">
                 {/* Mobile Identity */}
                 <div className="flex items-center gap-3 md:hidden h-10">
                   <Logo />
@@ -5690,29 +5735,36 @@ const AppLayout = ({
                 {/* Welcome & Time (Desktop) */}
                 <div className="hidden md:flex flex-col">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-zinc-900 font-bold text-lg leading-tight">
+                    <h2 className="text-zinc-900 dark:text-white font-bold text-lg leading-tight transition-colors">
                       ¡Bienvenido! {user.name}
                     </h2>
                     {isOffline && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 border border-red-100 text-red-600 text-[8px] font-bold uppercase rounded-full animate-pulse">
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-bold uppercase rounded-full animate-pulse">
                         <AlertCircle className="w-2.5 h-2.5" />
                         Desconectado
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-zinc-400 font-medium">
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500 font-medium">
                     {format(currentTime, "EEEE, dd 'de' MMMM • HH:mm:ss", { locale: es })}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                    className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-2"
+                    title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
+                  >
+                    {theme === 'light' ? <Moon className="w-6 h-6" /> : <Sun className="w-6 h-6" />}
+                  </button>
                   <button 
                     onClick={() => setShowNotificationCenter(true)}
-                    className="relative text-zinc-400 hover:text-zinc-900 transition-colors p-2"
+                    className="relative text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-2"
                   >
                     <Bell className="w-6 h-6" />
                     {unreadCount > 0 && (
-                      <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white animate-pulse-subtle">
+                      <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-black animate-pulse-subtle">
                         {unreadCount}
                       </span>
                     )}
@@ -5729,7 +5781,7 @@ const AppLayout = ({
             </header>
 
             {/* Content Body */}
-            <main className="flex-1 p-6 md:p-10 max-w-4xl mx-auto w-full mb-24 md:mb-0">
+            <main className="flex-1 p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full mb-24 md:mb-0 transitioning-all duration-300 dark:text-white">
               <NotificationCenter 
                 show={showNotificationCenter}
                 onClose={() => setShowNotificationCenter(false)}
@@ -5798,18 +5850,18 @@ const AppLayout = ({
             </main>
 
             {/* Mobile Navigation */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-100 px-6 pt-4 pb-2 z-40">
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 px-6 pt-4 pb-2 z-40 transition-colors duration-200">
               <div className="max-w-2xl mx-auto flex items-center justify-around mb-2">
                 <button 
                   onClick={() => setActiveTab('Home')}
-                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Home' ? 'text-zinc-900' : 'text-zinc-400'}`}
+                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Home' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
                 >
                   <LayoutDashboard className="w-6 h-6" />
                   <span className="text-[10px] font-bold uppercase tracking-widest">Inicio</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('History')}
-                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'History' ? 'text-zinc-900' : 'text-zinc-400'}`}
+                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'History' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
                 >
                   <History className="w-6 h-6" />
                   <span className="text-[10px] font-bold uppercase tracking-widest">Historial</span>
@@ -5818,21 +5870,21 @@ const AppLayout = ({
                   <>
                     <button 
                       onClick={() => setActiveTab('Admin')}
-                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Admin' ? 'text-zinc-900' : 'text-zinc-400'}`}
+                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Admin' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
                     >
                       <Users className="w-6 h-6" />
                       <span className="text-[10px] font-bold uppercase tracking-widest text-center leading-[1]">General</span>
                     </button>
                     <button 
                       onClick={() => setActiveTab('Notifications')}
-                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Notifications' ? 'text-zinc-900' : 'text-zinc-400'}`}
+                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Notifications' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
                     >
                       <Bell className="w-6 h-6" />
                       <span className="text-[10px] font-bold uppercase tracking-widest text-center leading-[1]">Msjes</span>
                     </button>
                     <button 
                       onClick={() => setActiveTab('PDFConfig')}
-                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'PDFConfig' ? 'text-zinc-900' : 'text-zinc-400'}`}
+                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'PDFConfig' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
                     >
                       <Shield className="w-6 h-6" />
                       <span className="text-[10px] font-bold uppercase tracking-widest text-center leading-[1]">PDF</span>
