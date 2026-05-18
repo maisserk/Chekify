@@ -76,7 +76,10 @@ import {
   ArrowLeft,
   ShieldCheck,
   ListChecks,
-  FileSearch
+  FileSearch,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu
 } from 'lucide-react';
 
 const DEFAULT_VOSO: VOSOInspection = {
@@ -5436,6 +5439,7 @@ const AppLayout = ({
   setIsOffline: (o: boolean) => void
 }) => {
   const [activeTab, setActiveTab] = useState<'Home' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig'>('Home');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
 
@@ -5540,81 +5544,108 @@ const AppLayout = ({
   return (
     <div className="min-h-screen bg-zinc-50 bg-concrete flex flex-col md:flex-row">
           {/* Sidebar Navigation (Desktop & Tablet) */}
-          <aside className="hidden md:flex flex-col w-64 bg-white border-r border-zinc-100 h-screen sticky top-0 z-40 p-6">
-            <div className="flex items-center gap-3 mb-10 px-2 h-10">
-              <Logo />
+          <aside className={`hidden md:flex flex-col ${isSidebarCollapsed ? 'w-24' : 'w-64'} bg-white border-r border-zinc-100 h-screen sticky top-0 z-40 p-6 transition-all duration-300 ease-in-out`}>
+            <div className={`flex flex-col mb-10 gap-6 ${isSidebarCollapsed ? 'items-center' : ''}`}>
+              <div className="flex items-center justify-between w-full">
+                <button 
+                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                  className={`p-2 hover:bg-zinc-50 rounded-xl text-zinc-400 transition-colors flex shrink-0 ${isSidebarCollapsed ? 'mx-auto' : ''}`}
+                  title={isSidebarCollapsed ? "Expandir" : "Contraer"}
+                >
+                  {isSidebarCollapsed ? <PanelLeftOpen className="w-6 h-6" /> : <PanelLeftClose className="w-5 h-5" />}
+                </button>
+              </div>
+              <div className={isSidebarCollapsed ? 'w-full flex justify-center' : 'px-2'}>
+                <Logo isCollapsed={isSidebarCollapsed} className={isSidebarCollapsed ? 'h-24 px-2' : 'h-12'} />
+              </div>
             </div>
 
             <div className="flex-1 space-y-2">
               <button 
                 onClick={() => setActiveTab('Home')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-bold text-sm ${
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
                   activeTab === 'Home' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
                 }`}
+                title={isSidebarCollapsed ? "Panel" : undefined}
               >
-                <LayoutDashboard className="w-5 h-5" />
-                <span>Panel</span>
+                <LayoutDashboard className="w-5 h-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Panel</span>}
               </button>
               <button 
                 onClick={() => setActiveTab('History')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-bold text-sm ${
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
                   activeTab === 'History' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
                 }`}
+                title={isSidebarCollapsed ? "Historial" : undefined}
               >
-                <History className="w-5 h-5" />
-                <span>Historial</span>
+                <History className="w-5 h-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Historial</span>}
               </button>
               {user.role === 'Administrador' && (
                 <>
                   <button 
                     onClick={() => setActiveTab('Admin')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-bold text-sm ${
+                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
                       activeTab === 'Admin' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
                     }`}
+                    title={isSidebarCollapsed ? "Administración" : undefined}
                   >
-                    <Users className="w-5 h-5" />
-                    <span>Administración</span>
+                    <Users className="w-5 h-5 shrink-0" />
+                    {!isSidebarCollapsed && <span>Administración</span>}
                   </button>
                   <button 
                     onClick={() => setActiveTab('Notifications')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-bold text-sm ${
+                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
                       activeTab === 'Notifications' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
                     }`}
+                    title={isSidebarCollapsed ? "Notificaciones" : undefined}
                   >
-                    <Bell className="w-5 h-5" />
-                    <span>Notificaciones</span>
+                    <Bell className="w-5 h-5 shrink-0" />
+                    {!isSidebarCollapsed && <span>Notificaciones</span>}
                   </button>
                   <button 
                     onClick={() => setActiveTab('PDFConfig')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-bold text-sm ${
+                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
                       activeTab === 'PDFConfig' ? 'bg-brand-blue text-white shadow-md shadow-sky-100' : 'text-zinc-500 hover:bg-zinc-50'
                     }`}
+                    title={isSidebarCollapsed ? "Configuración PDF" : undefined}
                   >
-                    <Shield className="w-5 h-5" />
-                    <span>Configuración PDF</span>
+                    <Shield className="w-5 h-5 shrink-0" />
+                    {!isSidebarCollapsed && <span>Configuración PDF</span>}
                   </button>
                 </>
               )}
             </div>
 
             <div className="mt-auto space-y-4">
-              <div className="px-4 py-4 bg-zinc-50 rounded-2xl">
-                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-1">
-                  {user.role}
-                </p>
-                <p className="text-xs font-bold text-zinc-900 truncate">{user.name}</p>
-                <p className="text-[10px] text-zinc-400 truncate mt-1">{user.email.replace('@chekify.local', '')}</p>
+              <div className={`px-4 py-4 bg-zinc-50 rounded-2xl ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
+                {isSidebarCollapsed ? (
+                  <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center text-[10px] text-white font-black border-2 border-white shadow-sm shrink-0">
+                    {user.name?.charAt(0) || user.email.charAt(0)}
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-1">
+                      {user.role}
+                    </p>
+                    <p className="text-xs font-bold text-zinc-900 truncate">{user.name}</p>
+                    <p className="text-[10px] text-zinc-400 truncate mt-1">{user.email.replace('@chekify.local', '')}</p>
+                  </>
+                )}
               </div>
               <button 
                 onClick={() => signOut(auth)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-red-500 hover:bg-red-50 transition-all font-bold text-sm"
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl text-red-500 hover:bg-red-50 transition-all font-bold text-sm`}
+                title={isSidebarCollapsed ? "Cerrar Sesión" : undefined}
               >
-                <LogOut className="w-5 h-5" />
-                <span>Cerrar Sesión</span>
+                <LogOut className="w-5 h-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Cerrar Sesión</span>}
               </button>
-              <div className="text-center pt-2">
-                <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Powered by maisser.cl</p>
-              </div>
+              {!isSidebarCollapsed && (
+                <div className="text-center pt-2">
+                  <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Powered by maisser.cl</p>
+                </div>
+              )}
             </div>
           </aside>
 
