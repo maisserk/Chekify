@@ -77,6 +77,7 @@ import {
   ShieldCheck,
   ListChecks,
   FileSearch,
+  Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
   Menu
@@ -108,6 +109,13 @@ const DEFAULT_VOSO: VOSOInspection = {
     { id: 'ol2', name: 'Olor químico', type: 'Seguridad' },
     { id: 'ol3', name: 'Olor a aceite', type: 'Mantenimiento' },
     { id: 'ol4', name: 'Olor eléctrico', type: 'Crítico' }
+  ],
+  orden: [
+    { id: 'l1', name: 'Residuos en el área', type: 'Seguridad' },
+    { id: 'l2', name: 'Herramientas fuera de lugar', type: 'Operacional' },
+    { id: 'l3', name: 'Derrame de lubricantes', type: 'Seguridad' },
+    { id: 'l4', name: 'Obstrucciones en accesos', type: 'Crítico' },
+    { id: 'l5', name: 'Limpieza del equipo', type: 'Mantenimiento' }
   ]
 };
 import { motion, AnimatePresence } from 'motion/react';
@@ -202,6 +210,7 @@ interface VOSOInspection {
   oir: VOSOItem[];
   sentir: VOSOItem[];
   oler: VOSOItem[];
+  orden: VOSOItem[];
 }
 
 interface Equipment {
@@ -1102,6 +1111,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                 const oir = equip?.inspeccionVOSO?.oir || [];
                 const sentir = equip?.inspeccionVOSO?.sentir || [];
                 const oler = equip?.inspeccionVOSO?.oler || [];
+                const orden = equip?.inspeccionVOSO?.orden || [];
 
                 let icon = "🔍";
                 let categoryName = "GENERAL";
@@ -1109,8 +1119,9 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                 else if (oir.some(i => i.id === id)) { icon = "👂"; categoryName = "OÍR"; }
                 else if (sentir.some(i => i.id === id)) { icon = "🖐️"; categoryName = "SENTIR"; }
                 else if (oler.some(i => i.id === id)) { icon = "👃"; categoryName = "OLER"; }
+                else if (orden.some(i => i.id === id)) { icon = "✨"; categoryName = "ORDEN"; }
 
-                const allVOSO = [...ver, ...oir, ...sentir, ...oler];
+                const allVOSO = [...ver, ...oir, ...sentir, ...oler, ...orden];
                 const item = allVOSO.find(i => i.id === id);
                 description += `${icon} [${categoryName}] ${item?.name || id}: ${v.status}${v.comment ? ` - ${v.comment}` : ''}${v.solvedByOperator ? ' [SOLUCIONADO]' : ''}\n`;
               });
@@ -1560,7 +1571,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                   <div className="flex items-center justify-between">
                     <h4 className="text-2xl font-black text-zinc-900 tracking-tighter uppercase">Inspección Primaria</h4>
                     <div className="flex gap-2">
-                      {[Eye, Ear, Hand, Wind].map((Ico, i) => (
+                      {[Eye, Ear, Hand, Wind, Sparkles].map((Ico, i) => (
                         <div key={`mini-voso-${i}`} className="w-8 h-8 rounded-full bg-white border border-zinc-100 flex items-center justify-center shadow-sm">
                           <Ico className="w-4 h-4 text-zinc-400" />
                         </div>
@@ -1604,6 +1615,14 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     items={currentEquipment.inspeccionVOSO.oler || []} 
                     responses={vosoResponses}
                     colorClass="bg-orange-50/80"
+                    onUpdate={handleSetVOSOResponse}
+                  />
+                  <VOSOExecutionCategory 
+                    title="✨ Orden y Limpieza" 
+                    icon={Sparkles} 
+                    items={currentEquipment.inspeccionVOSO.orden || []} 
+                    responses={vosoResponses}
+                    colorClass="bg-purple-50/80"
                     onUpdate={handleSetVOSOResponse}
                   />
                 </div>
@@ -2640,14 +2659,16 @@ const VOSO_ICONS: Record<string, any> = {
   'VER': Eye,
   'OÍR': Ear,
   'SENTIR': Hand,
-  'OLER': Wind
+  'OLER': Wind,
+  'ORDEN': Sparkles
 };
 
 const VOSO_COLORS: Record<string, string> = {
   'VER': 'bg-sky-500/10 text-sky-600 border-sky-200/50',
   'OÍR': 'bg-indigo-500/10 text-indigo-600 border-indigo-200/50',
   'SENTIR': 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50',
-  'OLER': 'bg-orange-500/10 text-orange-600 border-orange-200/50'
+  'OLER': 'bg-orange-500/10 text-orange-600 border-orange-200/50',
+  'ORDEN': 'bg-purple-500/10 text-purple-600 border-purple-200/50'
 };
 
 const FindingDescriptionRenderer = ({ description, className = "", isPreview = false }: { description: string, className?: string, isPreview?: boolean }) => {
@@ -4718,6 +4739,13 @@ const AdminEquipmentManagement = () => {
                   items={formData.inspeccionVOSO.oler} 
                   colorClass="bg-orange-50/50"
                   onUpdate={(oler) => setFormData({...formData, inspeccionVOSO: {...formData.inspeccionVOSO, oler}})}
+                />
+                <VOSOEditorCategory 
+                  title="Orden y Limpieza" 
+                  icon={Sparkles} 
+                  items={formData.inspeccionVOSO.orden || []} 
+                  colorClass="bg-purple-50/50"
+                  onUpdate={(orden) => setFormData({...formData, inspeccionVOSO: {...formData.inspeccionVOSO, orden}})}
                 />
               </div>
             </div>
