@@ -509,7 +509,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
           )}
 
           <div className="mt-8 pt-6 border-t border-zinc-50 dark:border-white/10">
-            <p className="text-[10px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-widest">Powered by maisser.cl</p>
+            <p className="text-[10px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-widest">Developed by maisser.cl</p>
           </div>
         </div>
       </div>
@@ -1522,7 +1522,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     </div>
                  </div>
 
-                 <h2 className="text-5xl font-black tracking-tighter mb-6 leading-none text-zinc-900 dark:text-white">
+                 <h2 className="text-5xl font-black tracking-tighter mb-6 leading-none text-white">
                     {currentEquipment?.name || selectedArea.name}
                  </h2>
                  
@@ -2117,26 +2117,32 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart id="stats-summary-chart" data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#1f2937' : '#f0f0f0'} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#27272a' : '#e4e4e7'} />
             <XAxis 
               dataKey="name" 
               axisLine={false} 
               tickLine={false} 
-              tick={{ fontSize: 10, fill: '#a1a1aa' }}
+              tick={{ fontSize: 10, fill: theme === 'dark' ? '#71717a' : '#71717a' }}
               interval={0}
             />
             <YAxis 
               axisLine={false} 
               tickLine={false} 
-              tick={{ fontSize: 10, fill: '#a1a1aa' }}
+              tick={{ fontSize: 10, fill: theme === 'dark' ? '#71717a' : '#71717a' }}
             />
             <Tooltip 
-              contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: theme === 'dark' ? '#000' : '#fff', color: theme === 'dark' ? '#fff' : '#000', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-              cursor={{ fill: theme === 'dark' ? '#111' : '#f4f4f5' }}
+              contentStyle={{ 
+                borderRadius: '16px', 
+                border: theme === 'dark' ? '1px solid #27272a' : '1px solid #e4e4e7', 
+                backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff', 
+                color: theme === 'dark' ? '#ffffff' : '#18181b', 
+                boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' 
+              }}
+              cursor={{ fill: theme === 'dark' ? '#27272a' : '#f4f4f5' }}
             />
-            <Bar dataKey="open" name="Pendientes" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="inReview" name="En Revisión" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="closed" name="Cerrados" fill="#10b981" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="open" name="Pendientes" fill="#0ea5e9" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="inReview" name="En Revisión" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="closed" name="Cerrados" fill="#10b981" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -2332,25 +2338,27 @@ const SupervisorDashboard = ({
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setShowStats(!showStats)}
-              className={`p-2 rounded-xl transition-all ${showStats ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'bg-zinc-100 text-zinc-500 hover:text-zinc-900'}`}
+              className={`p-2 rounded-xl transition-all ${showStats ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
               title="Estadísticas"
             >
               <BarChart3 className="w-5 h-5" />
             </button>
             <button 
               onClick={() => setShowFilters(!showFilters)}
-              className={`p-2 rounded-xl transition-all ${showFilters || startDate || endDate || operatorFilter !== 'All' ? 'bg-brand-green text-white shadow-md shadow-emerald-100 dark:shadow-none' : 'bg-zinc-100 text-zinc-500 hover:text-zinc-900'}`}
+              className={`p-2 rounded-xl transition-all ${showFilters || startDate || endDate || operatorFilter !== 'All' ? 'bg-brand-green text-white shadow-md shadow-emerald-100 dark:shadow-none' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
               title="Filtros Avanzados"
             >
               <Filter className="w-5 h-5" />
             </button>
-            <div className="hidden sm:flex bg-zinc-100 p-1 rounded-xl">
+            <div className="hidden sm:flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
               {(['Open', 'InReview', 'Closed', 'All'] as const).map((f, fIdx) => (
                 <button
                   key={`filter-tab-${f}-${fIdx}`}
                   onClick={() => setFilter(f)}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    filter === f ? 'bg-white text-zinc-900 shadow-sm dark:shadow-none' : 'text-zinc-500 hover:text-zinc-700'
+                    filter === f 
+                      ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm dark:shadow-none' 
+                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
                   }`}
                 >
                   {f === 'Open' ? 'Pendientes' : f === 'InReview' ? 'En Revisión' : f === 'Closed' ? 'Cerrados' : 'Todos'}
@@ -2367,60 +2375,60 @@ const SupervisorDashboard = ({
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm dark:shadow-none space-y-4 mb-4"
+              className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-4 mb-4"
             >
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-widest">Filtros Avanzados</h4>
-                <button onClick={clearFilters} className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 uppercase tracking-widest">
+                <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Filtros Avanzados</h4>
+                <button onClick={clearFilters} className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 dark:hover:text-white uppercase tracking-widest">
                   Limpiar Filtros
                 </button>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase ml-1">Rango de Fecha</label>
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Rango de Fecha</label>
                   <div className="flex flex-col sm:flex-row items-center gap-2">
                     <input 
                       type="date" 
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full p-2 bg-zinc-50 border border-zinc-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+                      className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
                     />
-                    <span className="text-zinc-300 hidden sm:block">-</span>
+                    <span className="text-zinc-300 dark:text-zinc-700 hidden sm:block">-</span>
                     <input 
                       type="date" 
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full p-2 bg-zinc-50 border border-zinc-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+                      className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase ml-1">Operador</label>
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Operador</label>
                   <select 
                     value={operatorFilter}
                     onChange={(e) => setOperatorFilter(e.target.value)}
-                    className="w-full p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none"
+                    className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100"
                   >
-                    <option value="All">Todos los Operadores</option>
+                    <option value="All" className="dark:bg-zinc-900">Todos los Operadores</option>
                     {uniqueOperators.map((op, idx) => (
-                      <option key={`op-opt-${op}-${idx}`} value={op}>{op}</option>
+                      <option key={`op-opt-${op}-${idx}`} value={op} className="dark:bg-zinc-900">{op}</option>
                     ))}
                   </select>
                 </div>
 
                 <div className="space-y-1 sm:hidden">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase ml-1">Estado</label>
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Estado</label>
                   <select 
                     value={filter}
                     onChange={(e) => setFilter(e.target.value as any)}
-                    className="w-full p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none"
+                    className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100"
                   >
-                    <option value="All">Todos los Estados</option>
-                    <option value="Open">Pendientes</option>
-                    <option value="InReview">En Revisión</option>
-                    <option value="Closed">Cerrados</option>
+                    <option value="All" className="dark:bg-zinc-900">Todos los Estados</option>
+                    <option value="Open" className="dark:bg-zinc-900">Pendientes</option>
+                    <option value="InReview" className="dark:bg-zinc-900">En Revisión</option>
+                    <option value="Closed" className="dark:bg-zinc-900">Cerrados</option>
                   </select>
                 </div>
               </div>
@@ -2450,14 +2458,14 @@ const SupervisorDashboard = ({
               placeholder="Buscar por área, descripción u operador..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-white border border-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue shadow-sm dark:shadow-none transition-all text-sm"
+              className="w-full pl-11 pr-4 py-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue shadow-sm dark:shadow-none transition-all text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
             />
           </div>
           {(startDate || endDate || operatorFilter !== 'All') && !showFilters && (
             <div className="flex flex-wrap gap-2 px-1">
-              {startDate && <span className="bg-zinc-100 text-zinc-600 px-2 py-1 rounded-lg text-[10px] font-bold uppercase">Desde: {startDate}</span>}
-              {endDate && <span className="bg-zinc-100 text-zinc-600 px-2 py-1 rounded-lg text-[10px] font-bold uppercase">Hasta: {endDate}</span>}
-              {operatorFilter !== 'All' && <span className="bg-zinc-100 text-zinc-600 px-2 py-1 rounded-lg text-[10px] font-bold uppercase">Op: {operatorFilter}</span>}
+              {startDate && <span className="bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-transparent dark:border-white/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase">Desde: {startDate}</span>}
+              {endDate && <span className="bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-transparent dark:border-white/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase">Hasta: {endDate}</span>}
+              {operatorFilter !== 'All' && <span className="bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-transparent dark:border-white/10 px-2 py-1 rounded-lg text-[10px] font-bold uppercase">Op: {operatorFilter}</span>}
               <button 
                 onClick={clearFilters}
                 className="text-[10px] font-bold text-brand-blue hover:underline"
@@ -3287,14 +3295,14 @@ const ReportsView = ({
                       </span>
                       <span className="text-zinc-400 text-[10px]">ID: {selectedFinding.id}</span>
                     </div>
-                    <h3 className="text-2xl font-bold text-zinc-900">{selectedFinding.areaName}</h3>
-                    <p className="text-zinc-500 text-sm mt-1">Reportado por {selectedFinding.operatorName}</p>
+                    <h3 className="text-2xl font-bold text-zinc-900 dark:text-white">{selectedFinding.areaName}</h3>
+                    <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Reportado por {selectedFinding.operatorName}</p>
                   </div>
 
                   <div className="space-y-4">
-                    <div className="bg-zinc-50 p-6 rounded-[2rem]">
-                      <h4 className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-[0.2em] mb-4">Descripción del Hallazgo</h4>
-                      <FindingDescriptionRenderer description={selectedFinding.description} className="text-zinc-800" />
+                    <div className="bg-zinc-50 dark:bg-zinc-900 p-6 rounded-[2rem] border border-transparent dark:border-white/5">
+                      <h4 className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-4">Descripción del Hallazgo</h4>
+                      <FindingDescriptionRenderer description={selectedFinding.description} className="text-zinc-800 dark:text-zinc-205" />
                     </div>
 
                     {selectedFinding.supervisorComments && (
@@ -3343,47 +3351,47 @@ const ReportsView = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-6 border-t border-zinc-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-6 border-t border-zinc-100 dark:border-white/5">
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
                            <Layout className="w-3 h-3" />
                            Inspección de Área (Total)
                         </p>
-                        <div className="bg-zinc-50 p-3 rounded-2xl border border-zinc-100 flex items-center justify-between">
-                           <div className="flex flex-col text-xs text-zinc-600 font-mono">
+                        <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                           <div className="flex flex-col text-xs text-zinc-600 dark:text-zinc-400 font-mono">
                               <span>{selectedFinding.inspectionStartedAt?.toDate ? format(selectedFinding.inspectionStartedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
-                              <span className="text-zinc-300">↓</span>
+                              <span className="text-zinc-300 dark:text-zinc-700">↓</span>
                               <span>{selectedFinding.inspectionCompletedAt?.toDate ? format(selectedFinding.inspectionCompletedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
                            </div>
                            {(selectedFinding.inspectionDurationSeconds || (selectedFinding.inspectionStartedAt && selectedFinding.inspectionCompletedAt)) && (
                               <div className="text-right">
-                                 <p className="text-lg font-black text-zinc-900 leading-none">
+                                 <p className="text-lg font-black text-zinc-900 dark:text-white leading-none">
                                     {Math.floor((selectedFinding.inspectionDurationSeconds || (selectedFinding.inspectionCompletedAt.toDate().getTime() - selectedFinding.inspectionStartedAt.toDate().getTime()) / 1000) / 60)} min
                                  </p>
-                                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Duración Total</p>
+                                 <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-tighter">Duración Total</p>
                               </div>
                            )}
                         </div>
                       </div>
 
                       <div className="space-y-1">
-                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
                            <Box className="w-3 h-3" />
                            Inspección de Equipo
                         </p>
-                        <div className="bg-sky-50/30 p-3 rounded-2xl border border-sky-100/50 flex items-center justify-between">
-                           <div className="flex flex-col text-xs text-sky-700/60 font-mono">
+                        <div className="bg-sky-50/20 dark:bg-sky-950/20 p-3 rounded-2xl border border-sky-100/30 dark:border-sky-500/10 flex items-center justify-between">
+                           <div className="flex flex-col text-xs text-sky-700/60 dark:text-sky-400 font-mono">
                               <span>{selectedFinding.equipmentStartedAt?.toDate ? format(selectedFinding.equipmentStartedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
-                              <span className="text-sky-200">↓</span>
+                              <span className="text-sky-200 dark:text-sky-800">↓</span>
                               <span>{selectedFinding.equipmentCompletedAt?.toDate ? format(selectedFinding.equipmentCompletedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
                            </div>
                            {(selectedFinding.equipmentDurationSeconds || (selectedFinding.equipmentStartedAt && selectedFinding.equipmentCompletedAt)) && (
                               <div className="text-right">
-                                 <p className="text-lg font-black text-sky-600 leading-none">
+                                 <p className="text-lg font-black text-sky-600 dark:text-sky-450 leading-none">
                                     {(selectedFinding.equipmentDurationSeconds || Math.round((selectedFinding.equipmentCompletedAt.toDate().getTime() - selectedFinding.equipmentStartedAt.toDate().getTime()) / 1000))}s
                                  </p>
-                                 <p className="text-[10px] font-bold text-sky-400 uppercase tracking-tighter">Tiempo Equipo</p>
+                                 <p className="text-[10px] font-bold text-sky-400 dark:text-sky-500 uppercase tracking-tighter">Tiempo Equipo</p>
                               </div>
                            )}
                         </div>
@@ -3392,19 +3400,19 @@ const ReportsView = ({
 
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Estado y Cierre</p>
-                        <div className="bg-zinc-50 p-3 rounded-2xl border border-zinc-100 space-y-3">
+                        <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Estado y Cierre</p>
+                        <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-100 dark:border-white/5 space-y-3">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500 font-medium">Reportado</span>
-                            <span className="text-xs font-bold text-zinc-900">{selectedFinding.createdAt?.toDate ? format(selectedFinding.createdAt.toDate(), 'dd MMM, HH:mm') : '--:--'}</span>
+                            <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium font-medium">Reportado</span>
+                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">{selectedFinding.createdAt?.toDate ? format(selectedFinding.createdAt.toDate(), 'dd MMM, HH:mm') : '--:--'}</span>
                           </div>
                           {selectedFinding.closedAt && (
-                            <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50">
-                              <span className="text-xs text-emerald-600 font-medium">Resolución</span>
+                            <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50 dark:border-white/5">
+                              <span className="text-xs text-emerald-600 dark:text-emerald-450 font-medium font-medium">Resolución</span>
                               <div className="text-right">
-                                <p className="text-xs font-bold text-emerald-700">{format(selectedFinding.closedAt.toDate(), 'dd MMM, HH:mm')}</p>
+                                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">{format(selectedFinding.closedAt.toDate(), 'dd MMM, HH:mm')}</p>
                                 {selectedFinding.createdAt && (
-                                  <p className="text-[9px] font-black text-emerald-500 uppercase tracking-tighter">
+                                  <p className="text-[9px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-tighter">
                                     En {Math.round((selectedFinding.closedAt.toDate().getTime() - selectedFinding.createdAt.toDate().getTime()) / (1000 * 60 * 60) * 10) / 10} horas
                                   </p>
                                 )}
@@ -5740,7 +5748,7 @@ const AppLayout = ({
               </button>
               {!isSidebarCollapsed && (
                 <div className="text-center pt-2">
-                  <p className="text-[8px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-[0.2em]">Powered by maisser.cl</p>
+                  <p className="text-[8px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-[0.2em]">Developed by maisser.cl</p>
                 </div>
               )}
             </div>
@@ -5918,7 +5926,7 @@ const AppLayout = ({
                 )}
               </div>
               <div className="text-center">
-                <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Powered by maisser.cl</p>
+                <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Developed by maisser.cl</p>
               </div>
             </nav>
           </div>
