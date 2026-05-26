@@ -845,11 +845,15 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         areaData = areaData.filter(a => a.plantId === user.plantId);
       }
       setAreas(areaData);
+    }, (error) => {
+      console.error("Error listening to areas:", error);
     });
 
     // Listen for equipment
     const unsubEquip = onSnapshot(collection(db, 'equipment'), (snapshot) => {
       setEquipment(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment)));
+    }, (error) => {
+      console.error("Error listening to equipment:", error);
     });
 
     // Listen for all findings in the user's plant to calculate KPIs
@@ -901,6 +905,8 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         totalInReview: plantFindings.filter(f => f.status === 'InReview').length,
         totalClosed: plantFindings.filter(f => f.status === 'Closed').length
       });
+    }, (error) => {
+      console.error("Error listening to plant stats:", error);
     });
 
     return () => {
@@ -2031,6 +2037,29 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 // --- Supervisor Stats Component ---
 
 const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setTheme((localStorage.getItem('theme') as 'light' | 'dark') || 'light');
+    };
+    window.addEventListener('storage', handleStorageChange);
+    const observer = new MutationObserver(() => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setTheme(isDark ? 'dark' : 'light');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      observer.disconnect();
+    };
+  }, []);
+
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [groupBy, setGroupBy] = useState<'area' | 'operador'>('area');
 

@@ -147,10 +147,12 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && (
         isAdmin() || 
-        (
-          (resource.data.targetRole == 'All' || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.targetRole == getUserData().role)) &&
-          (resource.data.scheduledAt != null && request.time >= resource.data.scheduledAt)
-        )
+        resource.data.targetRole == 'All' || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          resource.data.targetRole == getUserData().role ||
+          (resource.data.targetRole == 'Operador' && getUserData().role == 'Operator') ||
+          (resource.data.targetRole == 'Administrador' && getUserData().role == 'Admin')
+        ))
       );
       allow create: if isAuthenticated() && (
         isAdmin() || 
