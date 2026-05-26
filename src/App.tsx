@@ -3883,13 +3883,6 @@ const AdminReportSettings = () => {
                 <span className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Subir Logo</span>
               </label>
             </div>
-            <textarea 
-              value={settings.logoUrl} 
-              onChange={e => setSettings({...settings, logoUrl: e.target.value})}
-              className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-2xl outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all font-mono text-[8px] text-zinc-300 dark:text-zinc-700"
-              placeholder="O pega el Data URL (Base64) aquí..."
-              rows={2}
-            />
           </div>
           <div className="space-y-2">
              <label className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-[0.2em] ml-1">Nombre de la Empresa</label>
@@ -4907,15 +4900,15 @@ const AdminEquipmentManagement = () => {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h3 className="font-bold text-zinc-900">Equipos Industriales</h3>
+        <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Equipos Industriales</h3>
         <div className="flex items-center gap-3">
           <select 
             value={selectedPlantFilter} 
             onChange={(e) => setSelectedPlantFilter(e.target.value)}
-            className="text-xs p-2 bg-zinc-50 border border-zinc-100 rounded-xl outline-none"
+            className="text-xs p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl outline-none focus:ring-1 focus:ring-brand-blue"
           >
-            <option value="All">Todas las Plantas</option>
-            {plants.map((p, idx) => <option key={`pl-opt-select-1-${p.id}-${idx}`} value={p.id}>{p.name}</option>)}
+            <option value="All" className="bg-white dark:bg-black text-zinc-900 dark:text-white">Todas las Plantas</option>
+            {plants.map((p, idx) => <option key={`pl-opt-select-1-${p.id}-${idx}`} value={p.id} className="bg-white dark:bg-black text-zinc-900 dark:text-white">{p.name}</option>)}
           </select>
           <button onClick={() => { 
             setEditingEquip(null); 
@@ -4945,15 +4938,15 @@ const AdminEquipmentManagement = () => {
           .map((e, eIdx) => (
           <div key={`equip-${e.id}-${eIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex justify-between items-center hover:shadow-sm dark:hover:shadow-none transition-all">
             <div>
-              <p className="font-bold text-zinc-900">
+              <p className="font-bold text-zinc-900 dark:text-white">
                 <span className="text-zinc-400 mr-2 text-xs">#{e.inspectionOrder || '0'}</span>
                 {e.name}
               </p>
               <div className="flex gap-2 items-center mt-1">
-                <span className="text-[9px] bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded font-bold uppercase">
+                <span className="text-[9px] bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
                   Planta: {plants.find(p => p.id === e.plantId)?.name || 'Sin Planta'}
                 </span>
-                <span className="text-[9px] bg-zinc-50 text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 text-zinc-400 dark:text-zinc-500 px-1.5 py-0.5 rounded font-bold uppercase">
                   Área: {areas.find(a => a.id === e.areaId)?.name || e.areaId}
                 </span>
               </div>
@@ -4970,7 +4963,7 @@ const AdminEquipmentManagement = () => {
                   inspeccionVOSO: e.inspeccionVOSO || DEFAULT_VOSO
                 }); 
                 setShowForm(true); 
-              }} className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors">
+              }} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
                 <FileText className="w-4 h-4" />
               </button>
               <button onClick={() => setConfirmDeleteId(e.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors">
@@ -4980,7 +4973,7 @@ const AdminEquipmentManagement = () => {
           </div>
         ))}
         {equipment.filter(e => (e as any).status !== 'deleted' && (selectedPlantFilter === 'All' || e.plantId === selectedPlantFilter)).length === 0 && (
-          <div className="text-center py-8 text-zinc-400 text-sm italic">
+          <div className="text-center py-8 text-zinc-400 dark:text-zinc-500 text-sm italic">
             No se encontraron equipos para esta selección
           </div>
         )}
