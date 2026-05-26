@@ -82,7 +82,8 @@ import {
   PanelLeftOpen,
   Menu,
   Sun,
-  Moon
+  Moon,
+  Loader2
 } from 'lucide-react';
 
 const generateSafeId = (name: string): string => {
@@ -4618,6 +4619,7 @@ const AdminEquipmentManagement = () => {
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>('All');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (message) {
@@ -4633,10 +4635,12 @@ const AdminEquipmentManagement = () => {
   }, []);
 
   const handleSave = async () => {
+    if (isSaving) return;
     if (!formData.name || !formData.areaId || !formData.plantId) {
       setMessage({ text: "Completa los campos obligatorios (Nombre, Planta y Área)", type: 'error' });
       return;
     }
+    setIsSaving(true);
     try {
       const id = editingEquip ? editingEquip.id : generateSafeId(formData.name);
       await setDoc(doc(db, 'equipment', id), { 
@@ -4654,6 +4658,8 @@ const AdminEquipmentManagement = () => {
     } catch (err: any) {
       console.error("Error al guardar equipo:", err);
       setMessage({ text: "Error al guardar equipo: " + (err.message || String(err)), type: 'error' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -4678,8 +4684,9 @@ const AdminEquipmentManagement = () => {
         <div className="bg-white dark:bg-black border-b border-zinc-100 dark:border-white/10 p-4 sm:px-8 sm:py-6 flex items-center justify-between shadow-sm dark:shadow-none sticky top-0 z-10 transition-colors duration-200">
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => setShowForm(false)} 
-              className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl transition-colors text-zinc-500 dark:text-zinc-600"
+              onClick={() => !isSaving && setShowForm(false)} 
+              disabled={isSaving}
+              className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl transition-colors text-zinc-500 dark:text-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -4692,16 +4699,25 @@ const AdminEquipmentManagement = () => {
           </div>
           <div className="flex gap-3">
             <button 
-              onClick={() => setShowForm(false)} 
-              className="hidden sm:block px-6 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-xl font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
+              onClick={() => !isSaving && setShowForm(false)} 
+              disabled={isSaving}
+              className="hidden sm:block px-6 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-xl font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancelar
             </button>
             <button 
               onClick={handleSave} 
-              className="px-8 py-2.5 bg-brand-blue text-white rounded-xl font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-sky-100 dark:shadow-none"
+              disabled={isSaving}
+              className="px-8 py-2.5 bg-brand-blue text-white rounded-xl font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-sky-100 dark:shadow-none flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed min-w-[120px]"
             >
-              {editingEquip ? 'Actualizar' : 'Guardar Equipo'}
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin animate-duration-1000" />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <span>{editingEquip ? 'Actualizar' : 'Guardar Equipo'}</span>
+              )}
             </button>
           </div>
         </div>
