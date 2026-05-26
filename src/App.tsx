@@ -85,6 +85,16 @@ import {
   Moon
 } from 'lucide-react';
 
+const generateSafeId = (name: string): string => {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9-_]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+};
+
 const DEFAULT_VOSO: VOSOInspection = {
   ver: [
     { id: 'v1', name: 'Fugas', type: 'Crítico' },
@@ -3481,7 +3491,7 @@ const NotificationCenter = ({
   onRead: (id: string) => void,
   onAction: (n: Notification) => void,
   readIds: string[],
-  user: UserProfile
+  user: AppUser
 }) => {
   return (
     <AnimatePresence>
@@ -3997,7 +4007,7 @@ const BulkUpload = ({
             if (entityType === 'Plants') {
               const name = item.nombre || item.name;
               if (!name) continue;
-              const id = item.id || name.toLowerCase().replace(/\s+/g, '-');
+              const id = item.id || generateSafeId(name);
               await setDoc(doc(db, 'plants', id), { id, name });
               count++;
             } 
@@ -4013,7 +4023,7 @@ const BulkUpload = ({
                 if (found) plantId = found.id;
               }
 
-              const id = item.id || name.toLowerCase().replace(/\s+/g, '-');
+              const id = item.id || generateSafeId(name);
               await setDoc(doc(db, 'areas', id), { 
                 id, 
                 name, 
@@ -4043,7 +4053,7 @@ const BulkUpload = ({
                 if (found) areaId = found.id;
               }
 
-              const id = item.id || item.tag || item.etiqueta_tag || name.toLowerCase().replace(/\s+/g, '-');
+              const id = item.id || item.tag || item.etiqueta_tag || generateSafeId(name);
               const checkItemsStr = item.tipo_de_equipo || item.items || item.check_items || "";
               const checkItems = checkItemsStr.split(';').map((s: string) => s.trim()).filter((s: string) => s).map((s: string) => ({
                 id: Math.random().toString(36).substr(2, 9),
@@ -4243,7 +4253,7 @@ const AdminPlantManagement = () => {
     }
     
     try {
-      const id = editingPlant ? editingPlant.id : name.toLowerCase().replace(/\s+/g, '-');
+      const id = editingPlant ? editingPlant.id : generateSafeId(name);
       console.log("Guardando planta con ID:", id);
       await setDoc(doc(db, 'plants', id), { id, name });
       console.log("Planta guardada correctamente");
@@ -4378,7 +4388,7 @@ const AdminAreaManagement = () => {
   const handleSave = async () => {
     if (!formData.name || !formData.plantId) return;
     try {
-      const id = editingArea ? editingArea.id : formData.name.toLowerCase().replace(/\s+/g, '-');
+      const id = editingArea ? editingArea.id : generateSafeId(formData.name);
       await setDoc(doc(db, 'areas', id), { ...formData, id, qrCode: formData.qrCode || id.toUpperCase() });
       setShowForm(false);
       setEditingArea(null);
@@ -4498,13 +4508,13 @@ const AdminAreaManagement = () => {
 const VOSOEditorCategory = ({ 
   title, 
   icon: Icon, 
-  items, 
+  items = [], 
   onUpdate, 
   colorClass 
 }: { 
   title: string, 
   icon: any, 
-  items: VOSOItem[], 
+  items?: VOSOItem[], 
   onUpdate: (items: VOSOItem[]) => void,
   colorClass: string
 }) => {
@@ -4628,7 +4638,7 @@ const AdminEquipmentManagement = () => {
       return;
     }
     try {
-      const id = editingEquip ? editingEquip.id : formData.name.toLowerCase().replace(/\s+/g, '-');
+      const id = editingEquip ? editingEquip.id : generateSafeId(formData.name);
       await setDoc(doc(db, 'equipment', id), { 
         ...formData, 
         id, 
@@ -4642,7 +4652,8 @@ const AdminEquipmentManagement = () => {
       setNewCheckItemName('');
       setMessage({ text: "Equipo guardado correctamente", type: 'success' });
     } catch (err: any) {
-      setMessage({ text: "Error al guardar equipo", type: 'error' });
+      console.error("Error al guardar equipo:", err);
+      setMessage({ text: "Error al guardar equipo: " + (err.message || String(err)), type: 'error' });
     }
   };
 
