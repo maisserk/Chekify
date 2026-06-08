@@ -8,10 +8,12 @@ import {
   persistentMultipleTabManager,
   onSnapshotsInSync
 } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
 // Use initializeFirestore with modern cache settings and long-polling for iframe compatibility
 const db = initializeFirestore(app, {
@@ -107,4 +109,4 @@ export function handleFirestoreError(error: any, operationType: FirestoreErrorIn
   throw error;
 }
 
-export { auth, db };
+export { auth, db, storage };

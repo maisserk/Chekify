@@ -1,0 +1,260 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * 
+ * Chekify Enterprise Industrial SaaS Framework
+ * Service: FindingService
+ * 
+ * High-reliability domain service for Finding management.
+ * Controls compressions, robust Firebase Storage uploads, plant scoping, and offline syncing.
+ */
+
+import { db, storage, handleFirestoreError } from '../firebase';
+import { 
+  collection, 
+  doc, 
+  addDoc,
+  setDoc,
+  getDocs, 
+  query, 
+  where, 
+  onSnapshot,
+  Timestamp,
+  serverTimestamp,
+  arrayUnion
+} from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Finding, HistoryEntry } from '../types';
+import { offlineQueueService } from './OfflineQueueService';
+import { offlineMediaService } from './OfflineMediaService';
+import { compressImage } from '../utils/imageCompressor';
+
+export class FindingService {
+  private static readonly COLLECTION_NAME = 'findings';
+
+  /**
+   * Subscribes to real-time findings with multi-tenant plant scoping.
+   */
+  public static subscribeToFindings(
+    callback: (findings: Finding[]) => void,
+    plantId?: string
+  ): () => void {
+    const findingsRef = collection(db, this.COLLECTION_NAME);
+    let q = query(findingsRef);
+
+    if (plantId) {
+      q = query(findingsRef, where('plantId', '==', plantId));
+    }
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
+        // Sort chronologically in memory (fail-safe for local serverTimestamp delay)
+        list.sort((a, b) => {
+          const tA = a.createdAt?.seconds || a.createdAt?.toMillis?.() || Date.now();
+          const tB = b.createdAt?.seconds || b.createdAt?.toMillis?.() || Date.now();
+          return tB - tA; // Newest first
+        });
+        callback(list);
+      },
+      (error) => {
+        handleFirestoreError(error, 'list', this.COLLECTION_NAME);
+      }
+    );
+  }
+
+  /**
+   * Uploads an image to Firebase Storage and returns the public download URL.
+   */
+  public static async uploadFindingPhoto(findingId: string, imageBlob: Blob): Promise<string> {
+    try {
+      const fileRef = ref(storage, `findings/${findingId}/photo_${Date.now()}.jpg`);
+      const snapshot = await uploadBytes(fileRef, imageBlob, {
+        contentType: 'image/jpeg',
+        customMetadata: {
+          app: 'Chekify Enterprise',
+          findingId: findingId,
+        }
+      });
+      return await getDownloadURL(snapshot.ref);
+    } catch (err) {
+      console.error('[FindingService] Storage upload failed:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Saves or enqueues a new Finding, compressing images automatically to prevent Firestore bloat.
+   */
+  public static async createFinding(
+    findingData: Partial<Finding>,
+    photoFileOrBase64?: File | string | null
+  ): Promise<{ queued: boolean; id: string; photoUrl?: string }> {
+    const findingId = doc(collection(db, this.COLLECTION_NAME)).id;
+    const isOnline = offlineQueueService.getConnectivityStatus();
+
+    let imageUrl = findingData.photoUrl || '';
+    let hasLocalPhoto = false;
+
+    // 1. Process client side compression
+    let compressedBlob: Blob | null = null;
+    if (photoFileOrBase64) {
+      try {
+        compressedBlob = await compressImage(photoFileOrBase64, 1024, 768, 0.75);
+      } catch (err) {
+        console.warn('[FindingService] Fine-grained compression warning, using fallback source:', err);
+      }
+    }
+
+    // 2. Upload online or Cache offline
+    if (isOnline && compressedBlob) {
+      try {
+        imageUrl = await this.uploadFindingPhoto(findingId, compressedBlob);
+      } catch (err) {
+        console.warn('[FindingService] Failed uploading online. Falling back to offline queue process.');
+        hasLocalPhoto = true;
+      }
+    } else if (compressedBlob) {
+      hasLocalPhoto = true;
+    }
+
+    if (hasLocalPhoto && compressedBlob) {
+      // Store raw compressed binary inside IndexedDB safely representing offline cache
+      const mediaId = `media_fnd_${findingId}`;
+      await offlineMediaService.storeMedia(mediaId, compressedBlob);
+      imageUrl = `offline-cached://${mediaId}`;
+    }
+
+    // Prepare robust transaction schema
+    const payload: Partial<Finding> = {
+      ...findingData,
+      id: findingId,
+      photoUrl: imageUrl || 'https://picsum.photos/seed/finding/400/300',
+      createdAt: isOnline ? serverTimestamp() : new Date(),
+    };
+
+    // If we're online and image went through normal upload, write directly
+    if (isOnline && !hasLocalPhoto) {
+      try {
+        await setDoc(doc(db, this.COLLECTION_NAME, findingId), payload);
+        return { queued: false, id: findingId, photoUrl: imageUrl };
+      } catch (err) {
+        console.warn('[FindingService] Direct online save failed. Queuing for offline sync.');
+      }
+    }
+
+    // Write metadata to Queue
+    const result = await offlineQueueService.enqueue(
+      this.COLLECTION_NAME,
+      findingId,
+      payload,
+      'create'
+    );
+
+    // Let the offlineQueueService background controller know that if we reconnect or sync, 
+    // we should process and upload the offline-cached photo
+    if (hasLocalPhoto) {
+      this.schedulePhotoBackgroundSync(findingId);
+    }
+
+    return { queued: true, id: findingId, photoUrl: imageUrl };
+  }
+
+  /**
+   * Monitor for reconnect to safely trigger offline-cached media processing.
+   */
+  private static schedulePhotoBackgroundSync(findingId: string) {
+    const checkAndSync = async () => {
+      const isOnline = offlineQueueService.getConnectivityStatus();
+      if (!isOnline) return;
+
+      const mediaId = `media_fnd_${findingId}`;
+      const cachedBlob = await offlineMediaService.retrieveMedia(mediaId);
+
+      if (cachedBlob && cachedBlob instanceof Blob) {
+        try {
+          console.log(`[FindingService] Background syncing offline image for Finding: ${findingId}`);
+          const onlineUrl = await this.uploadFindingPhoto(findingId, cachedBlob);
+          
+          // Send merge patch to write queue/database
+          await offlineQueueService.enqueue(
+            this.COLLECTION_NAME,
+            findingId,
+            { photoUrl: onlineUrl },
+            'merge'
+          );
+
+          // Clear Cached DB binary footprint
+          await offlineMediaService.deleteMedia(mediaId);
+          console.log(`[FindingService] Background image sync completed for: ${findingId}`);
+
+          // Remove subscription listener
+          unsubscribe();
+        } catch (err) {
+          console.error(`[FindingService] Failed to background-upload offline image for Finding ${findingId}. Retrying later.`, err);
+        }
+      } else {
+        // No cached image found, cleanup subscription
+        unsubscribe();
+      }
+    };
+
+    const unsubscribe = offlineQueueService.subscribeToNetwork((online) => {
+      if (online) {
+        checkAndSync();
+      }
+    });
+  }
+
+  /**
+   * Updates state transition history for a Finding, enforcing traceability.
+   */
+  public static async transitionStatus(
+    findingId: string,
+    newStatus: Finding['status'],
+    user: { uid: string; name: string },
+    comment?: string
+  ): Promise<{ queued: boolean }> {
+    try {
+      const updateData: any = {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      };
+
+      if (newStatus === 'Closed') {
+        updateData.closedBy = user.uid;
+        updateData.closedAt = serverTimestamp();
+        if (comment) {
+          updateData.solution = comment;
+        }
+      }
+
+      // Read current document state or prepare the transition append
+      const historyEntry: HistoryEntry = {
+        status: newStatus,
+        userName: user.name,
+        userId: user.uid,
+        timestamp: new Date().toISOString(),
+        action: `Cambio de estado a ${newStatus}`,
+        comment: comment || `Estado cambiado a ${newStatus}.`
+      } as any;
+
+      // Queue an atomic merge operation for consistency
+      const result = await offlineQueueService.enqueue(
+        this.COLLECTION_NAME,
+        findingId,
+        {
+          ...updateData,
+          history: arrayUnion(historyEntry)
+        },
+        'merge'
+      );
+
+      // We also update history safely
+      return { queued: result.queued };
+    } catch (err: any) {
+      throw new Error(`Failed to update finding status: ${err.message}`);
+    }
+  }
+}

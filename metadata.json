@@ -2,5 +2,5 @@
   "name": "Chekify",
   "description": "Sistema integral para la gestión de inspecciones industriales mediante QR, reporte de hallazgos con fotos y seguimiento de cierres por supervisión.",
   "requestFramePermissions": ["camera"],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

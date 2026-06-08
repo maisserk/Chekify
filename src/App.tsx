@@ -83,8 +83,19 @@ import {
   Menu,
   Sun,
   Moon,
-  Loader2
+  Loader2,
+  Wifi,
+  WifiOff,
+  Database,
+  RefreshCw,
+  Compass,
+  Activity
 } from 'lucide-react';
+
+import { EquipmentService } from './services/EquipmentService';
+import { FindingService } from './services/FindingService';
+import { useOfflineStatus } from './hooks/useOfflineStatus';
+import { useHSECAnalytics } from './hooks/useHSECAnalytics';
 
 const generateSafeId = (name: string): string => {
   return name
@@ -189,109 +200,20 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// --- Types ---
-
-type UserRole = 'Administrador' | 'Supervisor' | 'Operador';
-
-interface AppUser {
-  uid: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  plantId?: string;
-  dismissedNotifications?: string[];
-  readNotifications?: string[];
-}
-
-interface Area {
-  id: string;
-  plantId: string;
-  name: string;
-  qrCode: string;
-}
-
-type VOSOPreference = 'Crítico' | 'Operacional' | 'Seguridad' | 'Mantenimiento';
-
-interface VOSOItem {
-  id: string;
-  name: string;
-  type: VOSOPreference;
-}
-
-interface VOSOInspection {
-  ver: VOSOItem[];
-  oir: VOSOItem[];
-  sentir: VOSOItem[];
-  oler: VOSOItem[];
-  orden: VOSOItem[];
-}
-
-interface Equipment {
-  id: string;
-  plantId: string;
-  areaId: string;
-  name: string;
-  qrCode?: string;
-  inspectionOrder: number;
-  checkItems?: { id: string; name: string }[];
-  inspeccionVOSO?: VOSOInspection;
-}
-
-interface HistoryEntry {
-  status: 'Open' | 'Closed' | 'InReview';
-  userName: string;
-  userId: string;
-  timestamp: any;
-  comment?: string;
-  action: string;
-}
-
-interface Finding {
-  id: string;
-  inspectionId: string;
-  areaId: string;
-  operatorId: string;
-  description: string;
-  photoUrl?: string;
-  status: 'Open' | 'Closed' | 'InReview';
-  solution?: string;
-  closedBy?: string;
-  closedAt?: any;
-  supervisorComments?: string;
-  createdAt: any;
-  areaName?: string;
-  operatorName?: string;
-  plantId?: string;
-  inspectionStartedAt?: any;
-  inspectionCompletedAt?: any;
-  inspectionDurationSeconds?: number;
-  equipmentStartedAt?: any;
-  equipmentCompletedAt?: any;
-  equipmentDurationSeconds?: number;
-  history?: HistoryEntry[];
-}
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'Finding' | 'System' | 'Announcement';
-  targetRole: 'All' | 'Administrador' | 'Supervisor' | 'Operador';
-  scheduledAt: any;
-  sentAt?: any;
-  status: 'Pending' | 'Sent';
-  createdBy: string;
-  createdAt: any;
-  referenceId?: string;
-  plantId?: string;
-}
-
-interface ReportSettings {
-  logoUrl?: string;
-  headerText?: string;
-  footerText?: string;
-  companyName?: string;
-}
+import {
+  UserRole,
+  AppUser,
+  Area,
+  VOSOPreference,
+  VOSOItem,
+  VOSOInspection,
+  Equipment,
+  HistoryEntry,
+  Finding,
+  Notification,
+  ReportSettings,
+  VOSOResponse
+} from './types';
 
 // --- Components ---
 
@@ -529,13 +451,6 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
 
   return <>{children(user)}</>;
 };
-
-interface VOSOResponse {
-  status: 'OK' | 'Observación' | 'Crítico' | 'NA';
-  comment?: string;
-  photoUrl?: string;
-  solvedByOperator?: boolean;
-}
 
 const VOSOExecutionCategory = ({ 
   title, 
@@ -867,21 +782,21 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       console.error("Error listening to equipment:", error);
     });
 
-    // Listen for all findings in the user's plant to calculate KPIs
+    // Listen for all findings in the user's plant to calculate KPIs using enterprise service layer
     if (!user.plantId) {
       return unsubAreas;
     }
     
-    const q = query(collection(db, 'findings'), where('plantId', '==', user.plantId));
-    const unsubStats = onSnapshot(q, (snapshot) => {
-      const plantFindings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Finding));
+    const unsubStats = FindingService.subscribeToFindings((plantFindings) => {
       setAllActiveFindings(plantFindings.filter(f => f.status !== 'Closed'));
       
       const closedFindings = plantFindings.filter(f => f.status === 'Closed' && f.closedAt && f.createdAt);
       
       let totalResolutionMs = 0;
       closedFindings.forEach(f => {
-        const resolutionTime = f.closedAt.toDate().getTime() - f.createdAt.toDate().getTime();
+        const createdMs = f.createdAt.seconds ? f.createdAt.toDate().getTime() : new Date(f.createdAt).getTime();
+        const closedMs = f.closedAt.seconds ? f.closedAt.toDate().getTime() : new Date(f.closedAt).getTime();
+        const resolutionTime = closedMs - createdMs;
         totalResolutionMs += resolutionTime;
       });
       
@@ -896,7 +811,12 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       let equipCount = 0;
 
       inspectionsWithTime.forEach(f => {
-        const areaSec = f.inspectionDurationSeconds || (f.inspectionStartedAt && f.inspectionCompletedAt ? (f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime()) / 1000 : 0);
+        let areaSec = f.inspectionDurationSeconds || 0;
+        if (!areaSec && f.inspectionStartedAt && f.inspectionCompletedAt) {
+          const startMs = f.inspectionStartedAt.seconds ? f.inspectionStartedAt.toDate().getTime() : new Date(f.inspectionStartedAt).getTime();
+          const compMs = f.inspectionCompletedAt.seconds ? f.inspectionCompletedAt.toDate().getTime() : new Date(f.inspectionCompletedAt).getTime();
+          areaSec = (compMs - startMs) / 1000;
+        }
         totalAreaSeconds += areaSec;
         
         if (f.equipmentDurationSeconds !== undefined) {
@@ -916,9 +836,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         totalInReview: plantFindings.filter(f => f.status === 'InReview').length,
         totalClosed: plantFindings.filter(f => f.status === 'Closed').length
       });
-    }, (error) => {
-      console.error("Error listening to plant stats:", error);
-    });
+    }, user.plantId);
 
     return () => {
       unsubAreas();
@@ -1157,7 +1075,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             const priority = vosoIssues.some(v => v[1].status === 'Crítico') ? 'Alta' : 'Media';
             const firstPhoto = vosoIssues.find(v => v[1].photoUrl)?.[1].photoUrl || null;
 
-            const findingRef = await addDoc(collection(db, 'findings'), sanitizeForFirestore({
+            const resultObj = await FindingService.createFinding({
               areaId: selectedArea!.id,
               areaName: selectedArea!.name,
               plantId: selectedArea!.plantId,
@@ -1166,9 +1084,8 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               description: description,
               status: vosoIssues.every(v => v[1].solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
               priority,
-              createdAt: serverTimestamp(),
-              date: serverTimestamp(),
-              inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
+              date: new Date(),
+              inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
               inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
               inspectionDurationSeconds: totalDurationSeconds,
               equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
@@ -1176,19 +1093,20 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               equipmentDurationSeconds: equipDuration,
               operatorId: user.uid,
               operatorName: user.name || user.email,
-              photoUrl: firstPhoto,
               source: 'Inspection',
               history: [
                 {
                   status: (vosoIssues.every(v => v[1].solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
                   userId: user.uid,
                   userName: user.name || user.email,
-                  timestamp: new Date(),
+                  timestamp: new Date().toISOString(),
                   action: 'Hallazgo autogenerado (Inspección VOSO)',
                   comment: 'Hallazgo detectado durante la inspección de ruta.'
-                }
+                } as any
               ]
-            }));
+            }, firstPhoto);
+
+            const findingRef = { id: resultObj.id };
 
             // Register notification for the autogenerated finding
             await addDoc(collection(db, 'notifications'), {
@@ -1246,28 +1164,27 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       operatorId: user.uid,
       operatorName: user.name,
       description: findingDescription,
-      photoUrl: findingPhoto || 'https://picsum.photos/seed/finding/400/300',
-      status: isClosingImmediately ? 'Closed' : 'Open',
+      status: isClosingImmediately ? 'Closed' : 'Open' as any,
       solution: isClosingImmediately ? immediateSolution : '',
       closedBy: isClosingImmediately ? user.uid : null,
-      closedAt: isClosingImmediately ? serverTimestamp() : null,
-      createdAt: serverTimestamp(),
-      inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
-      inspectionCompletedAt: serverTimestamp(),
+      closedAt: isClosingImmediately ? new Date() : null,
+      inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
+      inspectionCompletedAt: Timestamp.now(),
       history: [
         {
           status: isClosingImmediately ? 'Closed' : 'Open' as any,
           userId: user.uid,
           userName: user.name,
-          timestamp: new Date(), // using local date for initial array is okay as it's client-side defined but usually we want serverTimestamp for sorting
+          timestamp: new Date().toISOString(),
           action: 'Creación de hallazgo',
           comment: isClosingImmediately ? `Cerrado inmediatamente: ${immediateSolution}` : 'Hallazgo reportado'
-        }
+        } as any
       ]
     };
 
     try {
-      const findingRef = await addDoc(collection(db, 'findings'), sanitizeForFirestore(findingData));
+      const resultObj = await FindingService.createFinding(findingData, findingPhoto);
+      const findingRef = { id: resultObj.id };
       
       // Auto-generate notification for supervisors and admins
       await addDoc(collection(db, 'notifications'), {
@@ -2046,7 +1963,6 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 };
 
 // --- Supervisor Stats Component ---
-
 const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
@@ -2074,6 +1990,8 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [groupBy, setGroupBy] = useState<'area' | 'operador'>('area');
 
+  const hsecStats = useHSECAnalytics(findings);
+
   const filteredByDate = findings.filter(f => {
     if (!f.createdAt?.toDate) return true;
     const date = f.createdAt.toDate();
@@ -2091,8 +2009,8 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
   const chartData = React.useMemo(() => {
     const counts: Record<string, { name: string, open: number, closed: number, inReview: number }> = {};
     
-      filteredByDate.forEach(f => {
-        const key = groupBy === 'area' ? (f.areaName || 'Sin Área') : (f.operatorName || 'Sin Operador');
+    filteredByDate.forEach(f => {
+      const key = groupBy === 'area' ? (f.areaName || 'Sin Área') : (f.operatorName || 'Sin Operador');
       if (!counts[key]) {
         counts[key] = { name: key, open: 0, closed: 0, inReview: 0 };
       }
@@ -2101,90 +2019,211 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
       else counts[key].closed++;
     });
 
-    return Object.values(counts).sort((a, b) => (b.open + b.closed + b.inReview) - (a.open + a.closed + a.inReview)).slice(0, 8);
+    return Object.values(counts)
+      .sort((a, b) => (b.open + b.closed + b.inReview) - (a.open + a.closed + a.inReview))
+      .slice(0, 8);
   }, [filteredByDate, groupBy]);
 
   return (
-    <div className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-zinc-900 dark:text-white" />
-          <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Estadísticas de Hallazgos</h3>
+    <div className="space-y-6">
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Compliance Card */}
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Cumplimiento HSEC</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold tracking-tight dark:text-white">{hsecStats.complianceRate}%</span>
+            <span className="text-[10px] font-bold text-emerald-500">Cerrados + Revisión</span>
+          </div>
+          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Indicador clave de mitigación de riesgos en terreno.</p>
         </div>
-        <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
-          <button 
-            onClick={() => setGroupBy('area')}
-            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'area' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm dark:shadow-none' : 'text-zinc-500'}`}
-          >
-            Por Área
-          </button>
-          <button 
-            onClick={() => setGroupBy('operador')}
-            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${groupBy === 'operador' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-sm dark:shadow-none' : 'text-zinc-500'}`}
-          >
-            Por Operador
-          </button>
+
+        {/* MTTR Card */}
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Tiempo de Cierre (MTTR)</span>
+            <Clock className="w-4 h-4 text-sky-500" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold tracking-tight dark:text-white">{hsecStats.meanTimeToResolutionHours}h</span>
+            <span className="text-[10px] font-bold text-sky-500">Horas promedio</span>
+          </div>
+          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Tiempo medio para resolver un hallazgo de terreno.</p>
+        </div>
+
+        {/* High Priority count */}
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Hallazgos Críticos</span>
+            <AlertTriangle className="w-4 h-4 text-red-500" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold tracking-tight dark:text-white">
+              {hsecStats.findingsByPriority.find(p => p.name.includes('Alta'))?.value || 0}
+            </span>
+            <span className="text-[10px] font-bold text-red-500">Prioridad Alta</span>
+          </div>
+          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Amenazas activas que requieren acción inmediata.</p>
+        </div>
+
+        {/* Total stats */}
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Total Histórico</span>
+            <FileText className="w-4 h-4 text-brand-blue" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold tracking-tight dark:text-white">{hsecStats.totalFindings}</span>
+            <span className="text-[10px] font-bold text-zinc-500">Reportados</span>
+          </div>
+          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Registros consolidados de riesgos en planta.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase ml-1">Desde</label>
-          <div className="relative">
-            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600" />
-            <input 
-              type="date" 
-              value={dateRange.start}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue font-bold dark:text-white"
-            />
+      {/* Main Charts area */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Core Bar Chart */}
+        <div className="lg:col-span-2 bg-white dark:bg-black rounded-3xl p-5 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-zinc-900 dark:text-white" />
+              <h3 className="font-bold text-xs text-zinc-900 dark:text-white uppercase tracking-wider">Frecuencia de Hallazgos</h3>
+            </div>
+            <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
+              <button 
+                onClick={() => setGroupBy('area')}
+                className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${groupBy === 'area' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'}`}
+              >
+                Por Área
+              </button>
+              <button 
+                onClick={() => setGroupBy('operador')}
+                className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${groupBy === 'operador' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'}`}
+              >
+                Por Operador
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase ml-1">Hasta</label>
-          <div className="relative">
-            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600" />
-            <input 
-              type="date" 
-              value={dateRange.end}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue font-bold dark:text-white"
-            />
-          </div>
-        </div>
-      </div>
 
-      <div className="h-64 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart id="stats-summary-chart" data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#27272a' : '#e4e4e7'} />
-            <XAxis 
-              dataKey="name" 
-              axisLine={false} 
-              tickLine={false} 
-              tick={{ fontSize: 10, fill: theme === 'dark' ? '#71717a' : '#71717a' }}
-              interval={0}
-            />
-            <YAxis 
-              axisLine={false} 
-              tickLine={false} 
-              tick={{ fontSize: 10, fill: theme === 'dark' ? '#71717a' : '#71717a' }}
-            />
-            <Tooltip 
-              contentStyle={{ 
-                borderRadius: '16px', 
-                border: theme === 'dark' ? '1px solid #27272a' : '1px solid #e4e4e7', 
-                backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff', 
-                color: theme === 'dark' ? '#ffffff' : '#18181b', 
-                boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' 
-              }}
-              cursor={{ fill: theme === 'dark' ? '#27272a' : '#f4f4f5' }}
-            />
-            <Bar dataKey="open" name="Pendientes" fill="#0ea5e9" radius={[6, 6, 0, 0]} />
-            <Bar dataKey="inReview" name="En Revisión" fill="#f59e0b" radius={[6, 6, 0, 0]} />
-            <Bar dataKey="closed" name="Cerrados" fill="#10b981" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 border-b border-zinc-50 dark:border-white/5">
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-600 uppercase ml-1">Desde</label>
+              <div className="relative">
+                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600" />
+                <input 
+                  type="date" 
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                  className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue font-bold dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-600 uppercase ml-1">Hasta</label>
+              <div className="relative">
+                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600" />
+                <input 
+                  type="date" 
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                  className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue font-bold dark:text-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart id="stats-summary-chart" data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#27272a' : '#e4e4e7'} />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 9, fill: '#71717a' }}
+                  interval={0}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 9, fill: '#71717a' }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: '16px', 
+                    border: theme === 'dark' ? '1px solid #27272a' : '1px solid #e4e4e7', 
+                    backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff', 
+                    color: theme === 'dark' ? '#ffffff' : '#18181b', 
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' 
+                  }}
+                  cursor={{ fill: theme === 'dark' ? '#27272a' : '#f4f4f5' }}
+                />
+                <Bar dataKey="open" name="Pendientes" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="inReview" name="En Revisión" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="closed" name="Cerrados" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Dynamic vulnerable areas list & leaderboard */}
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none flex flex-col justify-between gap-6">
+          {/* Areas Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5 border-b border-zinc-100 dark:border-white/5 pb-2">
+              <Compass className="w-3.5 h-3.5 text-zinc-400" />
+              <h4 className="font-bold text-[10px] text-zinc-900 dark:text-white uppercase tracking-wider">Hotspots de Riesgo</h4>
+            </div>
+
+            {hsecStats.vulnerableAreas.length === 0 ? (
+              <p className="text-xs text-zinc-400 dark:text-zinc-600 py-4 text-center">Planta sin incidencias activas registradas.</p>
+            ) : (
+              <div className="space-y-2">
+                {hsecStats.vulnerableAreas.map((area, index) => (
+                  <div key={`vln-${index}`} className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300 truncate max-w-[150px]">{area.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-extrabold bg-zinc-50 dark:bg-zinc-900/60 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded-md">
+                        {area.count}
+                      </span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        area.status === 'Crítico' ? 'bg-red-500 animate-pulse' :
+                        area.status === 'Estable' ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Leaderboard Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5 border-b border-zinc-100 dark:border-white/5 pb-2">
+              <Activity className="w-3.5 h-3.5 text-zinc-400" />
+              <h4 className="font-bold text-[10px] text-zinc-900 dark:text-white uppercase tracking-wider">Aporte Operacional</h4>
+            </div>
+
+            {hsecStats.operatorLeaderboard.length === 0 ? (
+              <p className="text-xs text-zinc-400 dark:text-zinc-600 py-4 text-center font-medium">Buscando contribuciones de operadores...</p>
+            ) : (
+              <div className="space-y-2">
+                {hsecStats.operatorLeaderboard.map((op, index) => (
+                  <div key={`ldr-${index}`} className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[140px]">{op.name}</span>
+                    <div className="flex items-center gap-3 text-[10px] font-bold text-zinc-400">
+                      <span>R: <b className="text-zinc-700 dark:text-zinc-200">{op.reportsCount}</b></span>
+                      <span>C: <b className="text-emerald-500">{op.resolvedCount}</b></span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2217,21 +2256,11 @@ const SupervisorDashboard = ({
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    let q = query(collection(db, 'findings'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snapshot) => {
-      let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Finding));
-      
-      // Filter by user plant if not Admin
-      if (user.role !== 'Administrador') {
-        if (user.plantId) {
-          data = data.filter(f => f.plantId === user.plantId);
-        } else {
-          data = [];
-        }
-      }
-      
+    // Elegant plant-scoped real-time listener using Enterprise FindingService
+    const plantIdScope = user.role !== 'Administrador' ? user.plantId : undefined;
+    return FindingService.subscribeToFindings((data) => {
       setFindings(data);
-    });
+    }, plantIdScope);
   }, [user]);
 
   useEffect(() => {
@@ -2288,20 +2317,7 @@ const SupervisorDashboard = ({
 
   const handleCloseFinding = async () => {
     if (!selectedFinding) return;
-    await updateDoc(doc(db, 'findings', selectedFinding.id), {
-      status: 'Closed',
-      supervisorComments: supervisorComments,
-      closedBy: user.uid,
-      closedAt: serverTimestamp(),
-      history: arrayUnion({
-        status: 'Closed',
-        userId: user.uid,
-        userName: user.name,
-        timestamp: new Date(),
-        action: 'Cierre de hallazgo',
-        comment: supervisorComments || 'Hallazgo cerrado por supervisor'
-      })
-    });
+    const resultStatus = await FindingService.transitionStatus(selectedFinding.id, 'Closed', user, supervisorComments);
     
     // Notify operator
     await addDoc(collection(db, 'notifications'), {
@@ -2319,24 +2335,17 @@ const SupervisorDashboard = ({
 
     setSelectedFinding(null);
     setSupervisorComments('');
-    alert("Hallazgo cerrado exitosamente");
+    
+    if (resultStatus.queued) {
+      alert("Cierre registrado localmente en cola offline. Se sincronizará al recuperar señal.");
+    } else {
+      alert("Hallazgo cerrado exitosamente");
+    }
   };
 
   const handleSetInReview = async () => {
     if (!selectedFinding) return;
-    await updateDoc(doc(db, 'findings', selectedFinding.id), {
-      status: 'InReview',
-      supervisorComments: supervisorComments,
-      updatedAt: serverTimestamp(),
-      history: arrayUnion({
-        status: 'InReview',
-        userId: user.uid,
-        userName: user.name,
-        timestamp: new Date(),
-        action: 'Marcar en revisión',
-        comment: supervisorComments || 'Puesto en revisión por supervisor'
-      })
-    });
+    const resultStatus = await FindingService.transitionStatus(selectedFinding.id, 'InReview', user, supervisorComments);
 
     // Notify operator
     await addDoc(collection(db, 'notifications'), {
@@ -2354,7 +2363,12 @@ const SupervisorDashboard = ({
 
     setSelectedFinding(null);
     setSupervisorComments('');
-    alert("Hallazgo marcado como En Revisión");
+    
+    if (resultStatus.queued) {
+      alert("Estado 'En Revisión' encolado localmente.");
+    } else {
+      alert("Hallazgo marcado como En Revisión");
+    }
   };
 
   const handleDeleteFinding = async () => {
@@ -2964,19 +2978,9 @@ const ReportsView = ({
   }, [findings, sortConfig]);
 
   useEffect(() => {
-    const q = query(collection(db, 'findings'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snapshot) => {
-      let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Finding));
-      
-      // Filter by plant
-      if (user.role !== 'Administrador') {
-        if (user.plantId) {
-          data = data.filter(f => f.plantId === user.plantId);
-        } else {
-          data = [];
-        }
-      }
-
+    // Elegant plant-scoped real-time listener using Enterprise FindingService
+    const plantIdScope = user.role !== 'Administrador' ? user.plantId : undefined;
+    return FindingService.subscribeToFindings((data) => {
       setFindings(data);
       setStats({
         total: data.length,
@@ -2984,7 +2988,7 @@ const ReportsView = ({
         inReview: data.filter(f => f.status === 'InReview').length,
         closed: data.filter(f => f.status === 'Closed').length,
       });
-    });
+    }, plantIdScope);
   }, [user]);
 
   useEffect(() => {
@@ -4631,7 +4635,11 @@ const AdminEquipmentManagement = () => {
   useEffect(() => {
     onSnapshot(collection(db, 'plants'), (s) => setPlants(s.docs.map(d => ({id: d.id, ...d.data()} as any))));
     onSnapshot(collection(db, 'areas'), (s) => setAreas(s.docs.map(d => ({id: d.id, ...d.data()} as any))));
-    return onSnapshot(collection(db, 'equipment'), (s) => setEquipment(s.docs.map(d => ({id: d.id, ...d.data()} as any))));
+    
+    // Scoped subscription using enterprise decoupled service layer
+    return EquipmentService.subscribeToEquipment((items) => {
+      setEquipment(items);
+    });
   }, []);
 
   const handleSave = async () => {
@@ -4643,18 +4651,26 @@ const AdminEquipmentManagement = () => {
     setIsSaving(true);
     try {
       const id = editingEquip ? editingEquip.id : generateSafeId(formData.name);
-      await setDoc(doc(db, 'equipment', id), { 
-        ...formData, 
-        id, 
+      
+      // Save data utilizing the transaction-reliable queue mechanism
+      const result = await EquipmentService.saveEquipment({
+        ...formData,
+        id,
         inspectionOrder: Number(formData.inspectionOrder) || 0,
         checkItems: formData.checkItems || [],
         inspeccionVOSO: formData.inspeccionVOSO || DEFAULT_VOSO
       });
+
       setShowForm(false);
       setEditingEquip(null);
       setFormData({ name: '', areaId: '', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO });
       setNewCheckItemName('');
-      setMessage({ text: "Equipo guardado correctamente", type: 'success' });
+      
+      if (result.queued) {
+        setMessage({ text: "Equipo guardado localmente. Se sincronizará al recuperar conexión.", type: 'success' });
+      } else {
+        setMessage({ text: "Equipo guardado correctamente online", type: 'success' });
+      }
     } catch (err: any) {
       console.error("Error al guardar equipo:", err);
       setMessage({ text: "Error al guardar equipo: " + (err.message || String(err)), type: 'error' });
@@ -4665,8 +4681,12 @@ const AdminEquipmentManagement = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      await setDoc(doc(db, 'equipment', id), { status: 'deleted' }, { merge: true });
-      setMessage({ text: "Equipo eliminado correctamente", type: 'success' });
+      const result = await EquipmentService.deleteEquipment(id);
+      if (result.queued) {
+        setMessage({ text: "Equipo retirado localmente. Sincronización pendiente.", type: 'success' });
+      } else {
+        setMessage({ text: "Equipo eliminado correctamente", type: 'success' });
+      }
       setConfirmDeleteId(null);
     } catch (err: any) {
       setMessage({ text: "Error al eliminar equipo", type: 'error' });
@@ -5507,6 +5527,155 @@ const AdminUserManagement = () => {
   );
 };
 
+const SyncStatusTray = () => {
+  const { isOnline, pendingCount, syncBacklog, forceSync, clearFailed } = useOfflineStatus();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isRotating, setIsRotating] = useState(false);
+
+  const handleForceTrigger = () => {
+    setIsRotating(true);
+    forceSync();
+    setTimeout(() => setIsRotating(false), 1500);
+  };
+
+  return (
+    <div className="fixed bottom-24 md:bottom-6 right-6 z-[90] font-sans">
+      <div className="relative">
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              className="absolute bottom-16 right-0 w-80 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl border border-zinc-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden p-5 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-3">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-brand-blue" />
+                  <h4 className="font-bold text-xs text-zinc-900 dark:text-white uppercase tracking-wider">Centro de Sincronización</h4>
+                </div>
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  className="p-1 rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Status Band */}
+              <div className="flex items-center justify-between py-2 px-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-100 dark:border-white/5 text-xs">
+                <span className="text-zinc-500 font-medium">Estado Red:</span>
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500 animate-pulse'}`} />
+                  <span className={isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+                    {isOnline ? 'ONLINE' : 'DEGRADADO (OFFLINE)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Backlog Status */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none">
+                  <span>Cola de operaciones ({pendingCount})</span>
+                  {syncBacklog.some(item => item.state === 'failed') && (
+                    <button 
+                      onClick={clearFailed}
+                      className="text-red-500 hover:underline hover:text-red-600 normal-case"
+                    >
+                      Purgar fallidos
+                    </button>
+                  )}
+                </div>
+
+                {syncBacklog.length === 0 ? (
+                  <div className="text-center py-6 text-zinc-400 dark:text-zinc-600">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500/20 mx-auto mb-2" />
+                    <p className="text-[10px] font-bold uppercase tracking-wider">Todo Sincronizado</p>
+                    <p className="text-[9px] mt-0.5 normal-case font-medium text-zinc-500 dark:text-zinc-400">No hay transacciones pendientes en terreno.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                    {syncBacklog.map((item) => (
+                      <div 
+                        key={item.id} 
+                        className="p-2.5 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/40 border border-zinc-100 dark:border-white/5 flex flex-col gap-1 text-[11px]"
+                      >
+                        <div className="flex justify-between">
+                          <span className="font-bold text-zinc-800 dark:text-zinc-200 capitalize">
+                            {item.collection === 'equipment' ? 'Equipo' : item.collection}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-extrabold uppercase tracking-widest ${
+                            item.state === 'syncing' ? 'bg-sky-50 dark:bg-sky-500/10 text-brand-blue dark:text-sky-400' :
+                            item.state === 'failed' ? 'bg-red-50 dark:bg-red-500/10 text-red-500' :
+                            'bg-amber-50 dark:bg-amber-500/10 text-amber-500'
+                          }`}>
+                            {item.state}
+                          </span>
+                        </div>
+                        <div className="text-[9px] text-zinc-400 dark:text-zinc-500 flex justify-between">
+                          <span className="font-mono truncate max-w-[120px]">Payload ID: {item.docId}</span>
+                          <span className="font-mono">{item.operation.toUpperCase()}</span>
+                        </div>
+                        {item.error && (
+                          <p className="text-[8px] text-red-500/80 font-mono mt-0.5 max-h-8 overflow-y-auto">
+                            {item.error}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Force sync actions */}
+              {syncBacklog.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleForceTrigger}
+                  disabled={!isOnline || isRotating}
+                  className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRotating ? 'animate-spin' : ''}`} />
+                  <span>Sincronizar ahora ({pendingCount})</span>
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Trigger Badge */}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={`flex items-center gap-2.5 p-3.5 rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all text-xs font-bold leading-none ${
+            pendingCount > 0 
+              ? 'bg-amber-500 hover:bg-amber-600 text-white animate-pulse-subtle' 
+              : isOnline 
+                ? 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 border border-zinc-100 dark:border-white/10 shadow-md' 
+                : 'bg-red-500 text-white'
+          }`}
+        >
+          {isOnline ? (
+            <Wifi className="w-4 h-4 text-emerald-500" />
+          ) : (
+            <WifiOff className="w-4 h-4 text-red-500 animate-pulse" />
+          )}
+          
+          {pendingCount > 0 ? (
+            <span className="flex items-center gap-1.5">
+              <span className="bg-white/20 text-white px-2 py-0.5 rounded-full font-mono text-[10px]">{pendingCount}</span>
+              <span className="hidden sm:inline">Cola Local</span>
+            </span>
+          ) : (
+            <span className="hidden sm:inline text-zinc-500 dark:text-zinc-400">
+              {isOnline ? 'Online' : 'Conexión Offline'}
+            </span>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // --- Error Boundary ---
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -5930,6 +6099,7 @@ const AppLayout = ({
                 )}
               </AnimatePresence>
             </main>
+            <SyncStatusTray />
 
             {/* Mobile Navigation */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 px-6 pt-4 pb-2 z-40 transition-colors duration-200">
