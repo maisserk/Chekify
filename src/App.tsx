@@ -2387,23 +2387,9 @@ const SupervisorDashboard = ({
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Gestión de Hallazgos</h2>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Panel de Hallazgos</h2>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setShowStats(!showStats)}
-              className={`p-2 rounded-xl transition-all ${showStats ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
-              title="Estadísticas"
-            >
-              <BarChart3 className="w-5 h-5" />
-            </button>
-            <button 
-              onClick={() => setShowFilters(!showFilters)}
-              className={`p-2 rounded-xl transition-all ${showFilters || startDate || endDate || operatorFilter !== 'All' ? 'bg-brand-green text-white shadow-md shadow-emerald-100 dark:shadow-none' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
-              title="Filtros Avanzados"
-            >
-              <Filter className="w-5 h-5" />
-            </button>
             <div className="hidden sm:flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
               {(['Open', 'InReview', 'Closed', 'All'] as const).map((f, fIdx) => (
                 <button
@@ -2422,87 +2408,67 @@ const SupervisorDashboard = ({
           </div>
         </div>
 
-        <AnimatePresence>
-          {showFilters && (
-            <motion.div
-              key="supervisor-filter-panel"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-4 mb-4"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Filtros Avanzados</h4>
-                <button onClick={clearFilters} className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 dark:hover:text-white uppercase tracking-widest">
-                  Limpiar Filtros
-                </button>
+        {/* Global Statistics (Fixed) */}
+        <SupervisorStats findings={findings} />
+
+        {/* Advanced Filters Panel (Fixed) */}
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Filtros Avanzados</h4>
+            <button onClick={clearFilters} className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 dark:hover:text-white uppercase tracking-widest transition-colors">
+              Limpiar Filtros
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Rango de Fecha</label>
+              <div className="flex flex-col sm:flex-row items-center gap-2">
+                <input 
+                  type="date" 
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
+                />
+                <span className="text-zinc-300 dark:text-zinc-700 hidden sm:block">-</span>
+                <input 
+                  type="date" 
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
+                />
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Rango de Fecha</label>
-                  <div className="flex flex-col sm:flex-row items-center gap-2">
-                    <input 
-                      type="date" 
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
-                    />
-                    <span className="text-zinc-300 dark:text-zinc-700 hidden sm:block">-</span>
-                    <input 
-                      type="date" 
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
-                    />
-                  </div>
-                </div>
+            </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Operador</label>
-                  <select 
-                    value={operatorFilter}
-                    onChange={(e) => setOperatorFilter(e.target.value)}
-                    className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100"
-                  >
-                    <option value="All" className="dark:bg-zinc-900">Todos los Operadores</option>
-                    {uniqueOperators.map((op, idx) => (
-                      <option key={`op-opt-${op}-${idx}`} value={op} className="dark:bg-zinc-900">{op}</option>
-                    ))}
-                  </select>
-                </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Operador</label>
+              <select 
+                value={operatorFilter}
+                onChange={(e) => setOperatorFilter(e.target.value)}
+                className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100"
+              >
+                <option value="All" className="dark:bg-zinc-900">Todos los Operadoras</option>
+                {uniqueOperators.map((op, idx) => (
+                  <option key={`op-opt-${op}-${idx}`} value={op} className="dark:bg-zinc-900">{op}</option>
+                ))}
+              </select>
+            </div>
 
-                <div className="space-y-1 sm:hidden">
-                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Estado</label>
-                  <select 
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value as any)}
-                    className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100"
-                  >
-                    <option value="All" className="dark:bg-zinc-900">Todos los Estados</option>
-                    <option value="Open" className="dark:bg-zinc-900">Pendientes</option>
-                    <option value="InReview" className="dark:bg-zinc-900">En Revisión</option>
-                    <option value="Closed" className="dark:bg-zinc-900">Cerrados</option>
-                  </select>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {showStats && (
-            <motion.div
-              key="supervisor-stats"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <SupervisorStats findings={findings} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+            <div className="space-y-1 sm:hidden">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Estado</label>
+              <select 
+                value={filter}
+                onChange={(e) => setFilter(e.target.value as any)}
+                className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100"
+              >
+                <option value="All" className="dark:bg-zinc-900">Todos los Estados</option>
+                <option value="Open" className="dark:bg-zinc-900">Pendientes</option>
+                <option value="InReview" className="dark:bg-zinc-900">En Revisión</option>
+                <option value="Closed" className="dark:bg-zinc-900">Cerrados</option>
+              </select>
+            </div>
+          </div>
+        </div>
 
         <div className="space-y-2">
           <div className="relative">
