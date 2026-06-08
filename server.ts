@@ -1,14 +1,10 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { initializeApp, getApps, deleteApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import fs from 'fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Try to load project details from config file
 let FIREBASE_PROJECT_ID = "gen-lang-client-0220183815";
@@ -56,7 +52,6 @@ async function initAdmin() {
     console.error("Firebase Admin initialization failed", e);
   }
 }
-await initAdmin();
 
 const expressApp = express(); // Renamed from 'app' to avoid confusion with firebase 'app'
 expressApp.use(express.json());
@@ -152,6 +147,7 @@ expressApp.post('/api/admin/reset-password', async (req, res) => {
 });
 
 async function startServer() {
+  await initAdmin();
   const isProd = process.env.NODE_ENV === 'production';
   const PORT = 3000;
 

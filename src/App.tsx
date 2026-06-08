@@ -3617,7 +3617,7 @@ const NotificationCenter = ({
   );
 };
 
-const AdminNotificationManagement = () => {
+const AdminNotificationManagement = ({ plants }: { plants: {id: string, name: string}[] }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -3625,7 +3625,6 @@ const AdminNotificationManagement = () => {
   const [message, setMessage] = useState('');
   const [targetRole, setTargetRole] = useState<'All' | 'Administrador' | 'Supervisor' | 'Operador'>('All');
   const [selectedPlantId, setSelectedPlantId] = useState('');
-  const [plants, setPlants] = useState<{id: string, name: string}[]>([]);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -3635,12 +3634,8 @@ const AdminNotificationManagement = () => {
     const unsubNotif = onSnapshot(query(collection(db, 'notifications'), orderBy('createdAt', 'desc')), (snapshot) => {
       setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
     });
-    const unsubPlants = onSnapshot(collection(db, 'plants'), (snapshot) => {
-      setPlants(snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name } as any)));
-    });
     return () => {
       unsubNotif();
-      unsubPlants();
     };
   }, []);
 
@@ -4199,8 +4194,24 @@ const BulkUpload = ({
   );
 };
 
-const AdminManagement = () => {
+const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) => {
   const [activeSubTab, setActiveSubTab] = useState<'Users' | 'Plants' | 'Areas' | 'Equipment'>('Users');
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
+
+  useEffect(() => {
+    const unsubAreas = onSnapshot(collection(db, 'areas'), (snapshot) => {
+      setAreas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+    });
+    const unsubEquip = EquipmentService.subscribeToEquipment((items) => {
+      setEquipmentList(items);
+    });
+
+    return () => {
+      unsubAreas();
+      unsubEquip();
+    };
+  }, []);
   
   return (
     <div className="space-y-6">
@@ -4221,16 +4232,15 @@ const AdminManagement = () => {
         ))}
       </div>
 
-      {activeSubTab === 'Users' && <AdminUserManagement />}
-      {activeSubTab === 'Plants' && <AdminPlantManagement />}
-      {activeSubTab === 'Areas' && <AdminAreaManagement />}
-      {activeSubTab === 'Equipment' && <AdminEquipmentManagement />}
+      {activeSubTab === 'Users' && <AdminUserManagement plants={plants} />}
+      {activeSubTab === 'Plants' && <AdminPlantManagement plants={plants} />}
+      {activeSubTab === 'Areas' && <AdminAreaManagement plants={plants} areas={areas} />}
+      {activeSubTab === 'Equipment' && <AdminEquipmentManagement plants={plants} areas={areas} equipment={equipmentList} />}
     </div>
   );
 };
 
-const AdminPlantManagement = () => {
-  const [plants, setPlants] = useState<{id: string, name: string}[]>([]);
+const AdminPlantManagement = ({ plants }: { plants: {id: string, name: string}[] }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingPlant, setEditingPlant] = useState<{id: string, name: string} | null>(null);
   const [name, setName] = useState('');
@@ -4243,12 +4253,6 @@ const AdminPlantManagement = () => {
       return () => clearTimeout(timer);
     }
   }, [message]);
-
-  useEffect(() => {
-    return onSnapshot(collection(db, 'plants'), (snapshot) => {
-      setPlants(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
-    });
-  }, []);
 
   const handleSave = async () => {
     console.log("Iniciando handleSave Planta, name:", name);
@@ -4369,9 +4373,7 @@ const AdminPlantManagement = () => {
   );
 };
 
-const AdminAreaManagement = () => {
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [plants, setPlants] = useState<{id: string, name: string}[]>([]);
+const AdminAreaManagement = ({ plants, areas }: { plants: {id: string, name: string}[], areas: Area[] }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [formData, setFormData] = useState({ name: '', plantId: '', qrCode: '' });
@@ -4384,11 +4386,6 @@ const AdminAreaManagement = () => {
       return () => clearTimeout(timer);
     }
   }, [message]);
-
-  useEffect(() => {
-    onSnapshot(collection(db, 'plants'), (s) => setPlants(s.docs.map(d => ({id: d.id, ...d.data()} as any))));
-    return onSnapshot(collection(db, 'areas'), (s) => setAreas(s.docs.map(d => ({id: d.id, ...d.data()} as any))));
-  }, []);
 
   const handleSave = async () => {
     if (!formData.name || !formData.plantId) return;
@@ -4605,10 +4602,7 @@ const VOSOEditorCategory = ({
   );
 };
 
-const AdminEquipmentManagement = () => {
-  const [equipment, setEquipment] = useState<Equipment[]>([]);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [plants, setPlants] = useState<{id: string, name: string}[]>([]);
+const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: string, name: string}[], areas: Area[], equipment: Equipment[] }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingEquip, setEditingEquip] = useState<any | null>(null);
   const [formData, setFormData] = useState({ 
@@ -4631,16 +4625,6 @@ const AdminEquipmentManagement = () => {
       return () => clearTimeout(timer);
     }
   }, [message]);
-
-  useEffect(() => {
-    onSnapshot(collection(db, 'plants'), (s) => setPlants(s.docs.map(d => ({id: d.id, ...d.data()} as any))));
-    onSnapshot(collection(db, 'areas'), (s) => setAreas(s.docs.map(d => ({id: d.id, ...d.data()} as any))));
-    
-    // Scoped subscription using enterprise decoupled service layer
-    return EquipmentService.subscribeToEquipment((items) => {
-      setEquipment(items);
-    });
-  }, []);
 
   const handleSave = async () => {
     if (isSaving) return;
@@ -5064,9 +5048,8 @@ const AdminEquipmentManagement = () => {
   );
 };
 
-const AdminUserManagement = () => {
+const AdminUserManagement = ({ plants }: { plants: {id: string, name: string}[] }) => {
   const [users, setUsers] = useState<AppUser[]>([]);
-  const [plants, setPlants] = useState<{id: string, name: string}[]>([]);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [confirmDeleteUid, setConfirmDeleteUid] = useState<string | null>(null);
   const [resetPasswordFor, setResetPasswordFor] = useState<AppUser | null>(null);
@@ -5117,12 +5100,8 @@ const AdminUserManagement = () => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       setUsers(snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as AppUser)));
     });
-    const unsubPlants = onSnapshot(collection(db, 'plants'), (snapshot) => {
-      setPlants(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
-    });
     return () => {
       unsubUsers();
-      unsubPlants();
     };
   }, []);
 
@@ -5747,6 +5726,18 @@ const AppLayout = ({
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
+  
+  // Single, cache-reliable global plants list for the app
+  const [plants, setPlants] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    const unsubPlants = onSnapshot(collection(db, 'plants'), (snapshot) => {
+      setPlants(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+    }, (error) => {
+      console.warn("Global plants listener error:", error);
+    });
+    return () => unsubPlants();
+  }, []);
 
   useEffect(() => {
     // Notification listener
@@ -6074,7 +6065,7 @@ const AppLayout = ({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    <AdminManagement />
+                    <AdminManagement plants={plants} />
                   </motion.div>
                 )}
                 {activeTab === 'Notifications' && (
@@ -6084,7 +6075,7 @@ const AppLayout = ({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    <AdminNotificationManagement />
+                    <AdminNotificationManagement plants={plants} />
                   </motion.div>
                 )}
                 {activeTab === 'PDFConfig' && (
