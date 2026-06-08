@@ -5621,12 +5621,25 @@ export default function App() {
   });
 
   useEffect(() => {
+    let themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (!themeColorMeta) {
+      themeColorMeta = document.createElement('meta');
+      themeColorMeta.setAttribute('name', 'theme-color');
+      document.head.appendChild(themeColorMeta);
+    }
+
+    let appleStatusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
       document.documentElement.style.colorScheme = 'dark';
+      themeColorMeta.setAttribute('content', '#000000');
+      if (appleStatusBarMeta) appleStatusBarMeta.setAttribute('content', 'black');
     } else {
       document.documentElement.classList.remove('dark');
       document.documentElement.style.colorScheme = 'light';
+      themeColorMeta.setAttribute('content', '#ffffff');
+      if (appleStatusBarMeta) appleStatusBarMeta.setAttribute('content', 'default');
     }
     localStorage.setItem('theme', theme);
   }, [theme]);
