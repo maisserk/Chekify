@@ -2389,23 +2389,6 @@ const SupervisorDashboard = ({
       <div className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Panel de Hallazgos</h2>
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
-              {(['Open', 'InReview', 'Closed', 'All'] as const).map((f, fIdx) => (
-                <button
-                  key={`filter-tab-${f}-${fIdx}`}
-                  onClick={() => setFilter(f)}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    filter === f 
-                      ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm dark:shadow-none' 
-                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-                  }`}
-                >
-                  {f === 'Open' ? 'Pendientes' : f === 'InReview' ? 'En Revisión' : f === 'Closed' ? 'Cerrados' : 'Todos'}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Global Statistics (Fixed) */}
@@ -2420,52 +2403,59 @@ const SupervisorDashboard = ({
             </button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Rango de Fecha</label>
-              <div className="flex flex-col sm:flex-row items-center gap-2">
-                <input 
-                  type="date" 
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
-                />
-                <span className="text-zinc-300 dark:text-zinc-700 hidden sm:block">-</span>
-                <input 
-                  type="date" 
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
-                />
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Rango de Fecha</label>
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
+                  />
+                  <span className="text-zinc-300 dark:text-zinc-700 hidden sm:block">-</span>
+                  <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Operador</label>
+                <select 
+                  value={operatorFilter}
+                  onChange={(e) => setOperatorFilter(e.target.value)}
+                  className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100 font-bold"
+                >
+                  <option value="All" className="dark:bg-zinc-900">Todos los Operadores</option>
+                  {uniqueOperators.map((op, idx) => (
+                    <option key={`op-opt-${op}-${idx}`} value={op} className="dark:bg-zinc-900">{op}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Operador</label>
-              <select 
-                value={operatorFilter}
-                onChange={(e) => setOperatorFilter(e.target.value)}
-                className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100"
-              >
-                <option value="All" className="dark:bg-zinc-900">Todos los Operadoras</option>
-                {uniqueOperators.map((op, idx) => (
-                  <option key={`op-opt-${op}-${idx}`} value={op} className="dark:bg-zinc-900">{op}</option>
+            <div className="space-y-1.5 pt-4 border-t border-zinc-100 dark:border-white/5">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Estado de Hallazgos</label>
+              <div className="flex bg-zinc-100 dark:bg-zinc-950 p-1 rounded-xl border border-zinc-100 dark:border-white/5 gap-1">
+                {(['Open', 'InReview', 'Closed', 'All'] as const).map((f, fIdx) => (
+                  <button
+                    key={`filter-tab-${f}-${fIdx}`}
+                    onClick={() => setFilter(f)}
+                    className={`flex-1 py-2 text-center rounded-lg text-xs font-bold transition-all ${
+                      filter === f 
+                        ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' 
+                        : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    {f === 'Open' ? 'Pendientes' : f === 'InReview' ? 'En Revisión' : f === 'Closed' ? 'Cerrados' : 'Todos'}
+                  </button>
                 ))}
-              </select>
-            </div>
-
-            <div className="space-y-1 sm:hidden">
-              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase ml-1">Estado</label>
-              <select 
-                value={filter}
-                onChange={(e) => setFilter(e.target.value as any)}
-                className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue appearance-none text-zinc-900 dark:text-zinc-100"
-              >
-                <option value="All" className="dark:bg-zinc-900">Todos los Estados</option>
-                <option value="Open" className="dark:bg-zinc-900">Pendientes</option>
-                <option value="InReview" className="dark:bg-zinc-900">En Revisión</option>
-                <option value="Closed" className="dark:bg-zinc-900">Cerrados</option>
-              </select>
+              </div>
             </div>
           </div>
         </div>
