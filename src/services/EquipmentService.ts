@@ -33,14 +33,15 @@ export class EquipmentService {
   public static async fetchEquipment(plantId?: string): Promise<Equipment[]> {
     try {
       const equipRef = collection(db, this.COLLECTION_NAME);
+      const snapshot = await getDocs(equipRef);
+      let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Equipment));
       
-      let q = query(equipRef, where('status', '!=', 'deleted'));
+      // Filter out deleted items and apply plant filter client-side
+      list = list.filter(item => item.status !== 'deleted');
       if (plantId) {
-        q = query(equipRef, where('status', '!=', 'deleted'), where('plantId', '==', plantId));
+        list = list.filter(item => item.plantId === plantId);
       }
-
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Equipment));
+      return list;
     } catch (err) {
       handleFirestoreError(err, 'list', this.COLLECTION_NAME);
     }
@@ -54,17 +55,18 @@ export class EquipmentService {
     plantId?: string
   ): () => void {
     const equipRef = collection(db, this.COLLECTION_NAME);
-    
-    // Sort and filter active items
-    let q = query(equipRef, where('status', '!=', 'deleted'));
-    if (plantId) {
-      q = query(equipRef, where('status', '!=', 'deleted'), where('plantId', '==', plantId));
-    }
 
     return onSnapshot(
-      q,
+      equipRef,
       (snapshot) => {
-        const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Equipment));
+        let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Equipment));
+        
+        // Filter out deleted and apply plant filter client-side
+        list = list.filter(item => item.status !== 'deleted');
+        if (plantId) {
+          list = list.filter(item => item.plantId === plantId);
+        }
+
         // Sort items by inspectionOrder on client or memory
         list.sort((a, b) => (a.inspectionOrder || 0) - (b.inspectionOrder || 0));
         callback(list);
