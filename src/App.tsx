@@ -6082,10 +6082,10 @@ const HelpView = () => {
       </div>
 
       {/* Tabs Menu */}
-      <div className="flex gap-2 border-b border-zinc-100 dark:border-white/5 overflow-x-auto pb-1.5 scrollbar-none">
+      <div className="grid grid-cols-2 md:flex md:flex-wrap lg:flex-nowrap gap-2 border-b border-zinc-100 dark:border-white/5 pb-3">
         <button
           onClick={() => setActiveSubTab('general')}
-          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all border shrink-0 ${
+          className={`px-3 py-2 text-[11px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center ${
             activeSubTab === 'general'
               ? 'bg-brand-blue text-white border-brand-blue shadow-md'
               : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
@@ -6095,17 +6095,17 @@ const HelpView = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('operator')}
-          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all border shrink-0 ${
+          className={`px-3 py-2 text-[11px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center ${
             activeSubTab === 'operator'
               ? 'bg-brand-blue text-white border-brand-blue shadow-md'
               : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
           }`}
         >
-          Operadores (Inspectores)
+          Operadores
         </button>
         <button
           onClick={() => setActiveSubTab('supervisor')}
-          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all border shrink-0 ${
+          className={`px-3 py-2 text-[11px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center ${
             activeSubTab === 'supervisor'
               ? 'bg-brand-blue text-white border-brand-blue shadow-md'
               : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
@@ -6115,19 +6115,19 @@ const HelpView = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('faq')}
-          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all border shrink-0 ${
+          className={`px-3 py-2 text-[11px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center ${
             activeSubTab === 'faq'
               ? 'bg-brand-blue text-white border-brand-blue shadow-md'
               : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
           }`}
         >
-          Preguntas Frecuentes (FAQ)
+          Preguntas Frecuentes
         </button>
       </div>
 
       {activeSubTab === 'general' && (
         <div className="space-y-6">
-          <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
+          <div className="bg-white dark:bg-black p-4 md:p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
             <h3 className="text-base font-bold text-zinc-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
               <span>🔄</span> Ciclo Integral de Inspección y Hallazgos
             </h3>
@@ -6135,8 +6135,8 @@ const HelpView = () => {
               La plataforma permite controlar, registrar y dar seguimiento en tiempo real a las condiciones industriales de todas las áreas y equipos. El flujo se compone de 5 etapas automatizadas:
             </p>
 
-            <div className="grid md:grid-cols-5 gap-4 pt-4">
-              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-4">
+              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
                 <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">01</span>
                 <div>
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -6149,7 +6149,7 @@ const HelpView = () => {
                 </div>
               </div>
 
-              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
                 <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">02</span>
                 <div>
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -6162,7 +6162,7 @@ const HelpView = () => {
                 </div>
               </div>
 
-              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
                 <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">03</span>
                 <div>
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -6175,7 +6175,7 @@ const HelpView = () => {
                 </div>
               </div>
 
-              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
                 <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">04</span>
                 <div>
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -6188,7 +6188,7 @@ const HelpView = () => {
                 </div>
               </div>
 
-              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
                 <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">05</span>
                 <div>
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -6203,7 +6203,7 @@ const HelpView = () => {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
               <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                 <Database className="w-4 h-4 text-emerald-500" /> Conectividad & Sincronización Local
@@ -6317,7 +6317,7 @@ const HelpView = () => {
             </div>
 
             <div className="space-y-4">
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white mb-2">📥 1. Notificaciones en Tiempo Real</h4>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
@@ -6330,7 +6330,7 @@ const HelpView = () => {
                     Haz clic en cualquier anomalía activa desde el Panel. Podrás presionar 'En Revisión' para coordinar con mecánicos o digitar la solución técnica con 'Comentarios de Supervisor' y presionar 'Aprobar Cierre'.
                   </p>
                 </div>
-                <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5">
+                <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5 sm:col-span-2 lg:col-span-1">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white mb-2">📊 3. Métricas y KPIs</h4>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
                     Visualiza gráficos consolidados por planta de: cantidad de incidentes reportados, porcentaje de checklist con fallas, y el tiempo de respuesta promedio medido en horas.
@@ -6343,7 +6343,7 @@ const HelpView = () => {
                 <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed">
                   Para fines de reportabilidad interna y auditorías externas o corporativas, puedes recurrir a dos grandes herramientas en la pestaña de <strong>Historial</strong>:
                 </p>
-                <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div className="bg-white dark:bg-black p-3.5 border border-zinc-100 dark:border-white/5 rounded-xl">
                     <span className="font-bold text-brand-blue text-xs block mb-1">📋 Exportar PDF Profesional</span>
                     <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
