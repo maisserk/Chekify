@@ -694,6 +694,11 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
     }
   }, [showFindingForm]);
 
+  // Scroll back to the top of the view when the equipment index or selected area changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentEquipmentIndex, selectedArea?.id]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [searchingArea, setSearchingArea] = useState(false);
   const [areaSearchQuery, setAreaSearchQuery] = useState('');

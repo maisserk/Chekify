@@ -96,22 +96,23 @@ class OfflineQueueService {
    * Verifies actual internet access by executing a lightweight HEAD/GET request
    */
   private async verifyActualHeartbeat(): Promise<void> {
-    if (!navigator.onLine) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       this.handleNetworkEvent(false);
       return;
     }
 
     try {
-      // Use a fast, cache-bypassing fetch to checking real connectivity
-      const response = await fetch('https://www.google.com/favicon.ico', {
+      // Use window.location.origin to checking real connectivity on the SAME origin
+      const pingUrl = typeof window !== 'undefined' ? `${window.location.origin}/favicon.png` : '/favicon.png';
+      await fetch(pingUrl, {
         method: 'HEAD',
-        mode: 'no-cors',
         cache: 'no-store',
       });
       this.handleNetworkEvent(true);
     } catch (e) {
-      // Failed fetch implies we are behind a portal or have no outgoing route
-      this.handleNetworkEvent(false);
+      // If same-origin ping fails (e.g. local server is booting), still rely on navigator.onLine status
+      const isOnlineFallback = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      this.handleNetworkEvent(isOnlineFallback);
     }
   }
 
