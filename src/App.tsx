@@ -92,7 +92,9 @@ import {
   RefreshCw,
   Compass,
   Activity,
-  Download
+  Download,
+  HelpCircle,
+  BookOpen
 } from 'lucide-react';
 
 import { EquipmentService } from './services/EquipmentService';
@@ -6038,7 +6040,349 @@ const SyncStatusTray = () => {
   );
 };
 
-// --- Error Boundary ---
+// --- Help & Instructions View ---
+const HelpView = () => {
+  const [activeSubTab, setActiveSubTab] = useState<'general' | 'operator' | 'supervisor' | 'faq'>('general');
+
+  const faqs = [
+    {
+      q: "¿Qué sucede si no tengo señal de internet durante una inspección?",
+      a: "No te preocupes. La aplicación cuenta con soporte offline completo. Sigue realizando el checklist de los equipos normalmente y reporta los hallazgos que encuentres. Toda la información y fotos se encolarán de forma segura en tu dispositivo (verás un indicador de 'Cola Local' en la parte inferior). Una vez que vuelvas a tener internet, se sincronizará automáticamente con Firestore."
+    },
+    {
+      q: "¿Por qué se rechaza mi fotografía al reportar un hallazgo o checklist?",
+      a: "Para asegurar la máxima veracidad y nitidez de la evidencia física de planta, la aplicación valida que la foto tenga una resolución mínima de 300x300 píxeles. Si el archivo que subes o la cámara entrega una imagen de dimensiones menores, el formulario te alertará de que aumentes la resolución o selecciones una imagen de mejor calidad."
+    },
+    {
+      q: "¿Cómo exporto los datos históricos a Excel o planilla de cálculo?",
+      a: "En la pestaña 'Historial', selecciona los filtros que requieras (planta, área, fechas, estados). Una vez filtrada la lista de hallazgos abiertos o cerrados, pulsa el botón verde 'Exportar CSV' para descargar un archivo totalmente estructurado y legible por Excel, que incluye el cálculo de horas de resolución y comentarios aplicados."
+    },
+    {
+      q: "¿Cómo puedo cambiar entre modo de visualización visual (VOSO) y tradicional?",
+      a: "Al iniciar la inspección de un equipo, la aplicación determina la configuración guardada por la administración. El checklist visual te permite registrar fácil y rápidamente los sentidos (Visual, Olfativo, Auditivo, Sensorial) con botones interactivos, mientras que el tradicional utiliza un check clásico para cada componente."
+    },
+    {
+      q: "¿Cómo configuro las firmas, cargos y plantillas de los reportes PDF?",
+      a: "Si tienes credenciales de Administrador, la pestaña 'Configuración PDF' te permitirá habilitar/deshabilitar firmas preestablecidas, definir nombres y cargos de los aprobadores autorizados, cargar el logo corporativo del reporte, y habilitar un resumen ejecutivo automático que se añade a cada PDF generado."
+    }
+  ];
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-100 dark:border-white/5 pb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase flex items-center gap-2.5">
+            <BookOpen className="w-6 h-6 text-brand-blue" />
+            Guía de Ayuda e Instructivo de Uso
+          </h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+            Revisa los flujos de inspección, requerimientos técnicos, perfiles y soluciones rápidas del sistema.
+          </p>
+        </div>
+      </div>
+
+      {/* Tabs Menu */}
+      <div className="flex gap-2 border-b border-zinc-100 dark:border-white/5 overflow-x-auto pb-1.5 scrollbar-none">
+        <button
+          onClick={() => setActiveSubTab('general')}
+          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all border shrink-0 ${
+            activeSubTab === 'general'
+              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+          }`}
+        >
+          Flujo General
+        </button>
+        <button
+          onClick={() => setActiveSubTab('operator')}
+          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all border shrink-0 ${
+            activeSubTab === 'operator'
+              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+          }`}
+        >
+          Operadores (Inspectores)
+        </button>
+        <button
+          onClick={() => setActiveSubTab('supervisor')}
+          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all border shrink-0 ${
+            activeSubTab === 'supervisor'
+              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+          }`}
+        >
+          Supervisores y Admin
+        </button>
+        <button
+          onClick={() => setActiveSubTab('faq')}
+          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all border shrink-0 ${
+            activeSubTab === 'faq'
+              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+          }`}
+        >
+          Preguntas Frecuentes (FAQ)
+        </button>
+      </div>
+
+      {activeSubTab === 'general' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
+            <h3 className="text-base font-bold text-zinc-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+              <span>🔄</span> Ciclo Integral de Inspección y Hallazgos
+            </h3>
+            <p className="text-zinc-600 dark:text-zinc-400 text-sm leading-relaxed">
+              La plataforma permite controlar, registrar y dar seguimiento en tiempo real a las condiciones industriales de todas las áreas y equipos. El flujo se compone de 5 etapas automatizadas:
+            </p>
+
+            <div className="grid md:grid-cols-5 gap-4 pt-4">
+              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">01</span>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                    Selección
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    El operador selecciona la planta y área, o bien escanea el código QR directo del equipo a inspeccionar.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">02</span>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <ListChecks className="w-3.5 h-3.5 text-zinc-400" />
+                    Inspección
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Se responde el checklist modular (VOSO o Tradicional). También se puede declarar una fosa o hallazgo general sin checklist.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">03</span>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <Camera className="w-3.5 h-3.5 text-zinc-400" />
+                    Reporte
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Si falta algo, se adjunta una foto descriptiva (mínimo 300x300px) y texto. Si decide 'Solucionar ahora', puede quedar cerrado al instante.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">04</span>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <Bell className="w-3.5 h-3.5 text-zinc-400" />
+                    Auditoría
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Los supervisores reciben alertas en tiempo real, revisan la evidencia, cambian estados y coordinan reparaciones mecánicas.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between h-48">
+                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">05</span>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <Download className="w-3.5 h-3.5 text-zinc-400" />
+                    Cierre
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Una vez resuelto y cerrado el hallazgo, se genera el cálculo de horas reales del ciclo. Los reportes consolidados se bajan en PDF o CSV.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Database className="w-4 h-4 text-emerald-500" /> Conectividad & Sincronización Local
+              </h4>
+              <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed">
+                Este software incluye un motor interno inteligente capaz de retener checklists completos, imágenes y reportes de anomalías directamente en la sesión del dispositivo. Si el inspector pierde internet en las profundidades de la planta:
+              </p>
+              <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-2 list-disc list-inside">
+                <li>La aplicación <strong>no se congelará ni perderá datos</strong>.</li>
+                <li>Habilitará la persistencia temporal en formato de base de datos local HTML5.</li>
+                <li>Apenas se consiga señal o conexión wifi, el módulo de sincronización en background enviará la cola remanente automáticamente de manera ordenada.</li>
+              </ul>
+            </div>
+
+            <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-brand-blue" /> Validación de Fotos e Integridad
+              </h4>
+              <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed">
+                Cada hallazgo o chequeo fallido que requiera evidencia visual pasa por una prueba automática de dimensiones y compresión inteligente en tiempo real para optimizar ancho de banda pero priorizando la legibilidad técnica:
+              </p>
+              <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-2 list-disc list-inside">
+                <li><strong>Dimensión Mínima de Foto:</strong> Obligatorio <strong>300x300 píxeles</strong>. Esto evita adjuntar imágenes borrosas, en negro o erróneas.</li>
+                <li><strong>Compresión Dinámica:</strong> Escala imágenes pesadas reduciendo megabytes pero preservando bordes definidos.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'operator' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-6">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span>👷</span> Funciones y Operación de Inspectores en Terreno
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                La labor del operador es registrar de forma fidedigna el estado mecánico y de seguridad operacional.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="border border-zinc-100 dark:border-white/5 p-4 rounded-2xl space-y-2">
+                <span className="px-2 py-0.5 bg-brand-blue/10 text-brand-blue dark:text-sky-300 text-[10px] font-bold uppercase rounded-md">
+                  Paso 1: Identificación rápida del Area o Equipo
+                </span>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  Al ingresar con tu cuenta de operador, selecciona la planta asignada. Podrás buscar tu área en el listado haciendo clic en ella, o usar el cómodo lector de códigos QR ubicado en la barra para escanear directamente la etiqueta del equipo. Esto te dirigirá a sus puntos de control sin demoras.
+                </p>
+              </div>
+
+              <div className="border border-zinc-100 dark:border-white/5 p-4 rounded-2xl space-y-2">
+                <span className="px-2 py-0.5 bg-brand-blue/10 text-brand-blue dark:text-sky-300 text-[10px] font-bold uppercase rounded-md">
+                  Paso 2: Responder el checklist (Visual o Tradicional)
+                </span>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  Para el checklist <strong>Visual VOSO</strong>, responde el estado de los cuatro sentidos de alerta:
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-1">
+                  <div className="p-2 border border-zinc-100 dark:border-white/5 rounded-xl text-center">
+                    <span className="block text-sm font-bold">👁️ V</span>
+                    <span className="text-[10px] text-zinc-400">Inspección Visual</span>
+                  </div>
+                  <div className="p-2 border border-zinc-100 dark:border-white/5 rounded-xl text-center">
+                    <span className="block text-sm font-bold">👃 O</span>
+                    <span className="text-[10px] text-zinc-400">Olfativa (Olores)</span>
+                  </div>
+                  <div className="p-2 border border-zinc-100 dark:border-white/5 rounded-xl text-center">
+                    <span className="block text-sm font-bold">👂 S</span>
+                    <span className="text-[10px] text-zinc-400">Auditiva (Sonido)</span>
+                  </div>
+                  <div className="p-2 border border-zinc-100 dark:border-white/5 rounded-xl text-center">
+                    <span className="block text-sm font-bold">✋ O</span>
+                    <span className="text-[10px] text-zinc-400">Sensorial / Tacto</span>
+                  </div>
+                </div>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed mt-2">
+                  Si un área no posee equipos, el botón principal cambiará automáticamente a <strong>"Declarar Hallazgo de Área"</strong>, facilitándote enviar la información directamente.
+                </p>
+              </div>
+
+              <div className="border border-zinc-100 dark:border-white/5 p-4 rounded-2xl space-y-2">
+                <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold uppercase rounded-md">
+                  Paso 3: Reportar un Hallazgo y Evidencia Crítica
+                </span>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  Si detectas una anomalía, se requiere adjuntar información detallada:
+                </p>
+                <ul className="list-disc list-inside text-xs space-y-1.5 text-zinc-500 dark:text-zinc-400 pl-2">
+                  <li><strong>Descripción:</strong> Escribe ordenadamente en qué consiste la falla o desviación. Ej: <em>"Fuga de aceite hidráulico en acople trasero de motor"</em>. No se permiten reportes vacíos.</li>
+                  <li><strong>Foto Obligatoria:</strong> Haz clic en el botón de fotografía. El dispositivo activará la cámara o el selector de archivos. Recuerda la regla técnica: <strong>resolución igual o mayor a 300x300 píxeles</strong>.</li>
+                  <li><strong>Solucionar ahora mismo (Autocierre):</strong> Si resolviste el inconveniente en el acto, marca este casillero, detalla la descripción técnica de la reparación y el hallazgo se cargará como <strong>'Cerrado'</strong> inmediatamente para no sobrecargar el backlog.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'supervisor' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-6">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span>🕵️</span> Panel Administrativo y de Gestión de Supervisores
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                La labor del supervisor es comandar las inspecciones, dar seguimiento analítico a hallazgos históricos y autorizar cierres.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white mb-2">📥 1. Notificaciones en Tiempo Real</h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Siempre mantente alerta: la campana superior te notificará al instante con sonido y alerta en pantalla cuando un operador guarde un nuevo hallazgo abierto o en revisión.
+                  </p>
+                </div>
+                <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white mb-2">📝 2. Gestión e Intervención</h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Haz clic en cualquier anomalía activa desde el Panel. Podrás presionar 'En Revisión' para coordinar con mecánicos o digitar la solución técnica con 'Comentarios de Supervisor' y presionar 'Aprobar Cierre'.
+                  </p>
+                </div>
+                <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white mb-2">📊 3. Métricas y KPIs</h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Visualiza gráficos consolidados por planta de: cantidad de incidentes reportados, porcentaje de checklist con fallas, y el tiempo de respuesta promedio medido en horas.
+                  </p>
+                </div>
+              </div>
+
+              <div className="border border-zinc-100 dark:border-white/5 p-4 rounded-2xl space-y-3">
+                <h4 className="text-xs font-bold uppercase text-zinc-900 dark:text-white">💾 Utilidades de Exportación Avanzada</h4>
+                <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed">
+                  Para fines de reportabilidad interna y auditorías externas o corporativas, puedes recurrir a dos grandes herramientas en la pestaña de <strong>Historial</strong>:
+                </p>
+                <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                  <div className="bg-white dark:bg-black p-3.5 border border-zinc-100 dark:border-white/5 rounded-xl">
+                    <span className="font-bold text-brand-blue text-xs block mb-1">📋 Exportar PDF Profesional</span>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Genera un completo librillo técnico con las firmas, sellos configurados de la administración, gráficos de barras de criticidad por área, y la grilla completa de las fotos de los hallazgos en perfecta resolución.
+                    </p>
+                  </div>
+                  <div className="bg-white dark:bg-black p-3.5 border border-zinc-100 dark:border-white/5 rounded-xl">
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 text-xs block mb-1">🍏 Exportar Planilla CSV (Excel)</span>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Descarga una planilla con el detalle de las inspecciones realizadas. Incluye fecha de reporte, nombres de los operadores, equipos precisos, duración exacta en segundos de la inspección, tiempos de cierre en horas y las observaciones.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'faq' && (
+        <div className="space-y-4 animate-fade-in">
+          {faqs.map((faq, index) => (
+            <div key={`faq-item-${index}`} className="bg-white dark:bg-black p-5 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-2 hover:shadow-xs transition-shadow">
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-start gap-2.5">
+                <span className="text-brand-blue font-bold">¿?</span>
+                {faq.q}
+              </h4>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed pl-6">
+                {faq.a}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
@@ -6316,6 +6660,16 @@ const AppLayout = ({
                   </button>
                 </>
               )}
+              <button 
+                onClick={() => setActiveTab('Help')}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                  activeTab === 'Help' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                }`}
+                title={isSidebarCollapsed ? "Ayuda" : undefined}
+              >
+                <HelpCircle className="w-5 h-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Ayuda / Instructivo</span>}
+              </button>
             </div>
 
             <div className="mt-auto space-y-4">
@@ -6484,6 +6838,16 @@ const AppLayout = ({
                     <AdminReportSettings />
                   </motion.div>
                 )}
+                {activeTab === 'Help' && (
+                  <motion.div 
+                    key="help"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <HelpView />
+                  </motion.div>
+                )}
               </AnimatePresence>
             </main>
             <SyncStatusTray />
@@ -6530,6 +6894,13 @@ const AppLayout = ({
                     </button>
                   </>
                 )}
+                <button 
+                  onClick={() => setActiveTab('Help')}
+                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Help' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
+                >
+                  <HelpCircle className="w-6 h-6" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-center leading-[1]">Ayuda</span>
+                </button>
               </div>
               <div className="text-center">
                 <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Developed by maisser.cl</p>
