@@ -47,6 +47,8 @@ import {
   X,
   AlertTriangle,
   ChevronRight,
+  MessageSquare,
+  Check,
   ChevronUp,
   ChevronDown,
   Layout,
@@ -89,7 +91,8 @@ import {
   Database,
   RefreshCw,
   Compass,
-  Activity
+  Activity,
+  Download
 } from 'lucide-react';
 
 import { EquipmentService } from './services/EquipmentService';
@@ -179,6 +182,29 @@ const compressImage = (base64Str: string): Promise<string> => {
     };
     img.onerror = () => {
       resolve(base64Str); // Return original if compression fails
+    };
+  });
+};
+
+// Utility to validate image dimensions and compress
+const validateAndCompressImage = (base64Str: string, minWidth = 300, minHeight = 300): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = async () => {
+      if (img.width < minWidth || img.height < minHeight) {
+        reject(new Error(`La imagen debe tener al menos ${minWidth}x${minHeight} píxeles de resolución (actual: ${img.width}x${img.height}px).`));
+        return;
+      }
+      try {
+        const compressed = await compressImage(base64Str);
+        resolve(compressed);
+      } catch (err) {
+        resolve(base64Str); // Fallback
+      }
+    };
+    img.onerror = () => {
+      reject(new Error('El archivo seleccionado no es una imagen válida o está dañado.'));
     };
   });
 };
@@ -606,8 +632,15 @@ const VOSOExecutionCategory = ({
                           if (file) {
                             const reader = new FileReader();
                             reader.onloadend = async () => {
-                              const compressed = await compressImage(reader.result as string);
-                              onUpdate(item.id, res.status, res.comment, compressed);
+                              const base64 = reader.result as string;
+                              try {
+                                const compressed = await validateAndCompressImage(base64, 300, 300);
+                                onUpdate(item.id, res.status, res.comment, compressed);
+                              } catch (err: any) {
+                                console.error("Checklist image validation error:", err);
+                                alert(err.message || "Error al validar la imagen.");
+                                e.target.value = ''; // Reset file input
+                              }
                             };
                             reader.readAsDataURL(file);
                           }
@@ -651,6 +684,14 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   const [findingPhoto, setFindingPhoto] = useState<string | null>(null);
   const [immediateSolution, setImmediateSolution] = useState('');
   const [isClosingImmediately, setIsClosingImmediately] = useState(false);
+  const [formValidationError, setFormValidationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!showFindingForm) {
+      setFormValidationError(null);
+    }
+  }, [showFindingForm]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [searchingArea, setSearchingArea] = useState(false);
   const [areaSearchQuery, setAreaSearchQuery] = useState('');
@@ -1141,7 +1182,21 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   };
 
   const handleSubmitFinding = async (forceDuplicate = false) => {
-    if (!selectedArea || !findingDescription) return;
+    if (!selectedArea) return;
+
+    if (!findingDescription || !findingDescription.trim()) {
+      setFormValidationError("La descripción del hallazgo no puede estar vacía.");
+      setMessage({ text: "La descripción no puede estar vacía.", type: 'error' });
+      return;
+    }
+
+    if (isClosingImmediately && (!immediateSolution || !immediateSolution.trim())) {
+      setFormValidationError("Si marcas 'Solucionar ahora mismo', debes detallar la solución aplicada.");
+      setMessage({ text: "Debes detallar la solución aplicada.", type: 'error' });
+      return;
+    }
+
+    setFormValidationError(null);
 
     if (!forceDuplicate) {
       const existing = allActiveFindings.find(f => 
@@ -1687,15 +1742,18 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
+                      setFormValidationError(null);
                       const reader = new FileReader();
                       reader.onloadend = async () => {
                         const base64 = reader.result as string;
                         try {
-                          const compressed = await compressImage(base64);
+                          const compressed = await validateAndCompressImage(base64, 300, 300);
                           setFindingPhoto(compressed);
-                        } catch (err) {
-                          console.error("Compression failed", err);
-                          setFindingPhoto(base64); // Fallback
+                        } catch (err: any) {
+                          console.error("Manual finding validation/compression error:", err);
+                          setFormValidationError(err.message || "Error al validar la foto del hallazgo");
+                          setMessage({ text: err.message || "Error al validar la foto del hallazgo", type: 'error' });
+                          e.target.value = ''; // Reset file input
                         }
                       };
                       reader.readAsDataURL(file);
@@ -1744,6 +1802,13 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                 />
               </motion.div>
             )}
+
+            {formValidationError && (
+              <div className="p-4 bg-red-50 dark:bg-red-505/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-bold leading-relaxed flex items-start gap-2">
+                <span>⚠️</span>
+                <span>{formValidationError}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3">
@@ -1755,7 +1820,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             </button>
             <button 
               onClick={() => handleSubmitFinding(false)}
-              disabled={!findingDescription || isSaving}
+              disabled={isSaving}
               className="flex-[2] py-4 bg-brand-blue text-white rounded-2xl font-bold hover:opacity-90 transition-colors disabled:opacity-50 shadow-lg shadow-sky-100 dark:shadow-none flex items-center justify-center gap-2"
             >
               {isSaving ? (
@@ -2895,6 +2960,7 @@ const ReportsView = ({
     key: 'createdAt',
     direction: 'desc'
   });
+  const [subTab, setSubTab] = useState<'active' | 'closed'>('active');
 
   const handleSort = (key: keyof Finding) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -2932,6 +2998,14 @@ const ReportsView = ({
     }
     return sortableItems;
   }, [findings, sortConfig]);
+
+  const activeFindingsList = React.useMemo(() => {
+    return sortedFindings.filter(f => f.status !== 'Closed');
+  }, [sortedFindings]);
+
+  const closedFindingsList = React.useMemo(() => {
+    return sortedFindings.filter(f => f.status === 'Closed');
+  }, [sortedFindings]);
 
   useEffect(() => {
     // Elegant plant-scoped real-time listener using Enterprise FindingService
@@ -3038,6 +3112,90 @@ const ReportsView = ({
     }
   };
 
+  const exportToCSV = () => {
+    const activeList = subTab === 'active' ? activeFindingsList : closedFindingsList;
+    if (activeList.length === 0) {
+      alert("No hay hallazgos filtrados para exportar en este momento.");
+      return;
+    }
+
+    try {
+      const headers = [
+        "ID",
+        "Fecha Reporte",
+        "Planta ID",
+        "Area",
+        "Equipo",
+        "Operador",
+        "Descripcion / Hallazgo",
+        "Prioridad",
+        "Estado",
+        "Duracion Inspeccion Area (seg)",
+        "Duracion Inspeccion Equipo (seg)",
+        "Fecha Cierre",
+        "Horas de Cierre",
+        "Comentarios Supervisor"
+      ];
+
+      const escapeCSVCell = (val: any) => {
+        if (val === null || val === undefined) return '';
+        let str = String(val);
+        str = str.replace(/"/g, '""');
+        if (str.includes(',') || str.includes('\n') || str.includes('\r') || str.includes('"')) {
+          str = `"${str}"`;
+        }
+        return str;
+      };
+
+      const rows = [headers.join(",")];
+
+      activeList.forEach((f) => {
+        const createdAtStr = f.createdAt?.toDate ? format(f.createdAt.toDate(), 'dd/MM/yyyy HH:mm:ss') : '';
+        const closedAtStr = f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yyyy HH:mm:ss') : '';
+
+        let resolutionHours = '';
+        if (f.createdAt && f.closedAt) {
+          const createdTime = f.createdAt.toDate ? f.createdAt.toDate().getTime() : 0;
+          const closedTime = f.closedAt.toDate ? f.closedAt.toDate().getTime() : 0;
+          if (createdTime && closedTime) {
+            resolutionHours = (Math.round((closedTime - createdTime) / (1000 * 60 * 60) * 10) / 10).toString();
+          }
+        }
+
+        const row = [
+          escapeCSVCell(f.id),
+          escapeCSVCell(createdAtStr),
+          escapeCSVCell(f.plantId || ''),
+          escapeCSVCell(f.areaName || ''),
+          escapeCSVCell(f.equipmentName || ''),
+          escapeCSVCell(f.operatorName || ''),
+          escapeCSVCell(f.description),
+          escapeCSVCell(f.priority || 'N/A'),
+          escapeCSVCell(f.status === 'Open' ? 'Abierto' : f.status === 'InReview' ? 'En Revision' : 'Cerrado'),
+          escapeCSVCell(f.inspectionDurationSeconds || ''),
+          escapeCSVCell(f.equipmentDurationSeconds || ''),
+          escapeCSVCell(closedAtStr),
+          escapeCSVCell(resolutionHours),
+          escapeCSVCell(f.supervisorComments || f.solution || '')
+        ];
+        rows.push(row.join(","));
+      });
+
+      const csvContent = "\uFEFF" + rows.join("\n");
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `reporte-inspecciones-${subTab}-${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error exporting to CSV:", err);
+      alert("Error al exportar los datos a CSV.");
+    }
+  };
+
   return (
     <div className="space-y-8">
       <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Reportes Históricos</h2>
@@ -3062,194 +3220,355 @@ const ReportsView = ({
       </div>
 
       <div className="bg-white dark:bg-black rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none overflow-hidden">
-        <div className="p-3 sm:p-4 border-b border-zinc-50 dark:border-white/5 bg-zinc-50/50 dark:bg-white/5 flex items-center justify-between">
-          <h3 className="font-bold text-zinc-900 dark:text-white text-sm sm:text-base uppercase tracking-tight">Historial de Hallazgos</h3>
-          <button 
-            onClick={exportToPDF}
-            className="text-xs font-bold text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white flex items-center gap-1 bg-white dark:bg-black border border-zinc-100 dark:border-white/10 px-3 py-1.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors uppercase tracking-widest"
-          >
-            <FileText className="w-3 h-3" /> Exportar PDF
-          </button>
+        <div className="p-4 sm:p-6 border-b border-zinc-50 dark:border-white/5 bg-zinc-50/50 dark:bg-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="font-bold text-zinc-900 dark:text-white text-base uppercase tracking-tight">Historial de Hallazgos</h3>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500 font-medium">Registro histórico y auditoría del estado de inspecciones</p>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl flex items-center border border-zinc-200/50 dark:border-white/5">
+              <button
+                onClick={() => setSubTab('active')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  subTab === 'active' 
+                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' 
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <span>Activos</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${
+                  subTab === 'active' 
+                    ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300' 
+                    : 'bg-zinc-200 dark:bg-zinc-805 text-zinc-550 dark:text-zinc-400'
+                }`}>
+                  {stats.open + stats.inReview}
+                </span>
+              </button>
+              <button
+                onClick={() => setSubTab('closed')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  subTab === 'closed' 
+                    ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs' 
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-905 dark:hover:text-white'
+                }`}
+              >
+                <span>Cerrados</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${
+                  subTab === 'closed' 
+                    ? 'bg-emerald-100/50 dark:bg-emerald-500/10 text-emerald-650 dark:text-emerald-400' 
+                    : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                }`}>
+                  {stats.closed}
+                </span>
+              </button>
+            </div>
+
+            <button 
+              onClick={exportToPDF}
+              className="text-xs font-bold text-zinc-505 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white flex items-center gap-1.5 bg-white dark:bg-black border border-zinc-100 dark:border-white/10 px-3 py-1.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors uppercase tracking-widest cursor-pointer shadow-xs"
+            >
+              <FileText className="w-3.5 h-3.5" /> Exportar PDF
+            </button>
+
+            <button 
+              onClick={exportToCSV}
+              className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1.5 bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl hover:bg-emerald-505 dark:hover:bg-emerald-500/20 transition-colors uppercase tracking-widest cursor-pointer shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5" /> Exportar CSV
+            </button>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm min-w-[800px]">
-            <thead>
-              <tr className="text-zinc-400 dark:text-zinc-500 border-b border-zinc-50 dark:border-white/5">
-                <th 
-                  className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
-                  onClick={() => handleSort('createdAt')}
-                >
-                  <div className="flex items-center gap-1">
-                    Fecha
-                    {sortConfig?.key === 'createdAt' && (
-                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                    )}
-                  </div>
-                </th>
-                <th 
-                  className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
-                  onClick={() => handleSort('areaName')}
-                >
-                  <div className="flex items-center gap-1">
-                    Área
-                    {sortConfig?.key === 'areaName' && (
-                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                    )}
-                  </div>
-                </th>
-                <th 
-                  className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
-                  onClick={() => handleSort('operatorName')}
-                >
-                  <div className="flex items-center gap-1">
-                    Operador
-                    {sortConfig?.key === 'operatorName' && (
-                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-4 font-bold uppercase tracking-widest">Inspección</th>
-                <th className="px-4 py-4 font-bold uppercase tracking-widest">Cierre</th>
-                <th 
-                  className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
-                  onClick={() => handleSort('status')}
-                >
-                  <div className="flex items-center gap-1">
-                    Estado
-                    {sortConfig?.key === 'status' && (
-                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                    )}
-                  </div>
-                </th>
-                {user.role === 'Administrador' && <th className="px-4 py-4 font-bold uppercase tracking-widest text-right">Acciones</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-50 dark:divide-white/5">
-              {sortedFindings.map((f, index) => {
-                const areaDuration = f.inspectionDurationSeconds || (f.inspectionStartedAt && f.inspectionCompletedAt 
-                  ? Math.round((f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime()) / 1000) 
-                  : null);
-                
-                const equipDuration = f.equipmentDurationSeconds || (f.equipmentStartedAt && f.equipmentCompletedAt
-                  ? Math.round((f.equipmentCompletedAt.toDate().getTime() - f.equipmentStartedAt.toDate().getTime()) / 1000)
-                  : null);
 
-                const resolutionTime = f.status === 'Closed' && f.createdAt && f.closedAt
-                  ? Math.round((f.closedAt.toDate().getTime() - f.createdAt.toDate().getTime()) / (1000 * 60 * 60) * 10) / 10
-                  : null;
+        {subTab === 'active' ? (
+          <div>
+            {activeFindingsList.length === 0 ? (
+              <div className="p-16 text-center space-y-3">
+                <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-650 rounded-full flex items-center justify-center mx-auto border border-zinc-100 dark:border-white/5">
+                  <Check className="w-8 h-8" />
+                </div>
+                <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">Sin Hallazgos Activos</h4>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-md mx-auto">No hay hallazgos con estado pendiente o en revisión asignados a esta planta de producción.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[800px]">
+                  <thead>
+                    <tr className="text-zinc-400 dark:text-zinc-500 border-b border-zinc-50 dark:border-white/5">
+                      <th 
+                        className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
+                        onClick={() => handleSort('createdAt')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Fecha
+                          {sortConfig?.key === 'createdAt' && (
+                            sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                          )}
+                        </div>
+                      </th>
+                      <th 
+                        className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
+                        onClick={() => handleSort('areaName')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Área
+                          {sortConfig?.key === 'areaName' && (
+                            sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                          )}
+                        </div>
+                      </th>
+                      <th 
+                        className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
+                        onClick={() => handleSort('operatorName')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Operador
+                          {sortConfig?.key === 'operatorName' && (
+                            sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                          )}
+                        </div>
+                      </th>
+                      <th className="px-4 py-4 font-bold uppercase tracking-widest">Inspección</th>
+                      <th 
+                        className="px-4 py-4 font-bold uppercase tracking-widest cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors"
+                        onClick={() => handleSort('status')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Estado
+                          {sortConfig?.key === 'status' && (
+                            sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                          )}
+                        </div>
+                      </th>
+                      {user.role === 'Administrador' && <th className="px-4 py-4 font-bold uppercase tracking-widest text-right">Acciones</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-50 dark:divide-white/5">
+                    {activeFindingsList.map((f, index) => {
+                      const areaDuration = f.inspectionDurationSeconds || (f.inspectionStartedAt && f.inspectionCompletedAt 
+                        ? Math.round((f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime()) / 1000) 
+                        : null);
+                      
+                      const equipDuration = f.equipmentDurationSeconds || (f.equipmentStartedAt && f.equipmentCompletedAt
+                        ? Math.round((f.equipmentCompletedAt.toDate().getTime() - f.equipmentStartedAt.toDate().getTime()) / 1000)
+                        : null);
 
-                return (
-                  <tr 
-                    key={`rep-row-${f.id}-${index}`} 
-                    onClick={() => setSelectedFinding(f)}
-                    className="hover:bg-zinc-50/50 dark:hover:bg-white/5 transition-colors group cursor-pointer"
-                  >
-                    <td className="px-4 py-4 text-zinc-500 dark:text-zinc-600 whitespace-nowrap">
-                      {f.createdAt?.toDate ? format(f.createdAt.toDate(), 'dd/MM/yy') : '-'}
-                    </td>
-                    <td className="px-4 py-4 font-medium text-zinc-900 dark:text-white">
-                      <div className="flex flex-col">
-                        <span>{f.areaName}</span>
-                        <FindingDescriptionRenderer 
-                          description={f.description} 
-                          isPreview 
-                          className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase tracking-tight truncate max-w-[150px]" 
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-zinc-500 dark:text-zinc-500">
-                      {f.operatorName || '-'}
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-col gap-2">
-                        {/* Area Duration */}
-                        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 rounded-xl p-2 flex items-center justify-between gap-3 min-w-[120px]">
-                           <div className="flex flex-col text-[9px] text-zinc-400 dark:text-zinc-500 leading-none">
-                              <span className="font-bold uppercase tracking-tighter mb-1">TOTAL ÁREA</span>
-                              <div className="flex items-center gap-1 font-mono">
-                                <span>{f.inspectionStartedAt?.toDate ? format(f.inspectionStartedAt.toDate(), 'HH:mm') : '--:--'}</span>
-                                <span className="opacity-30">→</span>
-                                <span>{f.inspectionCompletedAt?.toDate ? format(f.inspectionCompletedAt.toDate(), 'HH:mm') : '--:--'}</span>
+                      return (
+                        <tr 
+                          key={`rep-row-${f.id}-${index}`} 
+                          onClick={() => setSelectedFinding(f)}
+                          className="hover:bg-zinc-50/50 dark:hover:bg-white/5 transition-colors group cursor-pointer"
+                        >
+                          <td className="px-4 py-4 text-zinc-500 dark:text-zinc-650 whitespace-nowrap">
+                            {f.createdAt?.toDate ? format(f.createdAt.toDate(), 'dd/MM/yy') : '-'}
+                          </td>
+                          <td className="px-4 py-4 font-medium text-zinc-900 dark:text-white">
+                            <div className="flex flex-col">
+                              <span>{f.areaName}</span>
+                              <FindingDescriptionRenderer 
+                                description={f.description} 
+                                isPreview 
+                                className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase tracking-tight truncate max-w-[150px]" 
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-zinc-500 dark:text-zinc-500">
+                            {f.operatorName || '-'}
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-2">
+                              {/* Area Duration */}
+                              <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 rounded-xl p-2 flex items-center justify-between gap-3 min-w-[120px]">
+                                 <div className="flex flex-col text-[9px] text-zinc-400 dark:text-zinc-500 leading-none">
+                                    <span className="font-bold uppercase tracking-tighter mb-1">TOTAL ÁREA</span>
+                                    <div className="flex items-center gap-1 font-mono">
+                                      <span>{f.inspectionStartedAt?.toDate ? format(f.inspectionStartedAt.toDate(), 'HH:mm') : '--:--'}</span>
+                                      <span className="opacity-30">→</span>
+                                      <span>{f.inspectionCompletedAt?.toDate ? format(f.inspectionCompletedAt.toDate(), 'HH:mm') : '--:--'}</span>
+                                    </div>
+                                 </div>
+                                 {areaDuration !== null && (
+                                    <div className="bg-white dark:bg-black px-2 py-1 rounded-lg border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none flex flex-col items-center">
+                                       <span className="text-[10px] font-black text-zinc-905 dark:text-white leading-none">{Math.floor(areaDuration / 60)}m</span>
+                                       <span className="text-[8px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-tighter">{areaDuration % 60}s</span>
+                                    </div>
+                                 )}
                               </div>
-                           </div>
-                           {areaDuration !== null && (
-                              <div className="bg-white dark:bg-black px-2 py-1 rounded-lg border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none flex flex-col items-center">
-                                 <span className="text-[10px] font-black text-zinc-900 dark:text-white leading-none">{Math.floor(areaDuration / 60)}m</span>
-                                 <span className="text-[8px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-tighter">{areaDuration % 60}s</span>
+
+                              {/* Equipment Duration */}
+                              {equipDuration !== null && (
+                                <div className="flex items-center gap-2 px-2 text-[10px]">
+                                  <span className="text-zinc-400 dark:text-zinc-600 font-bold tracking-tighter uppercase">Equipo:</span>
+                                  <span className="font-black text-zinc-900 dark:text-white bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 py-0.5 rounded-md border border-sky-100 dark:border-sky-500/20">
+                                    {equipDuration < 60 ? `${equipDuration}s` : `${Math.floor(equipDuration / 60)}m ${equipDuration % 60}s`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                              f.status === 'Open' ? 'bg-amber-100 text-amber-700' : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {f.status === 'Open' ? 'Abierto' : 'En Revisión'}
+                            </span>
+                          </td>
+                          {user.role === 'Administrador' && (
+                            <td className="px-4 py-4 text-right">
+                              <div className="flex justify-end items-center gap-1">
+                                {confirmingDelete === f.id ? (
+                                  <div className="flex items-center gap-1 bg-red-50 p-1 rounded-xl border border-red-100">
+                                    <span className="text-[10px] font-bold text-red-600 px-2">¿Seguro?</span>
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); handleDelete(f.id); }}
+                                      className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm dark:shadow-none"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); setConfirmingDelete(null); }}
+                                      className="p-1.5 bg-zinc-200 text-zinc-650 rounded-lg hover:bg-zinc-300 transition-colors"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setConfirmingDelete(f.id);
+                                    }}
+                                    className="p-2 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                    title="Eliminar permanentemente"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
                               </div>
-                           )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 sm:p-6">
+            {closedFindingsList.length === 0 ? (
+              <div className="p-16 text-center space-y-3">
+                <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-905 text-zinc-300 dark:text-zinc-700 rounded-full flex items-center justify-center mx-auto border border-zinc-100 dark:border-white/5">
+                  <CheckCircle2 className="w-8 h-8 font-light" />
+                </div>
+                <h4 className="text-sm font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight">Sin Hallazgos Cerrados</h4>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-sm mx-auto">No se ha cerrado ningún hallazgo todavía. Los hallazgos cerrados por los supervisores aparecerán aquí.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fadeIn">
+                {closedFindingsList.map((f, index) => {
+                  const resolutionTime = f.createdAt && f.closedAt
+                    ? Math.round((f.closedAt.toDate().getTime() - f.createdAt.toDate().getTime()) / (1000 * 60 * 60) * 10) / 10
+                    : null;
+
+                  return (
+                    <div 
+                      key={`closed-card-${f.id}-${index}`}
+                      onClick={() => setSelectedFinding(f)}
+                      className="bg-zinc-50/50 dark:bg-zinc-900/10 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/10 border border-zinc-100 dark:border-white/10 rounded-3xl p-5 sm:p-6 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between hover:border-zinc-200 dark:hover:border-white/20 relative overflow-hidden group"
+                    >
+                      {/* Accent decoration */}
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-full -mr-8 -mt-8 blur-xl opacity-60 pointer-events-none" />
+                      
+                      <div className="space-y-4">
+                        {/* Header info */}
+                        <div className="flex items-start justify-between gap-3 relative z-10">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 text-[9px] font-black uppercase tracking-widest rounded-md border border-emerald-500/20">
+                                Cerrado
+                              </span>
+                              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
+                                {f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy') : '-'}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight leading-tight mt-1 group-hover:text-brand-blue dark:group-hover:text-emerald-400 transition-colors">
+                              {f.areaName}
+                            </h4>
+                            <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-bold uppercase tracking-wider">
+                              Por {f.operatorName || 'Operador'}
+                            </p>
+                          </div>
+
+                          {/* Photo Thumbnail */}
+                          {f.photoUrl && (
+                            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-zinc-200/50 dark:border-white/10 shrink-0 shadow-sm bg-zinc-100 dark:bg-zinc-850">
+                              <img 
+                                src={f.photoUrl} 
+                                className="w-full h-full object-cover group-hover:scale-105 duration-300 transition-transform" 
+                                alt="Finding" 
+                                referrerPolicy="no-referrer" 
+                              />
+                            </div>
+                          )}
                         </div>
 
-                        {/* Equipment Duration */}
-                        {equipDuration !== null && (
-                          <div className="flex items-center gap-2 px-2 text-[10px]">
-                            <span className="text-zinc-400 dark:text-zinc-600 font-bold tracking-tighter uppercase">Equipo:</span>
-                            <span className="font-black text-zinc-900 dark:text-white bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 py-0.5 rounded-md border border-sky-100 dark:border-sky-500/20">
-                              {equipDuration < 60 ? `${equipDuration}s` : `${Math.floor(equipDuration / 60)}m ${equipDuration % 60}s`}
+                        {/* Resolution Time Badge */}
+                        {resolutionTime !== null && (
+                          <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/5 px-3 py-1.5 rounded-xl border border-emerald-500/10 w-fit">
+                            <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-450" />
+                            <span>Resuelto en: <span className="font-extrabold text-emerald-700 dark:text-emerald-300">{resolutionTime} horas</span></span>
+                          </div>
+                        )}
+
+                        {/* Solución Aplicada (Parsed or clean description) */}
+                        <div className="space-y-1">
+                          <span className="text-[9px] font-extrabold text-zinc-405 dark:text-zinc-500 uppercase tracking-[0.15em] block">
+                            Solución / Hallazgo Reportado
+                          </span>
+                          <div className="bg-white dark:bg-zinc-950 p-3 rounded-2xl border border-zinc-100/80 dark:border-white/5 shadow-xs">
+                            <FindingDescriptionRenderer 
+                              description={f.description} 
+                              isPreview 
+                              className="text-xs font-semibold text-zinc-650 dark:text-zinc-300 leading-relaxed" 
+                            />
+                          </div>
+                        </div>
+
+                        {/* Supervisor Comments */}
+                        {f.supervisorComments && (
+                          <div className="space-y-1 pt-1">
+                            <span className="text-[9px] font-extrabold text-[#00a8cc] dark:text-sky-450 uppercase tracking-[0.15em] flex items-center gap-1">
+                              <MessageSquare className="w-3 h-3 text-sky-550" />
+                              Comentarios del Supervisor
                             </span>
+                            <div className="bg-sky-50 dark:bg-sky-500/5 p-3 rounded-2xl border border-sky-100 dark:border-sky-500/10">
+                              <p className="text-zinc-700 dark:text-sky-200 text-xs italic font-semibold leading-relaxed">
+                                "{f.supervisorComments}"
+                              </p>
+                            </div>
                           </div>
                         )}
                       </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      {resolutionTime !== null ? (
-                        <div className="flex flex-col">
-                          <span className="text-zinc-900 dark:text-white font-bold">{resolutionTime} hrs</span>
-                          <span className="text-[9px] text-zinc-400 dark:text-zinc-600 uppercase tracking-tighter">Tiempo Cierre</span>
-                        </div>
-                      ) : (
-                        <span className="text-zinc-300 dark:text-zinc-700 italic text-xs">Pendiente</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
-                      f.status === 'Open' ? 'bg-amber-100 text-amber-700' : 
-                      f.status === 'InReview' ? 'bg-orange-100 text-orange-700' :
-                      'bg-emerald-100 text-emerald-700'
-                    }`}>
-                      {f.status === 'Open' ? 'Abierto' : f.status === 'InReview' ? 'En Revisión' : 'Cerrado'}
-                    </span>
-                    </td>
-                    {user.role === 'Administrador' && (
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex justify-end items-center gap-1">
-                          {confirmingDelete === f.id ? (
-                            <div className="flex items-center gap-1 bg-red-50 p-1 rounded-xl border border-red-100">
-                              <span className="text-[10px] font-bold text-red-600 px-2">¿Seguro?</span>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleDelete(f.id); }}
-                                className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm dark:shadow-none"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); setConfirmingDelete(null); }}
-                                className="p-1.5 bg-zinc-200 text-zinc-600 rounded-lg hover:bg-zinc-300 transition-colors"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmingDelete(f.id);
-                              }}
-                              className="p-2 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                              title="Eliminar permanentemente"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+
+                      {/* Action Footer */}
+                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-zinc-100 dark:border-white/5">
+                        <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-500" /> RESUELTO
+                        </span>
+                        <span className="text-[10px] font-extrabold text-zinc-450 dark:text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white uppercase tracking-wider flex items-center gap-1 group-hover:underline">
+                          Detalles <ChevronRight className="w-3 h-3" />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
         <AnimatePresence>
           {selectedFinding && (
@@ -3428,7 +3747,6 @@ const ReportsView = ({
             </div>
           )}
         </AnimatePresence>
-      </div>
     </div>
   );
 };
@@ -4915,55 +5233,164 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
         onError={(err) => setMessage({ text: err, type: 'error' })}
       />
 
-      <div className="grid gap-3">
-        {equipment
-          .filter(e => {
+      <div className="space-y-6">
+        {(() => {
+          const seenEquipIds = new Set<string>();
+          const filteredEquipment = equipment.filter(e => {
             const isNotDeleted = (e as any).status !== 'deleted';
             const matchesPlant = selectedPlantFilter === 'All' || e.plantId === selectedPlantFilter;
-            return isNotDeleted && matchesPlant;
-          })
-          .map((e, eIdx) => (
-          <div key={`equip-${e.id}-${eIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex justify-between items-center hover:shadow-sm dark:hover:shadow-none transition-all">
-            <div>
-              <p className="font-bold text-zinc-900 dark:text-white">
-                <span className="text-zinc-400 mr-2 text-xs">#{e.inspectionOrder || '0'}</span>
-                {e.name}
-              </p>
-              <div className="flex gap-2 items-center mt-1">
-                <span className="text-[9px] bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
-                  Planta: {plants.find(p => p.id === e.plantId)?.name || 'Sin Planta'}
-                </span>
-                <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 text-zinc-400 dark:text-zinc-500 px-1.5 py-0.5 rounded font-bold uppercase">
-                  Área: {areas.find(a => a.id === e.areaId)?.name || e.areaId}
-                </span>
+            const isUnique = e.id && !seenEquipIds.has(e.id);
+            if (isNotDeleted && matchesPlant && isUnique) {
+              seenEquipIds.add(e.id);
+              return true;
+            }
+            return false;
+          });
+
+          if (filteredEquipment.length === 0) {
+            return (
+              <div className="text-center py-12 bg-white dark:bg-black rounded-3xl border border-zinc-100 dark:border-white/10 text-zinc-400 dark:text-zinc-500 text-sm italic shadow-xs">
+                No se encontraron equipos para esta selección
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => { 
-                setEditingEquip(e); 
-                setFormData({
-                  name: e.name, 
-                  areaId: e.areaId, 
-                  plantId: e.plantId || '', 
-                  inspectionOrder: e.inspectionOrder || 0,
-                  checkItems: e.checkItems || [],
-                  inspeccionVOSO: e.inspeccionVOSO || DEFAULT_VOSO
-                }); 
-                setShowForm(true); 
-              }} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
-                <FileText className="w-4 h-4" />
-              </button>
-              <button onClick={() => setConfirmDeleteId(e.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-        {equipment.filter(e => (e as any).status !== 'deleted' && (selectedPlantFilter === 'All' || e.plantId === selectedPlantFilter)).length === 0 && (
-          <div className="text-center py-8 text-zinc-400 dark:text-zinc-500 text-sm italic">
-            No se encontraron equipos para esta selección
-          </div>
-        )}
+            );
+          }
+
+          const seenAreaIds = new Set<string>();
+          const activeAreas = areas.filter(a => {
+            const matchesPlant = selectedPlantFilter === 'All' || a.plantId === selectedPlantFilter;
+            const isUnique = a.id && !seenAreaIds.has(a.id);
+            if (matchesPlant && isUnique) {
+              seenAreaIds.add(a.id);
+              return true;
+            }
+            return false;
+          });
+          const unassignedEquips = filteredEquipment.filter(e => !e.areaId || !areas.some(a => a.id === e.areaId));
+
+          return (
+            <>
+              {activeAreas.map((area, aIdx) => {
+                const areaEquips = filteredEquipment.filter(e => e.areaId === area.id);
+                if (areaEquips.length === 0) return null;
+
+                return (
+                  <div key={`area-group-${area.id}-${aIdx}`} className="bg-zinc-50/50 dark:bg-white/5 p-5 rounded-3xl border border-zinc-100 dark:border-white/5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-brand-blue" />
+                        <h4 className="font-bold text-zinc-900 dark:text-white text-sm uppercase tracking-wider">
+                          {area.name}
+                        </h4>
+                        <span className="text-[9px] bg-sky-50 dark:bg-sky-500/10 text-brand-blue dark:text-sky-400 px-2 py-0.5 rounded-full font-bold uppercase transition-colors">
+                          {plants.find(p => p.id === area.plantId)?.name || 'Sin Planta'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+                        {areaEquips.length} {areaEquips.length === 1 ? 'equipo' : 'equipos'}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3">
+                      {areaEquips.map((e, eIdx) => (
+                        <div key={`equip-${e.id}-${eIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100/80 dark:border-white/10 flex justify-between items-center hover:shadow-xs dark:hover:shadow-none transition-all">
+                          <div>
+                            <p className="font-bold text-zinc-900 dark:text-white text-sm">
+                              <span className="text-zinc-400 mr-2 text-xs">#{e.inspectionOrder || '0'}</span>
+                              {e.name}
+                            </p>
+                            <div className="flex gap-2 items-center mt-1.5">
+                              <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                                Planta: {plants.find(p => p.id === e.plantId)?.name || 'Sin Planta'}
+                              </span>
+                              <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 text-zinc-400 dark:text-zinc-500 px-1.5 py-0.5 rounded font-bold uppercase">
+                                Área: {area.name}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { 
+                              setEditingEquip(e); 
+                              setFormData({
+                                name: e.name, 
+                                areaId: e.areaId, 
+                                plantId: e.plantId || '', 
+                                inspectionOrder: e.inspectionOrder || 0,
+                                checkItems: e.checkItems || [],
+                                inspeccionVOSO: e.inspeccionVOSO || DEFAULT_VOSO
+                              }); 
+                              setShowForm(true); 
+                            }} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                              <FileText className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setConfirmDeleteId(e.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {unassignedEquips.length > 0 && (
+                <div className="bg-amber-500/5 p-5 rounded-3xl border border-amber-500/10 space-y-4">
+                  <div className="flex items-center justify-between border-b border-amber-500/10 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-500" />
+                      <h4 className="font-bold text-amber-700 dark:text-amber-400 text-sm uppercase tracking-wider">
+                        Equipos sin Área Asignada
+                      </h4>
+                    </div>
+                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">
+                      {unassignedEquips.length} {unassignedEquips.length === 1 ? 'equipo' : 'equipos'}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3">
+                    {unassignedEquips.map((e, eIdx) => (
+                      <div key={`equip-unassigned-${e.id}-${eIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100/80 dark:border-white/10 flex justify-between items-center hover:shadow-xs dark:hover:shadow-none transition-all">
+                        <div>
+                          <p className="font-bold text-zinc-900 dark:text-white text-sm">
+                            <span className="text-zinc-400 mr-2 text-xs">#{e.inspectionOrder || '0'}</span>
+                            {e.name}
+                          </p>
+                          <div className="flex gap-2 items-center mt-1.5">
+                            <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                              Planta: {plants.find(p => p.id === e.plantId)?.name || 'Sin Planta'}
+                            </span>
+                            <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                              Sin Área
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => { 
+                            setEditingEquip(e); 
+                            setFormData({
+                              name: e.name, 
+                              areaId: e.areaId, 
+                              plantId: e.plantId || '', 
+                              inspectionOrder: e.inspectionOrder || 0,
+                              checkItems: e.checkItems || [],
+                              inspeccionVOSO: e.inspeccionVOSO || DEFAULT_VOSO
+                            }); 
+                            setShowForm(true); 
+                          }} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                            <FileText className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setConfirmDeleteId(e.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
       <AnimatePresence>
         {message && (
