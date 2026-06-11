@@ -100,6 +100,7 @@ import {
 import { EquipmentService } from './services/EquipmentService';
 import { FindingService } from './services/FindingService';
 import { offlineQueueService } from './services/OfflineQueueService';
+import { OfflineImage } from './components/OfflineImage';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
 
@@ -657,8 +658,8 @@ const VOSOExecutionCategory = ({
                         CAPTURAR EVIDENCIA
                       </button>
                       {res?.photoUrl && (
-                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-2 border-white dark:border-white/20 shadow-sm dark:shadow-none flex-shrink-0">
-                          <img src={res.photoUrl} className="w-full h-full object-cover" />
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-2 border-white dark:border-white/20 shadow-sm dark:shadow-none flex-shrink-0 flex items-center justify-center">
+                          <OfflineImage src={res.photoUrl} className="w-full h-full object-cover" />
                         </div>
                       )}
                     </div>
@@ -2004,7 +2005,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                              </div>
                              {r.photoUrl && (
                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-white dark:border-white/20 shadow-sm dark:shadow-none flex-shrink-0">
-                                 <img src={r.photoUrl} className="w-full h-full object-cover" />
+                                 <OfflineImage src={r.photoUrl} className="w-full h-full object-cover" />
                                </div>
                              )}
                            </div>
@@ -2628,7 +2629,7 @@ const SupervisorDashboard = ({
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-600 truncate flex-1">Por: {finding.operatorName}</span>
                 {finding.photoUrl && (
                   <div className="w-12 h-12 rounded-xl bg-zinc-900 dark:bg-zinc-800 overflow-hidden shrink-0 shadow-sm dark:shadow-none border border-zinc-100 dark:border-white/10">
-                    <img src={finding.photoUrl} className="w-full h-full object-contain" alt="" />
+                    <OfflineImage src={finding.photoUrl} className="w-full h-full object-contain" alt="" />
                   </div>
                 )}
               </div>
@@ -2661,7 +2662,7 @@ const SupervisorDashboard = ({
               className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
             >
               <div className="min-h-[200px] max-h-[400px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 dark:bg-black flex items-center justify-center">
-                <img 
+                <OfflineImage 
                   src={selectedFinding.photoUrl} 
                   className="w-full h-full object-contain" 
                   alt="Finding" 
@@ -3543,7 +3544,7 @@ const ReportsView = ({
                           {/* Photo Thumbnail */}
                           {f.photoUrl && (
                             <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-zinc-200/50 dark:border-white/10 shrink-0 shadow-sm bg-zinc-100 dark:bg-zinc-850">
-                              <img 
+                              <OfflineImage 
                                 src={f.photoUrl} 
                                 className="w-full h-full object-cover group-hover:scale-105 duration-300 transition-transform" 
                                 alt="Finding" 
@@ -3626,12 +3627,12 @@ const ReportsView = ({
                 className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
               >
                 <div className="min-h-[200px] max-h-[400px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 flex items-center justify-center">
-                  <img 
-                    src={selectedFinding.photoUrl} 
-                    className="w-full h-full object-contain" 
-                    alt="Finding" 
-                    referrerPolicy="no-referrer" 
-                  />
+                <OfflineImage 
+                  src={selectedFinding.photoUrl} 
+                  className="w-full h-full object-contain" 
+                  alt="Finding" 
+                  referrerPolicy="no-referrer" 
+                />
                   <button 
                     onClick={() => setSelectedFinding(null)}
                     className="absolute top-4 right-4 bg-white/80 dark:bg-black/60 backdrop-blur p-2 rounded-full hover:bg-white dark:hover:bg-black transition-colors shadow-md dark:shadow-none z-10 border border-transparent dark:border-white/10"
