@@ -97,11 +97,15 @@ export class FindingService {
     let imageUrl = findingData.photoUrl || '';
     let hasLocalPhoto = false;
 
-    // 1. Process client side compression
+    // 1. Process client side compression only if it is a File or a base64 data-URL
     let compressedBlob: Blob | null = null;
-    if (photoFileOrBase64) {
+    const shouldCompress = photoFileOrBase64 && 
+      (photoFileOrBase64 instanceof File || 
+       (typeof photoFileOrBase64 === 'string' && photoFileOrBase64.startsWith('data:')));
+
+    if (shouldCompress) {
       try {
-        compressedBlob = await compressImage(photoFileOrBase64, 1024, 768, 0.75);
+        compressedBlob = await compressImage(photoFileOrBase64 as any, 1024, 768, 0.75);
       } catch (err) {
         console.warn('[FindingService] Fine-grained compression warning, using fallback source:', err);
       }

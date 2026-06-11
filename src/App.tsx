@@ -99,6 +99,7 @@ import {
 
 import { EquipmentService } from './services/EquipmentService';
 import { FindingService } from './services/FindingService';
+import { offlineQueueService } from './services/OfflineQueueService';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
 
@@ -694,11 +695,6 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
     }
   }, [showFindingForm]);
 
-  // Scroll back to the top of the view when the equipment index or selected area changes
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentEquipmentIndex, selectedArea?.id]);
-
   const [isSaving, setIsSaving] = useState(false);
   const [searchingArea, setSearchingArea] = useState(false);
   const [areaSearchQuery, setAreaSearchQuery] = useState('');
@@ -713,6 +709,11 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   // Tracking inspection times
   const [inspectionStartTime, setInspectionStartTime] = useState<Date | null>(null);
   const [equipmentStartTime, setEquipmentStartTime] = useState<Date | null>(null);
+
+  // Scroll back to the top of the view when the equipment index, selected area, or summary state changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentEquipmentIndex, selectedArea?.id, showEquipmentSummary]);
 
   // Removed problematic useEffect that caused data mismatch
   
@@ -1053,38 +1054,58 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       try {
         const hasFindings = Object.values(updatedResults).some(resAny => {
           const res = resAny as { trad: any, voso: any };
-          return Object.values(res.trad).some(s => s !== 'Bueno') ||
-                 (Object.values(res.voso) as VOSOResponse[]).some(v => v.status === 'Observación' || v.status === 'Crítico');
+          const trad = res?.trad || {};
+          const voso = res?.voso || {};
+          return Object.values(trad).some(s => s !== 'Bueno') ||
+                 (Object.values(voso) as VOSOResponse[]).some(v => v?.status === 'Observación' || v?.status === 'Crítico');
         });
 
         const inspectionCompletedTime = new Date();
         const totalDurationSeconds = inspectionStartTime ? Math.round((inspectionCompletedTime.getTime() - inspectionStartTime.getTime()) / 1000) : 0;
 
-        await addDoc(collection(db, 'inspections'), {
+        const inspectionId = doc(collection(db, 'inspections')).id;
+        const isOnline = offlineQueueService.getConnectivityStatus();
+
+        const inspectionPayload = {
+          id: inspectionId,
           areaId: selectedArea!.id,
           areaName: selectedArea!.name,
           operatorId: user.uid,
           operatorName: user.name || user.email,
           plantId: selectedArea!.plantId,
-          timestamp: serverTimestamp(),
-          startedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : serverTimestamp(),
+          timestamp: isOnline ? serverTimestamp() : new Date(),
+          startedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : (isOnline ? serverTimestamp() : new Date()),
           completedAt: Timestamp.fromDate(inspectionCompletedTime),
           durationSeconds: totalDurationSeconds,
           status: hasFindings ? 'With Findings' : 'Completed',
           results: updatedResults
-        });
+        };
+
+        if (isOnline) {
+          try {
+            await setDoc(doc(db, 'inspections', inspectionId), inspectionPayload);
+          } catch (err) {
+            console.warn('[Inspections] Direct save failed, queuing offline:', err);
+            await offlineQueueService.enqueue('inspections', inspectionId, inspectionPayload, 'create');
+          }
+        } else {
+          await offlineQueueService.enqueue('inspections', inspectionId, inspectionPayload, 'create');
+        }
 
         // Register findings in the 'findings' collection for each equipment that has issues
         for (const [equipId, resAny] of Object.entries(updatedResults)) {
           const res = resAny as { trad: any, voso: any, timing?: { startedAt: any, completedAt: any } };
           const equip = equipment.find(e => e.id === equipId);
           
-          const equipStarted = res.timing?.startedAt instanceof Date ? res.timing.startedAt : (res.timing?.startedAt?.toDate ? res.timing.startedAt.toDate() : null);
-          const equipCompleted = res.timing?.completedAt instanceof Date ? res.timing.completedAt : (res.timing?.completedAt?.toDate ? res.timing.completedAt.toDate() : null);
+          const equipStarted = res?.timing?.startedAt instanceof Date ? res.timing.startedAt : (res?.timing?.startedAt?.toDate ? res.timing.startedAt.toDate() : null);
+          const equipCompleted = res?.timing?.completedAt instanceof Date ? res.timing.completedAt : (res?.timing?.completedAt?.toDate ? res.timing.completedAt.toDate() : null);
           const equipDuration = (equipStarted && equipCompleted) ? Math.round((equipCompleted.getTime() - equipStarted.getTime()) / 1000) : 0;
 
-          const tradIssues = Object.entries(res.trad).filter(([_, s]) => s !== 'Bueno');
-          const vosoIssues = (Object.entries(res.voso) as [string, VOSOResponse][]).filter(([_, v]) => v.status === 'Observación' || v.status === 'Crítico');
+          const resTrad = res?.trad || {};
+          const resVoso = res?.voso || {};
+
+          const tradIssues = Object.entries(resTrad).filter(([_, s]) => s !== 'Bueno');
+          const vosoIssues = (Object.entries(resVoso) as [string, VOSOResponse][]).filter(([_, v]) => v && (v.status === 'Observación' || v.status === 'Crítico'));
 
           if (tradIssues.length > 0 || vosoIssues.length > 0) {
             let description = `Inspección VOSO en ${equip?.name || equipId}.\n\n`;
@@ -1120,8 +1141,8 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               });
             }
 
-            const priority = vosoIssues.some(v => v[1].status === 'Crítico') ? 'Alta' : 'Media';
-            const firstPhoto = vosoIssues.find(v => v[1].photoUrl)?.[1].photoUrl || null;
+            const priority = vosoIssues.some(v => v[1]?.status === 'Crítico') ? 'Alta' : 'Media';
+            const firstPhoto = vosoIssues.find(v => v[1]?.photoUrl)?.[1]?.photoUrl || null;
 
             const resultObj = await FindingService.createFinding({
               areaId: selectedArea!.id,
@@ -1130,7 +1151,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               equipmentId: equipId,
               equipmentName: equip?.name || null,
               description: description,
-              status: vosoIssues.every(v => v[1].solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
+              status: vosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
               priority,
               date: new Date(),
               inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
@@ -1144,7 +1165,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               source: 'Inspection',
               history: [
                 {
-                  status: (vosoIssues.every(v => v[1].solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
+                  status: (vosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
                   userId: user.uid,
                   userName: user.name || user.email,
                   timestamp: new Date().toISOString(),
@@ -1156,19 +1177,30 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 
             const findingRef = { id: resultObj.id };
 
-            // Register notification for the autogenerated finding
-            await addDoc(collection(db, 'notifications'), {
+            const notificationId = doc(collection(db, 'notifications')).id;
+            const notificationPayload = {
+              id: notificationId,
               title: 'Nuevo Hallazgo VOSO',
               message: `${user.name || user.email} ha reportado hallazgos en ${equip?.name || equipId}`,
               type: 'Finding',
               targetRole: 'Supervisor',
-              scheduledAt: serverTimestamp(),
+              scheduledAt: isOnline ? serverTimestamp() : new Date(),
               status: 'Sent',
               createdBy: user.uid,
-              createdAt: serverTimestamp(),
+              createdAt: isOnline ? serverTimestamp() : new Date(),
               referenceId: findingRef.id,
               plantId: selectedArea!.plantId
-            });
+            };
+
+            if (isOnline) {
+              try {
+                await setDoc(doc(db, 'notifications', notificationId), notificationPayload);
+              } catch (err) {
+                await offlineQueueService.enqueue('notifications', notificationId, notificationPayload, 'create');
+              }
+            } else {
+              await offlineQueueService.enqueue('notifications', notificationId, notificationPayload, 'create');
+            }
           }
         }
 
