@@ -245,6 +245,18 @@ import {
   VOSOResponse
 } from './types';
 
+const getFindingDate = (f: Finding | null): Date | null => {
+  if (!f) return null;
+  const d = f.date || f.createdAt;
+  if (!d) return null;
+  try {
+    return d.toDate ? d.toDate() : (d instanceof Date ? d : new Date(d));
+  } catch (err) {
+    console.error("Error parsing date:", err);
+    return null;
+  }
+};
+
 // --- Components ---
 
 const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.ReactNode, theme: 'light' | 'dark' }) => {
@@ -1265,6 +1277,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       closedAt: isClosingImmediately ? new Date() : null,
       inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
       inspectionCompletedAt: Timestamp.now(),
+      date: new Date(),
       history: [
         {
           status: isClosingImmediately ? 'Closed' : 'Open' as any,
@@ -2098,15 +2111,15 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
   const hsecStats = useHSECAnalytics(findings);
 
   const filteredByDate = findings.filter(f => {
-    if (!f.createdAt?.toDate) return true;
-    const date = f.createdAt.toDate();
+    const fDate = getFindingDate(f);
+    if (!fDate) return true;
     const start = dateRange.start ? new Date(dateRange.start) : null;
     const end = dateRange.end ? new Date(dateRange.end) : null;
-    if (start && date < start) return false;
+    if (start && fDate < start) return false;
     if (end) {
       const endOfDay = new Date(end);
       endOfDay.setHours(23, 59, 59, 999);
-      if (date > endOfDay) return false;
+      if (fDate > endOfDay) return false;
     }
     return true;
   });
@@ -2136,7 +2149,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
         {/* Compliance Card */}
         <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
           <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Cumplimiento HSEC</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Cumplimiento</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
           <div className="flex items-baseline gap-2">
@@ -2149,7 +2162,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
         {/* MTTR Card */}
         <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
           <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Tiempo de Cierre (MTTR)</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Tiempo de Cierre</span>
             <Clock className="w-4 h-4 text-sky-500" />
           </div>
           <div className="flex items-baseline gap-2">
@@ -2394,16 +2407,16 @@ const SupervisorDashboard = ({
     const matchesOperator = operatorFilter === 'All' || f.operatorName === operatorFilter;
     
     let matchesDate = true;
-    if (f.createdAt?.toDate) {
-      const date = f.createdAt.toDate();
+    const fDate = getFindingDate(f);
+    if (fDate) {
       if (startDate) {
         const start = new Date(startDate);
-        if (date < start) matchesDate = false;
+        if (fDate < start) matchesDate = false;
       }
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        if (date > end) matchesDate = false;
+        if (fDate > end) matchesDate = false;
       }
     } else if (startDate || endDate) {
       matchesDate = false; // "Recién" findings won't match fixed date filters usually
@@ -2618,7 +2631,7 @@ const SupervisorDashboard = ({
                   <div>
                     <h4 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight leading-tighter">{finding.areaName}</h4>
                     <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mt-0.5">
-                      {finding.createdAt?.toDate ? format(finding.createdAt.toDate(), 'EEE dd MMM, HH:mm', { locale: es }) : 'Recién'}
+                      {getFindingDate(finding) ? format(getFindingDate(finding)!, 'EEE dd MMM, HH:mm', { locale: es }) : 'Recién'}
                     </p>
                   </div>
                 </div>
@@ -3113,7 +3126,7 @@ const ReportsView = ({
       }
 
       const tableData = findings.map(f => [
-        f.createdAt?.toDate ? format(f.createdAt.toDate(), 'dd/MM/yy') : '-',
+        getFindingDate(f) ? format(getFindingDate(f)!, 'dd/MM/yy') : '-',
         f.areaName || '-',
         f.operatorName || '-',
         f.description || '-',
@@ -3190,12 +3203,13 @@ const ReportsView = ({
       const rows = [headers.join(",")];
 
       activeList.forEach((f) => {
-        const createdAtStr = f.createdAt?.toDate ? format(f.createdAt.toDate(), 'dd/MM/yyyy HH:mm:ss') : '';
+        const fDate = getFindingDate(f);
+        const createdAtStr = fDate ? format(fDate, 'dd/MM/yyyy HH:mm:ss') : '';
         const closedAtStr = f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yyyy HH:mm:ss') : '';
 
         let resolutionHours = '';
-        if (f.createdAt && f.closedAt) {
-          const createdTime = f.createdAt.toDate ? f.createdAt.toDate().getTime() : 0;
+        if (fDate && f.closedAt) {
+          const createdTime = fDate.getTime();
           const closedTime = f.closedAt.toDate ? f.closedAt.toDate().getTime() : 0;
           if (createdTime && closedTime) {
             resolutionHours = (Math.round((closedTime - createdTime) / (1000 * 60 * 60) * 10) / 10).toString();
@@ -3400,7 +3414,7 @@ const ReportsView = ({
                           className="hover:bg-zinc-50/50 dark:hover:bg-white/5 transition-colors group cursor-pointer"
                         >
                           <td className="px-4 py-4 text-zinc-500 dark:text-zinc-650 whitespace-nowrap">
-                            {f.createdAt?.toDate ? format(f.createdAt.toDate(), 'dd/MM/yy') : '-'}
+                            {getFindingDate(f) ? format(getFindingDate(f)!, 'dd/MM/yy') : '-'}
                           </td>
                           <td className="px-4 py-4 font-medium text-zinc-900 dark:text-white">
                             <div className="flex flex-col">
@@ -3508,9 +3522,8 @@ const ReportsView = ({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fadeIn">
                 {closedFindingsList.map((f, index) => {
-                  const resolutionTime = f.createdAt && f.closedAt
-                    ? Math.round((f.closedAt.toDate().getTime() - f.createdAt.toDate().getTime()) / (1000 * 60 * 60) * 10) / 10
-                    : null;
+                  const fDate = getFindingDate(f);
+                  const resolutionTime = fDate && f.closedAt ? Math.round((f.closedAt.toDate().getTime() - fDate.getTime()) / (1000 * 60 * 60) * 10) / 10 : null;
 
                   return (
                     <div 
@@ -3763,16 +3776,16 @@ const ReportsView = ({
                         <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-100 dark:border-white/5 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium font-medium">Reportado</span>
-                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">{selectedFinding.createdAt?.toDate ? format(selectedFinding.createdAt.toDate(), 'dd MMM, HH:mm') : '--:--'}</span>
+                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">{getFindingDate(selectedFinding) ? format(getFindingDate(selectedFinding)!, 'dd MMM, HH:mm') : '--:--'}</span>
                           </div>
                           {selectedFinding.closedAt && (
                             <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50 dark:border-white/5">
                               <span className="text-xs text-emerald-600 dark:text-emerald-450 font-medium font-medium">Resolución</span>
                               <div className="text-right">
                                 <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">{format(selectedFinding.closedAt.toDate(), 'dd MMM, HH:mm')}</p>
-                                {selectedFinding.createdAt && (
+                                {getFindingDate(selectedFinding) && (
                                   <p className="text-[9px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-tighter">
-                                    En {Math.round((selectedFinding.closedAt.toDate().getTime() - selectedFinding.createdAt.toDate().getTime()) / (1000 * 60 * 60) * 10) / 10} horas
+                                    En {Math.round((selectedFinding.closedAt.toDate().getTime() - getFindingDate(selectedFinding)!.getTime()) / (1000 * 60 * 60) * 10) / 10} horas
                                   </p>
                                 )}
                               </div>
