@@ -130,13 +130,20 @@ export class FindingService {
       imageUrl = `offline-cached://${mediaId}`;
     }
 
-    // Prepare robust transaction schema
-    const payload: Partial<Finding> = {
+    // Prepare robust transaction schema and sanitize to avoid undefined fields
+    const rawPayload: Partial<Finding> = {
       ...findingData,
       id: findingId,
       photoUrl: imageUrl || 'https://picsum.photos/seed/finding/400/300',
       createdAt: isOnline ? serverTimestamp() : new Date(),
     };
+
+    const payload: any = {};
+    for (const [key, value] of Object.entries(rawPayload)) {
+      if (value !== undefined) {
+        payload[key] = value;
+      }
+    }
 
     // If we're online and image went through normal upload, write directly
     if (isOnline && !hasLocalPhoto) {
@@ -237,7 +244,7 @@ export class FindingService {
       // Read current document state or prepare the transition append
       const historyEntry: HistoryEntry = {
         status: newStatus,
-        userName: user.name,
+        userName: user.name || 'Supervisor',
         userId: user.uid,
         timestamp: new Date().toISOString(),
         action: `Cambio de estado a ${newStatus}`,

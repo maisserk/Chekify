@@ -688,7 +688,7 @@ const VOSOExecutionCategory = ({
 
 // --- Operator View ---
 
-const OperatorDashboard = ({ user }: { user: AppUser }) => {
+const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab?: (tab: 'Home' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig') => void }) => {
   const [scanning, setScanning] = useState(false);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -701,6 +701,8 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   const [immediateSolution, setImmediateSolution] = useState('');
   const [isClosingImmediately, setIsClosingImmediately] = useState(false);
   const [formValidationError, setFormValidationError] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalConfig, setSuccessModalConfig] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!showFindingForm) {
@@ -729,6 +731,16 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
   }, [currentEquipmentIndex, selectedArea?.id, showEquipmentSummary]);
 
   // Removed problematic useEffect that caused data mismatch
+  
+  const resetInspectionState = () => {
+    setSelectedArea(null);
+    setInspectionStartTime(null);
+    setCurrentEquipmentIndex(0);
+    setInspectionResults({});
+    setCheckItemStates({});
+    setVosoResponses({});
+    setShowEquipmentSummary(false);
+  };
   
   const saveCurrentToResults = () => {
     if (currentEquipment) {
@@ -1085,7 +1097,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           areaName: selectedArea!.name,
           operatorId: user.uid,
           operatorName: user.name || user.email,
-          plantId: selectedArea!.plantId,
+          plantId: selectedArea!.plantId || user.plantId || 'default-plant',
           timestamp: isOnline ? serverTimestamp() : new Date(),
           startedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : (isOnline ? serverTimestamp() : new Date()),
           completedAt: Timestamp.fromDate(inspectionCompletedTime),
@@ -1160,7 +1172,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
             const resultObj = await FindingService.createFinding({
               areaId: selectedArea!.id,
               areaName: selectedArea!.name,
-              plantId: selectedArea!.plantId,
+              plantId: selectedArea!.plantId || user.plantId || 'default-plant',
               equipmentId: equipId,
               equipmentName: equip?.name || null,
               description: description,
@@ -1202,7 +1214,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
               createdBy: user.uid,
               createdAt: isOnline ? serverTimestamp() : new Date(),
               referenceId: findingRef.id,
-              plantId: selectedArea!.plantId
+              plantId: selectedArea!.plantId || user.plantId || 'default-plant'
             };
 
             if (isOnline) {
@@ -1217,13 +1229,13 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
           }
         }
 
-        setSelectedArea(null);
-        setInspectionStartTime(null);
-        setCurrentEquipmentIndex(0);
-        setInspectionResults({});
-        setCheckItemStates({});
-        setVosoResponses({});
-        setMessage({ text: "Inspección finalizada y hallazgos registrados correctamente", type: 'success' });
+        resetInspectionState();
+
+        setSuccessModalConfig({
+          title: "¡Inspección Finalizada con Éxito!",
+          message: "El hallazgo o la inspección fue finalizada con éxito. Se guardaron todos los cambios y se notificará al supervisor."
+        });
+        setShowSuccessModal(true);
       } catch (err) {
         console.error("Error finalizing inspection:", err);
         setMessage({ text: "Error al registrar la inspección", type: 'error' });
@@ -1267,9 +1279,9 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       areaName: selectedArea.name,
       equipmentId: currentEquipment?.id || null,
       equipmentName: currentEquipment?.name || null,
-      plantId: selectedArea.plantId,
+      plantId: selectedArea.plantId || user.plantId || 'default-plant',
       operatorId: user.uid,
-      operatorName: user.name,
+      operatorName: user.name || user.email || 'Operador',
       description: findingDescription,
       status: isClosingImmediately ? 'Closed' : 'Open' as any,
       solution: isClosingImmediately ? immediateSolution : '',
@@ -1282,7 +1294,7 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
         {
           status: isClosingImmediately ? 'Closed' : 'Open' as any,
           userId: user.uid,
-          userName: user.name,
+          userName: user.name || user.email || 'Operador',
           timestamp: new Date().toISOString(),
           action: 'Creación de hallazgo',
           comment: isClosingImmediately ? `Cerrado inmediatamente: ${immediateSolution}` : 'Hallazgo reportado'
@@ -1294,19 +1306,32 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
       const resultObj = await FindingService.createFinding(findingData, findingPhoto);
       const findingRef = { id: resultObj.id };
       
-      // Auto-generate notification for supervisors and admins
-      await addDoc(collection(db, 'notifications'), {
+      // Auto-generate notification for supervisors and admins supporting offline queueing
+      const notificationId = doc(collection(db, 'notifications')).id;
+      const isOnline = offlineQueueService.getConnectivityStatus();
+      const notificationPayload = {
+        id: notificationId,
         title: 'Nuevo Hallazgo',
-        message: `${user.name} ha reportado: ${findingDescription.substring(0, 40)}${findingDescription.length > 40 ? '...' : ''}`,
+        message: `${user.name || user.email} ha reportado: ${findingDescription.substring(0, 40)}${findingDescription.length > 40 ? '...' : ''}`,
         type: 'Finding',
         targetRole: 'Supervisor',
-        scheduledAt: serverTimestamp(),
+        scheduledAt: isOnline ? serverTimestamp() : new Date(),
         status: 'Sent',
         createdBy: user.uid,
-        createdAt: serverTimestamp(),
+        createdAt: isOnline ? serverTimestamp() : new Date(),
         referenceId: findingRef.id,
-        plantId: selectedArea.plantId // Target supervisors of THIS plant
-      });
+        plantId: selectedArea.plantId || user.plantId || 'default-plant'
+      };
+
+      if (isOnline) {
+        try {
+          await setDoc(doc(db, 'notifications', notificationId), notificationPayload);
+        } catch (err) {
+          await offlineQueueService.enqueue('notifications', notificationId, notificationPayload, 'create');
+        }
+      } else {
+        await offlineQueueService.enqueue('notifications', notificationId, notificationPayload, 'create');
+      }
 
       setShowFindingForm(false);
       setFindingDescription('');
@@ -1325,6 +1350,29 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
 
   return (
     <div className="space-y-6">
+      <AnimatePresence>
+        {isSaving && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-zinc-950/40 backdrop-blur-md flex items-center justify-center z-[150]"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center gap-4 max-w-xs text-center border border-zinc-100 dark:border-white/10"
+            >
+              <div className="w-12 h-12 border-4 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-white rounded-full animate-spin" />
+              <div className="space-y-1">
+                <p className="font-extrabold text-zinc-900 dark:text-white uppercase tracking-wider text-xs">Guardando Inspección</p>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">Reportando hallazgos al supervisor...</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {message && (
           <motion.div 
@@ -2070,6 +2118,69 @@ const OperatorDashboard = ({ user }: { user: AppUser }) => {
                     {currentEquipmentIndex < areaEquipment.length - 1 ? 'Siguiente Equipo' : 'Finalizar y Guardar'}
                   </span>
                   <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showSuccessModal && successModalConfig && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" 
+              onClick={() => {
+                setShowSuccessModal(false);
+                resetInspectionState();
+              }} 
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 30 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 30 }}
+              className="relative bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] shadow-2xl dark:shadow-none max-w-sm w-full space-y-6 border border-zinc-100 dark:border-white/10 text-center"
+            >
+              <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-8 h-8 animate-bounce" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight">
+                  {successModalConfig.title}
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  {successModalConfig.message}
+                </p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    resetInspectionState();
+                    if (setActiveTab) {
+                      setActiveTab('History');
+                    }
+                  }}
+                  className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-2xl font-bold text-[10px] uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <Eye className="w-4 h-4" />
+                  Ver Historial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    resetInspectionState();
+                  }}
+                  className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-black rounded-2xl font-bold text-[10px] uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  Nueva Inspección
                 </button>
               </div>
             </motion.div>
@@ -6094,6 +6205,7 @@ const SyncStatusTray = () => {
 // --- Help & Instructions View ---
 const HelpView = () => {
   const [activeSubTab, setActiveSubTab] = useState<'general' | 'operator' | 'supervisor' | 'faq'>('general');
+  const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
   const faqs = [
     {
@@ -6118,58 +6230,103 @@ const HelpView = () => {
     }
   ];
 
+  const stepsConfig = [
+    {
+      id: "01",
+      title: "Selección",
+      desc: "El operador selecciona la planta y área, o bien escanea el código QR directo del equipo a inspeccionar.",
+      icon: MapPin,
+      borderColor: "border-l-4 border-sky-500",
+      iconBg: "bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400"
+    },
+    {
+      id: "02",
+      title: "Inspección",
+      desc: "Se responde el checklist modular (VOSO o Tradicional). También se puede declarar un hallazgo general o anomalía sin checklist.",
+      icon: ListChecks,
+      borderColor: "border-l-4 border-indigo-500",
+      iconBg: "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400"
+    },
+    {
+      id: "03",
+      title: "Reporte",
+      desc: "Si falta algo, se añade una foto descriptiva (mín. 300x300px) y texto. El 'Autocierre' puede resolverlo en el acto.",
+      icon: Camera,
+      borderColor: "border-l-4 border-amber-500",
+      iconBg: "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
+    },
+    {
+      id: "04",
+      title: "Auditoría",
+      desc: "Los supervisores reciben alertas instantáneas, auditan la foto, cambian estados y asignan cuadrillas de reparación.",
+      icon: Bell,
+      borderColor: "border-l-4 border-purple-500",
+      iconBg: "bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400"
+    },
+    {
+      id: "05",
+      title: "Cierre",
+      desc: "Tras resolver el hallazgo, se liquida el ciclo de horas reales. Los reportes consolidados se bajan en formato PDF o CSV.",
+      icon: Download,
+      borderColor: "border-l-4 border-emerald-500",
+      iconBg: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
+    }
+  ];
+
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in max-w-full overflow-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-100 dark:border-white/5 pb-6">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase flex items-center gap-2.5">
-            <BookOpen className="w-6 h-6 text-brand-blue" />
+          <h2 className="text-xl md:text-2xl font-black text-zinc-900 dark:text-white tracking-tight uppercase flex items-center gap-3">
+            <div className="p-2 bg-brand-blue/10 rounded-2xl shrink-0">
+              <BookOpen className="w-5 h-5 md:w-6 md:h-6 text-brand-blue" />
+            </div>
             Guía de Ayuda e Instructivo de Uso
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+          <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
             Revisa los flujos de inspección, requerimientos técnicos, perfiles y soluciones rápidas del sistema.
           </p>
         </div>
       </div>
 
       {/* Tabs Menu */}
-      <div className="grid grid-cols-2 md:flex md:flex-wrap lg:flex-nowrap gap-2 border-b border-zinc-100 dark:border-white/5 pb-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 border-b border-zinc-100 dark:border-white/5 pb-3">
         <button
-          onClick={() => setActiveSubTab('general')}
-          className={`px-3 py-2 text-[11px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center ${
+          onClick={() => { setActiveSubTab('general'); setActiveFaq(null); }}
+          className={`px-3 py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center cursor-pointer ${
             activeSubTab === 'general'
-              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+              ? 'bg-brand-blue text-white border-brand-blue shadow-lg shadow-brand-blue/10 font-black'
+              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-450 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
           }`}
         >
           Flujo General
         </button>
         <button
-          onClick={() => setActiveSubTab('operator')}
-          className={`px-3 py-2 text-[11px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center ${
+          onClick={() => { setActiveSubTab('operator'); setActiveFaq(null); }}
+          className={`px-3 py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center cursor-pointer ${
             activeSubTab === 'operator'
-              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+              ? 'bg-brand-blue text-white border-brand-blue shadow-lg shadow-brand-blue/10 font-black'
+              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-455 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
           }`}
         >
           Operadores
         </button>
         <button
-          onClick={() => setActiveSubTab('supervisor')}
-          className={`px-3 py-2 text-[11px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center ${
+          onClick={() => { setActiveSubTab('supervisor'); setActiveFaq(null); }}
+          className={`px-3 py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center cursor-pointer ${
             activeSubTab === 'supervisor'
-              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+              ? 'bg-brand-blue text-white border-brand-blue shadow-lg shadow-brand-blue/10 font-black'
+              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-455 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
           }`}
         >
           Supervisores y Admin
         </button>
         <button
-          onClick={() => setActiveSubTab('faq')}
-          className={`px-3 py-2 text-[11px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center ${
+          onClick={() => { setActiveSubTab('faq'); setActiveFaq(null); }}
+          className={`px-3 py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider rounded-xl transition-all border text-center cursor-pointer ${
             activeSubTab === 'faq'
-              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+              ? 'bg-brand-blue text-white border-brand-blue shadow-lg shadow-brand-blue/10 font-black'
+              : 'bg-white dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-455 border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-zinc-900'
           }`}
         >
           Preguntas Frecuentes
@@ -6177,108 +6334,89 @@ const HelpView = () => {
       </div>
 
       {activeSubTab === 'general' && (
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-black p-4 md:p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-              <span>🔄</span> Ciclo Integral de Inspección y Hallazgos
+        <div className="space-y-8">
+          <div className="bg-white dark:bg-zinc-900 p-5 md:p-6 rounded-[2rem] border border-zinc-100 dark:border-white/10 space-y-4">
+            <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <span className="p-1.5 bg-zinc-100 dark:bg-white/5 rounded-lg">🔄</span> Ciclo Integral de Inspección y Hallazgos
             </h3>
-            <p className="text-zinc-600 dark:text-zinc-400 text-sm leading-relaxed">
-              La plataforma permite controlar, registrar y dar seguimiento en tiempo real a las condiciones industriales de todas las áreas y equipos. El flujo se compone de 5 etapas automatizadas:
+            <p className="text-zinc-600 dark:text-zinc-400 text-xs md:text-sm leading-relaxed">
+              La plataforma permite controlar, registrar y dar seguimiento en tiempo real a las condiciones industriales de todas las áreas y equipos. El flujo se compone de 5 etapas automatizadas sumamente intuitivas:
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-4">
-              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
-                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">01</span>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-zinc-400" />
-                    Selección
-                  </h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    El operador selecciona la planta y área, o bien escanea el código QR directo del equipo a inspeccionar.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
-                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">02</span>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <ListChecks className="w-3.5 h-3.5 text-zinc-400" />
-                    Inspección
-                  </h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Se responde el checklist modular (VOSO o Tradicional). También se puede declarar una fosa o hallazgo general sin checklist.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
-                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">03</span>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <Camera className="w-3.5 h-3.5 text-zinc-400" />
-                    Reporte
-                  </h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Si falta algo, se adjunta una foto descriptiva (mínimo 300x300px) y texto. Si decide 'Solucionar ahora', puede quedar cerrado al instante.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
-                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">04</span>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <Bell className="w-3.5 h-3.5 text-zinc-400" />
-                    Auditoría
-                  </h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Los supervisores reciben alertas en tiempo real, revisan la evidencia, cambian estados y coordinan reparaciones mecánicas.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[11rem]">
-                <span className="absolute right-3 top-2 font-mono text-3xl font-black text-brand-blue/10 dark:text-sky-400/5 select-none">05</span>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <Download className="w-3.5 h-3.5 text-zinc-400" />
-                    Cierre
-                  </h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Una vez resuelto y cerrado el hallazgo, se genera el cálculo de horas reales del ciclo. Los reportes consolidados se bajan en PDF o CSV.
-                  </p>
-                </div>
-              </div>
+              {stepsConfig.map((item, idx) => {
+                const IconComp = item.icon;
+                return (
+                  <div 
+                    key={`gen-step-${idx}`}
+                    className={`bg-zinc-50 dark:bg-white/5 p-5 rounded-2xl border border-zinc-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[12rem] hover:-translate-y-1 transition-transform duration-300 ${item.borderColor}`}
+                  >
+                    <span className="absolute right-4 top-2 font-mono text-3xl font-black text-zinc-200 dark:text-white/5 select-none">{item.id}</span>
+                    <div className="space-y-4 h-full flex flex-col justify-between">
+                      <div>
+                        <div className={`p-2 w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mb-3 ${item.iconBg}`}>
+                          <IconComp className="w-4 h-4" />
+                        </div>
+                        <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest mb-1.5">
+                          {item.title}
+                        </h4>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium">
+                          {item.desc}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
-              <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Database className="w-4 h-4 text-emerald-500" /> Conectividad & Sincronización Local
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2rem] border border-zinc-100 dark:border-white/10 space-y-4 hover:shadow-xs transition-shadow duration-300">
+              <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                  <Database className="w-4 h-4" />
+                </div>
+                Conectividad & Sincronización Local
               </h4>
-              <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed">
+              <p className="text-xs text-[#52525b] dark:text-[#a1a1aa] leading-relaxed">
                 Este software incluye un motor interno inteligente capaz de retener checklists completos, imágenes y reportes de anomalías directamente en la sesión del dispositivo. Si el inspector pierde internet en las profundidades de la planta:
               </p>
-              <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-2 list-disc list-inside">
-                <li>La aplicación <strong>no se congelará ni perderá datos</strong>.</li>
-                <li>Habilitará la persistencia temporal en formato de base de datos local HTML5.</li>
-                <li>Apenas se consiga señal o conexión wifi, el módulo de sincronización en background enviará la cola remanente automáticamente de manera ordenada.</li>
+              <ul className="text-xs text-zinc-500 dark:text-zinc-450 space-y-2.5">
+                <li className="flex items-start gap-2">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span>La aplicación <strong className="text-zinc-800 dark:text-zinc-200">no se congelará ni perderá datos</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span>Habilitará la <strong className="text-zinc-800 dark:text-zinc-200">persistencia temporal</strong> en formato de base de datos local HTML5.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span>Apenas se consiga señal o conexión wifi, enviará la cola remanente automáticamente de manera ordenada.</span>
+                </li>
               </ul>
             </div>
 
-            <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-4">
-              <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-brand-blue" /> Validación de Fotos e Integridad
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2rem] border border-zinc-100 dark:border-white/10 space-y-4 hover:shadow-xs transition-shadow duration-300">
+              <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <div className="p-1.5 bg-sky-100 dark:bg-sky-950 text-brand-blue rounded-xl">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                Validación de Fotos e Integridad
               </h4>
-              <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed">
-                Cada hallazgo o chequeo fallido que requiera evidencia visual pasa por una prueba automática de dimensiones y compresión inteligente en tiempo real para optimizar ancho de banda pero priorizando la legibilidad técnica:
+              <p className="text-xs text-[#52525b] dark:text-[#a1a1aa] leading-relaxed">
+                Cada hallazgo o reporte que requiera evidencia visual pasa por una prueba automática de dimensiones y compresión inteligente en tiempo real para optimizar ancho de banda pero priorizando la legibilidad técnica:
               </p>
-              <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-2 list-disc list-inside">
-                <li><strong>Dimensión Mínima de Foto:</strong> Obligatorio <strong>300x300 píxeles</strong>. Esto evita adjuntar imágenes borrosas, en negro o erróneas.</li>
-                <li><strong>Compresión Dinámica:</strong> Escala imágenes pesadas reduciendo megabytes pero preservando bordes definidos.</li>
+              <ul className="text-xs text-zinc-500 dark:text-zinc-450 space-y-2.5">
+                <li className="flex items-start gap-2">
+                  <Check className="w-4 h-4 text-brand-blue shrink-0 mt-0.5" />
+                  <span><strong className="text-zinc-800 dark:text-zinc-200">Dimensión Mínima de Foto:</strong> Obligatorio <span className="bg-sky-50 dark:bg-sky-900/30 text-brand-blue dark:text-sky-300 px-2 py-0.5 rounded text-[10px] font-mono font-black">300x300 píxeles</span> para evitar imágenes borrosas o nulas.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="w-4 h-4 text-brand-blue shrink-0 mt-0.5" />
+                  <span><strong className="text-zinc-800 dark:text-zinc-200">Compresión Dinámica:</strong> Escala imágenes pesadas reduciendo megabytes pero preservando bordes definidos.</span>
+                </li>
               </ul>
             </div>
           </div>
@@ -6287,68 +6425,104 @@ const HelpView = () => {
 
       {activeSubTab === 'operator' && (
         <div className="space-y-6 animate-fade-in">
-          <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-6">
+          <div className="bg-white dark:bg-zinc-900 p-5 md:p-6 rounded-[2rem] border border-zinc-100 dark:border-white/10 space-y-6">
             <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <span>👷</span> Funciones y Operación de Inspectores en Terreno
+              <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span className="p-1.5 bg-zinc-100 dark:bg-white/5 rounded-lg">👷</span> Funciones y Operación de Inspectores en Terreno
               </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                La labor del operador es registrar de forma fidedigna el estado mecánico y de seguridad operacional.
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
+                La labor del operador es registrar de forma fidedigna el estado mecánico y de seguridad operacional. Sigue este orden de pasos:
               </p>
             </div>
 
-            <div className="space-y-4">
-              <div className="border border-zinc-100 dark:border-white/5 p-4 rounded-2xl space-y-2">
-                <span className="px-2 py-0.5 bg-brand-blue/10 text-brand-blue dark:text-sky-300 text-[10px] font-bold uppercase rounded-md">
-                  Paso 1: Identificación rápida del Area o Equipo
-                </span>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+            <div className="grid grid-cols-1 gap-4">
+              <div className="border border-zinc-100 dark:border-white/5 p-5 rounded-2xl space-y-3 bg-zinc-50/50 dark:bg-white/5">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 bg-sky-500 text-white text-[10px] font-black uppercase rounded-lg">
+                    Paso 1
+                  </span>
+                  <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">Identificación rápida de Planta, Área o Equipo</h4>
+                </div>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
                   Al ingresar con tu cuenta de operador, selecciona la planta asignada. Podrás buscar tu área en el listado haciendo clic en ella, o usar el cómodo lector de códigos QR ubicado en la barra para escanear directamente la etiqueta del equipo. Esto te dirigirá a sus puntos de control sin demoras.
                 </p>
               </div>
 
-              <div className="border border-zinc-100 dark:border-white/5 p-4 rounded-2xl space-y-2">
-                <span className="px-2 py-0.5 bg-brand-blue/10 text-brand-blue dark:text-sky-300 text-[10px] font-bold uppercase rounded-md">
-                  Paso 2: Responder el checklist (Visual o Tradicional)
-                </span>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                  Para el checklist <strong>Visual VOSO</strong>, responde el estado de los cuatro sentidos de alerta:
+              <div className="border border-zinc-100 dark:border-white/5 p-5 rounded-2xl space-y-3 bg-zinc-50/50 dark:bg-white/5">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 bg-brand-blue text-white text-[10px] font-black uppercase rounded-lg">
+                    Paso 2
+                  </span>
+                  <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">Responder el checklist (Visual VOSO o Tradicional)</h4>
+                </div>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
+                  Para el checklist <strong className="text-zinc-800 dark:text-zinc-200">Visual VOSO</strong>, responde cómodamente el estado de los componentes utilizando los sentidos:
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-1">
-                  <div className="p-2 border border-zinc-100 dark:border-white/5 rounded-xl text-center">
-                    <span className="block text-sm font-bold">👁️ V</span>
-                    <span className="text-[10px] text-zinc-400">Inspección Visual</span>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-1">
+                  <div className="p-3 border border-zinc-100 dark:border-white/5 rounded-2xl text-center bg-white dark:bg-zinc-900 flex flex-col items-center gap-1 hover:border-sky-500/30 transition-all duration-300">
+                    <div className="p-1.5 bg-sky-100 dark:bg-sky-950/40 text-sky-600 dark:text-sky-455 rounded-xl">
+                      <Eye className="w-5 h-5" />
+                    </div>
+                    <span className="block text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">👁️ V</span>
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Inspección Visual</span>
                   </div>
-                  <div className="p-2 border border-zinc-100 dark:border-white/5 rounded-xl text-center">
-                    <span className="block text-sm font-bold">👃 O</span>
-                    <span className="text-[10px] text-zinc-400">Olfativa (Olores)</span>
+                  <div className="p-3 border border-zinc-100 dark:border-white/5 rounded-2xl text-center bg-white dark:bg-zinc-900 flex flex-col items-center gap-1 hover:border-purple-500/30 transition-all duration-300">
+                    <div className="p-1.5 bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-455 rounded-xl">
+                      <Wind className="w-5 h-5" />
+                    </div>
+                    <span className="block text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">👃 O</span>
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Olfativa / Olores</span>
                   </div>
-                  <div className="p-2 border border-zinc-100 dark:border-white/5 rounded-xl text-center">
-                    <span className="block text-sm font-bold">👂 S</span>
-                    <span className="text-[10px] text-zinc-400">Auditiva (Sonido)</span>
+                  <div className="p-3 border border-zinc-100 dark:border-white/5 rounded-2xl text-center bg-white dark:bg-zinc-900 flex flex-col items-center gap-1 hover:border-amber-500/30 transition-all duration-300">
+                    <div className="p-1.5 bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-455 rounded-xl">
+                      <Ear className="w-5 h-5" />
+                    </div>
+                    <span className="block text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">👂 S</span>
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Sónicos / Sonido</span>
                   </div>
-                  <div className="p-2 border border-zinc-100 dark:border-white/5 rounded-xl text-center">
-                    <span className="block text-sm font-bold">✋ O</span>
-                    <span className="text-[10px] text-zinc-400">Sensorial / Tacto</span>
+                  <div className="p-3 border border-zinc-100 dark:border-white/5 rounded-2xl text-center bg-white dark:bg-zinc-900 flex flex-col items-center gap-1 hover:border-emerald-500/30 transition-all duration-300">
+                    <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-455 rounded-xl">
+                      <Hand className="w-5 h-5" />
+                    </div>
+                    <span className="block text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">✋ O</span>
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Sensorial / Tacto</span>
                   </div>
                 </div>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed mt-2">
-                  Si un área no posee equipos, el botón principal cambiará automáticamente a <strong>"Declarar Hallazgo de Área"</strong>, facilitándote enviar la información directamente.
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium mt-2">
+                  Si un área no posee equipos creados, el botón principal cambiará automáticamente a <strong className="text-zinc-800 dark:text-zinc-200">"Declarar Hallazgo de Área"</strong>, facilitándote enviar la información directamente de un solo clic.
                 </p>
               </div>
 
-              <div className="border border-zinc-100 dark:border-white/5 p-4 rounded-2xl space-y-2">
-                <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold uppercase rounded-md">
-                  Paso 3: Reportar un Hallazgo y Evidencia Crítica
-                </span>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                  Si detectas una anomalía, se requiere adjuntar información detallada:
+              <div className="border border-zinc-100 dark:border-white/5 p-5 rounded-2xl space-y-3 bg-zinc-50/50 dark:bg-white/5">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 bg-amber-500 text-white text-[10px] font-black uppercase rounded-lg">
+                    Paso 3
+                  </span>
+                  <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">Reportar un Hallazgo y Evidencia Crítica</h4>
+                </div>
+                <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed font-medium">
+                  Si detectas una anomalía o falla, se requiere adjuntar información estructurada:
                 </p>
-                <ul className="list-disc list-inside text-xs space-y-1.5 text-zinc-500 dark:text-zinc-400 pl-2">
-                  <li><strong>Descripción:</strong> Escribe ordenadamente en qué consiste la falla o desviación. Ej: <em>"Fuga de aceite hidráulico en acople trasero de motor"</em>. No se permiten reportes vacíos.</li>
-                  <li><strong>Foto Obligatoria:</strong> Haz clic en el botón de fotografía. El dispositivo activará la cámara o el selector de archivos. Recuerda la regla técnica: <strong>resolución igual o mayor a 300x300 píxeles</strong>.</li>
-                  <li><strong>Solucionar ahora mismo (Autocierre):</strong> Si resolviste el inconveniente en el acto, marca este casillero, detalla la descripción técnica de la reparación y el hallazgo se cargará como <strong>'Cerrado'</strong> inmediatamente para no sobrecargar el backlog.</li>
-                </ul>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl">
+                    <span className="text-xs font-bold text-zinc-950 dark:text-white block mb-1">📝 Descripción</span>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed block">
+                      Detalla la falla de forma clara. Al menos 2 palabras (Ej: <i>"Goteo en válvula"</i>).
+                    </span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl">
+                    <span className="text-xs font-bold text-zinc-950 dark:text-white block mb-1">📸 Foto Técnica</span>
+                    <span className="text-[11px] text-zinc-505 dark:text-zinc-400 leading-relaxed block">
+                      Obligatorio adjuntar foto clara del daño (mínimo 300x300px), usando la cámara del dispositivo móvil.
+                    </span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl">
+                    <span className="text-xs font-bold text-zinc-950 dark:text-white block mb-1">⚡ Autocierre técnico</span>
+                    <span className="text-[11px] text-zinc-505 dark:text-zinc-400 leading-relaxed block">
+                      Si lo solucionaste altiro, márcale para guardarlo como resuelto, sin sobrecargar tareas de supervisores.
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -6357,54 +6531,76 @@ const HelpView = () => {
 
       {activeSubTab === 'supervisor' && (
         <div className="space-y-6 animate-fade-in">
-          <div className="bg-white dark:bg-black p-6 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-6">
+          <div className="bg-white dark:bg-zinc-900 p-5 md:p-6 rounded-[2rem] border border-zinc-100 dark:border-white/10 space-y-6">
             <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <span>🕵️</span> Panel Administrativo y de Gestión de Supervisores
+              <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span className="p-1.5 bg-zinc-100 dark:bg-white/5 rounded-lg">🕵️</span> Panel Administrativo y de Gestión de Supervisores
               </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                La labor del supervisor es comandar las inspecciones, dar seguimiento analítico a hallazgos históricos y autorizar cierres.
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
+                La labor del supervisor es comandar las inspecciones, dar seguimiento analítico a hallazgos históricos, crear áreas/equipos y autorizar cierres.
               </p>
             </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white mb-2">📥 1. Notificaciones en Tiempo Real</h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Siempre mantente alerta: la campana superior te notificará al instante con sonido y alerta en pantalla cuando un operador guarde un nuevo hallazgo abierto o en revisión.
-                  </p>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-5 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5 relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3">
+                      <BellRing className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-2">1. Alertabilidad Técnica</h4>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium">
+                      La campana superior te notificará de inmediato con un sonido y aviso en pantalla cuando un operador guarde un nuevo hallazgo abierto o en revisión.
+                    </p>
+                  </div>
                 </div>
-                <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white mb-2">📝 2. Gestión e Intervención</h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Haz clic en cualquier anomalía activa desde el Panel. Podrás presionar 'En Revisión' para coordinar con mecánicos o digitar la solución técnica con 'Comentarios de Supervisor' y presionar 'Aprobar Cierre'.
-                  </p>
+
+                <div className="p-5 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5 relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3">
+                      <Edit3 className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-2">2. Intervención Activa</h4>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium">
+                      Haz clic en cualquier hallazgo activo. Podrás pasarlo a "En Revisión" para coordinar técnicos o digitar la solución y presionar "Aprobar Cierre".
+                    </p>
+                  </div>
                 </div>
-                <div className="p-4 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5 sm:col-span-2 lg:col-span-1">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white mb-2">📊 3. Métricas y KPIs</h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Visualiza gráficos consolidados por planta de: cantidad de incidentes reportados, porcentaje de checklist con fallas, y el tiempo de respuesta promedio medido en horas.
-                  </p>
+
+                <div className="p-5 border border-zinc-100 dark:border-white/5 rounded-2xl bg-zinc-50/50 dark:bg-white/5 relative overflow-hidden flex flex-col justify-between md:col-span-3 lg:col-span-1">
+                  <div>
+                    <div className="w-8 h-8 rounded-lg bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 flex items-center justify-center mb-3">
+                      <BarChart3 className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-2">3. Monitor de Métricas</h4>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium">
+                      Monitorea gráficos por planta y área de: cantidad de incidentes reportados, porcentaje con fallas, y el tiempo de respuesta promedio (MTTR).
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="border border-zinc-100 dark:border-white/5 p-4 rounded-2xl space-y-3">
-                <h4 className="text-xs font-bold uppercase text-zinc-900 dark:text-white">💾 Utilidades de Exportación Avanzada</h4>
-                <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed">
-                  Para fines de reportabilidad interna y auditorías externas o corporativas, puedes recurrir a dos grandes herramientas en la pestaña de <strong>Historial</strong>:
+              <div className="border border-zinc-100 dark:border-white/5 p-5 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <h4 className="text-xs font-black uppercase text-zinc-900 dark:text-white tracking-wider">Sistemas de Exportación y Auditoría Avanzada</h4>
+                </div>
+                <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed font-medium">
+                  Para respaldar auditorías externas, comités de seguridad o reportes a la gerencia, puedes usar los botones del <strong>Historial</strong>:
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div className="bg-white dark:bg-black p-3.5 border border-zinc-100 dark:border-white/5 rounded-xl">
-                    <span className="font-bold text-brand-blue text-xs block mb-1">📋 Exportar PDF Profesional</span>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                      Genera un completo librillo técnico con las firmas, sellos configurados de la administración, gráficos de barras de criticidad por área, y la grilla completa de las fotos de los hallazgos en perfecta resolución.
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-white dark:bg-black p-4 border border-zinc-100 dark:border-white/5 rounded-xl space-y-1.5">
+                    <span className="font-black text-brand-blue text-xs block uppercase tracking-wider">📋 Exportar PDF Profesional</span>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium">
+                      Genera un informe súper detallado con las firmas del supervisor configurados en "Configuración PDF", fotos nítidas con zoom de los hallazgos, y gráficos listos para imprimir.
                     </p>
                   </div>
-                  <div className="bg-white dark:bg-black p-3.5 border border-zinc-100 dark:border-white/5 rounded-xl">
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400 text-xs block mb-1">🍏 Exportar Planilla CSV (Excel)</span>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                      Descarga una planilla con el detalle de las inspecciones realizadas. Incluye fecha de reporte, nombres de los operadores, equipos precisos, duración exacta en segundos de la inspección, tiempos de cierre en horas y las observaciones.
+                  <div className="bg-white dark:bg-black p-4 border border-zinc-100 dark:border-white/5 rounded-xl space-y-1.5">
+                    <span className="font-black text-emerald-600 dark:text-emerald-400 text-xs block uppercase tracking-wider">🍏 Exportar Planilla CSV (Excel)</span>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium">
+                      Descarga un listado plano que registra la fecha del reporte, nombre del operador, duraciones exactas en segundos, cálculo de tiempos de resolución y observaciones técnicas.
                     </p>
                   </div>
                 </div>
@@ -6415,18 +6611,40 @@ const HelpView = () => {
       )}
 
       {activeSubTab === 'faq' && (
-        <div className="space-y-4 animate-fade-in">
-          {faqs.map((faq, index) => (
-            <div key={`faq-item-${index}`} className="bg-white dark:bg-black p-5 rounded-3xl border border-zinc-100 dark:border-white/10 space-y-2 hover:shadow-xs transition-shadow">
-              <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-start gap-2.5">
-                <span className="text-brand-blue font-bold">¿?</span>
-                {faq.q}
-              </h4>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed pl-6">
-                {faq.a}
-              </p>
-            </div>
-          ))}
+        <div className="space-y-3 animate-fade-in">
+          {faqs.map((faq, index) => {
+            const isOpen = activeFaq === index;
+            return (
+              <div 
+                key={`faq-item-${index}`} 
+                onClick={() => setActiveFaq(isOpen ? null : index)}
+                className="bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 hover:shadow-xs transition-all duration-300 cursor-pointer select-none space-y-1"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <h4 className="text-xs md:text-sm font-black text-zinc-900 dark:text-white flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-lg bg-brand-blue/10 dark:bg-sky-400/10 text-brand-blue dark:text-sky-300 text-xs font-black flex items-center justify-center shrink-0">?</span>
+                    {faq.q}
+                  </h4>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-300 shrink-0 ${isOpen ? 'rotate-180 text-brand-blue' : ''}`} />
+                </div>
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed pl-9 pt-3 font-medium border-t border-zinc-50 dark:border-white/5 mt-3">
+                        {faq.a}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -6843,7 +7061,7 @@ const AppLayout = ({
                     exit={{ opacity: 0, y: -10 }}
                   >
                     {user.role === 'Operador' ? (
-                      <OperatorDashboard user={user} />
+                      <OperatorDashboard user={user} setActiveTab={setActiveTab} />
                     ) : (
                       <SupervisorDashboard user={user} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
                     )}
