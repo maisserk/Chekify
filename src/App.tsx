@@ -352,12 +352,14 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
       if (error.code === 'auth/cancelled-popup-request') {
         // This is often a benign race condition in iframes, we can just log it
         console.warn("Popup request was cancelled, likely a duplicate call or browser restriction.");
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        setError("Inicio de sesión cancelado o bloqueado (Ventana emergente cerrada). Como estás en un entorno embebido (iframe), te recomendamos utilizar la sección de 'Acceso Rápido Demo' de abajo o iniciar sesión con tu usuario y contraseña tradicionales.");
       } else if (error.code === 'auth/popup-blocked') {
-        setError("El navegador bloqueó la ventana emergente. Por favor, permite las ventanas emergentes para este sitio.");
+        setError("El navegador bloqueó la ventana emergente. Por favor, permite las ventanas emergentes para este sitio o utiliza el acceso rápido demo de abajo.");
       } else if (error.code === 'auth/network-request-failed') {
         setError("Error de red: No se pudo conectar con el servidor de autenticación. Revisa tu internet o desactiva bloqueadores de anuncios.");
       } else {
-        setError("Error al iniciar sesión con Google. Intenta de nuevo.");
+        setError("Error al iniciar sesión con Google. Intenta de nuevo o utiliza la sección de Acceso Rápido abajo.");
       }
     } finally {
       setIsLoggingIn(false);
@@ -389,6 +391,55 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     }
   };
 
+  const handleDemoLogin = async (role: 'Administrador' | 'Supervisor' | 'Operador') => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    setError('');
+    
+    let targetEmail = '';
+    let targetName = '';
+    let targetPlantId = 'plant_a';
+    
+    if (role === 'Administrador') {
+      targetEmail = 'maisserk@gmail.com';
+      targetName = 'Administrador Demo';
+    } else if (role === 'Supervisor') {
+      targetEmail = 'supervisor@chekify.local';
+      targetName = 'Supervisor Demo';
+    } else {
+      targetEmail = 'operador@chekify.local';
+      targetName = 'Operador Demo';
+    }
+    
+    const demoPassword = 'password123';
+    
+    try {
+      await signInWithEmailAndPassword(auth, targetEmail, demoPassword);
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        try {
+          console.log("Demo user not found, auto-registering:", targetEmail);
+          const userCredential = await createUserWithEmailAndPassword(auth, targetEmail, demoPassword);
+          await setDoc(doc(db, 'users', userCredential.user.uid), {
+            uid: userCredential.user.uid,
+            email: targetEmail,
+            name: targetName,
+            role: role,
+            plantId: targetPlantId
+          });
+        } catch (regErr: any) {
+          console.error("Auto-registration of demo user failed", regErr);
+          setError(`No se pudo crear automáticamente el acceso rápido: ${regErr.message || regErr}`);
+        }
+      } else {
+        console.error("Demo login error", err);
+        setError(`Error en acceso rápido: ${err.message || err.code || err}`);
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 transition-colors duration-200">
@@ -409,6 +460,14 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
             <Logo className="h-16" />
           </div>
           <p className="text-zinc-500 dark:text-zinc-400 mb-8 font-medium">Gestión avanzada de inspecciones industriales.</p>
+
+          {/* Unified Error Message Display */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900 text-red-650 dark:text-red-400 text-sm font-medium rounded-2xl text-left leading-relaxed">
+              <span className="font-bold block mb-1">⚠️ Error al iniciar sesión:</span>
+              {error}
+            </div>
+          )}
           
           {loginMode === 'Password' ? (
             <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
@@ -437,13 +496,12 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors p-1"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-650 transition-colors p-1"
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
-              {error && <p className="text-red-500 text-xs font-bold text-center">{error}</p>}
               <button
                 type="submit"
                 disabled={isLoggingIn}
@@ -465,7 +523,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
               <button
                 disabled={isLoggingIn}
                 onClick={handleGoogleLogin}
-                className={`w-full py-4 px-6 bg-white border border-zinc-100 text-zinc-900 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all shadow-sm dark:shadow-none ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:bg-zinc-50'}`}
+                className={`w-full py-4 px-6 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all shadow-sm dark:shadow-none ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}
               >
                 {isLoggingIn ? (
                   <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
@@ -483,8 +541,8 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
             </div>
           )}
 
-          <div className="mt-8 pt-6 border-t border-zinc-50 dark:border-white/10">
-            <p className="text-[10px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-widest">Developed by maisser.cl</p>
+          <div className="mt-8 pt-6 border-t border-zinc-150/40 dark:border-white/10">
+            <p className="text-[10px] font-bold text-zinc-300 dark:text-zinc-650 uppercase tracking-widest">Developed by maisser.cl</p>
           </div>
         </div>
       </div>
