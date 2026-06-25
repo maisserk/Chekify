@@ -27,7 +27,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Finding, HistoryEntry } from '../types';
 import { offlineQueueService } from './OfflineQueueService';
 import { offlineMediaService } from './OfflineMediaService';
-import { compressImage } from '../utils/imageCompressor';
+import { compressImage, blobToBase64 } from '../utils/imageCompressor';
 
 export class FindingService {
   private static readonly COLLECTION_NAME = 'findings';
@@ -111,23 +111,37 @@ export class FindingService {
       }
     }
 
+    let base64Photo: string | null = null;
+    if (compressedBlob) {
+      try {
+        base64Photo = await blobToBase64(compressedBlob);
+      } catch (err) {
+        console.warn('[FindingService] Failed to convert compressed blob to base64:', err);
+      }
+    }
+
     // 2. Upload online or Cache offline
     if (isOnline && compressedBlob) {
       try {
         imageUrl = await this.uploadFindingPhoto(findingId, compressedBlob);
       } catch (err) {
-        console.warn('[FindingService] Failed uploading online. Falling back to offline queue process.');
+        console.warn('[FindingService] Failed uploading online. Falling back to Base64 fallback.');
+        imageUrl = base64Photo || '';
         hasLocalPhoto = true;
       }
     } else if (compressedBlob) {
+      imageUrl = base64Photo || '';
       hasLocalPhoto = true;
     }
 
     if (hasLocalPhoto && compressedBlob) {
       // Store raw compressed binary inside IndexedDB safely representing offline cache
       const mediaId = `media_fnd_${findingId}`;
-      await offlineMediaService.storeMedia(mediaId, compressedBlob);
-      imageUrl = `offline-cached://${mediaId}`;
+      try {
+        await offlineMediaService.storeMedia(mediaId, compressedBlob);
+      } catch (err) {
+        console.warn('[FindingService] Failed to store media in IndexedDB:', err);
+      }
     }
 
     // Prepare robust transaction schema and sanitize to avoid undefined fields
@@ -203,7 +217,20 @@ export class FindingService {
           // Remove subscription listener
           unsubscribe();
         } catch (err) {
-          console.error(`[FindingService] Failed to background-upload offline image for Finding ${findingId}. Retrying later.`, err);
+          console.warn(`[FindingService] Failed to background-upload offline image to Storage for Finding ${findingId}. Falling back to Base64 in Firestore.`, err);
+          try {
+            const base64 = await blobToBase64(cachedBlob);
+            await offlineQueueService.enqueue(
+              this.COLLECTION_NAME,
+              findingId,
+              { photoUrl: base64 },
+              'merge'
+            );
+            await offlineMediaService.deleteMedia(mediaId);
+            unsubscribe();
+          } catch (fallbackErr) {
+            console.error(`[FindingService] Critical failure in Base64 sync fallback for Finding ${findingId}`, fallbackErr);
+          }
         }
       } else {
         // No cached image found, cleanup subscription
