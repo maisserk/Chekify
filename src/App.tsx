@@ -2624,9 +2624,9 @@ const SupervisorDashboard = ({
     setSupervisorComments('');
     
     if (resultStatus.queued) {
-      alert("Cierre registrado localmente en cola offline. Se sincronizará al recuperar señal.");
+      showToast("Cierre Encolado", "Cierre registrado localmente en cola offline. Se sincronizará al recuperar señal.", "warning");
     } else {
-      alert("Hallazgo cerrado exitosamente");
+      showToast("Hallazgo Cerrado", "El hallazgo se ha cerrado exitosamente.", "success");
     }
   };
 
@@ -2652,9 +2652,9 @@ const SupervisorDashboard = ({
     setSupervisorComments('');
     
     if (resultStatus.queued) {
-      alert("Estado 'En Revisión' encolado localmente.");
+      showToast("Revisión Encolada", "Estado 'En Revisión' encolado localmente.", "warning");
     } else {
-      alert("Hallazgo marcado como En Revisión");
+      showToast("Hallazgo en Revisión", "El hallazgo ha sido marcado en revisión.", "info");
     }
   };
 
@@ -2665,9 +2665,10 @@ const SupervisorDashboard = ({
       await deleteDoc(doc(db, 'findings', selectedFinding.id));
       setSelectedFinding(null);
       setIsConfirmingDelete(false);
+      showToast("Hallazgo Eliminado", "El hallazgo ha sido eliminado permanentemente.", "success");
     } catch (err) {
       console.error("Error deleting finding:", err);
-      alert("Error al eliminar el hallazgo. Revisa tus permisos de administrador.");
+      showToast("Error", "Error al eliminar el hallazgo. Revisa tus permisos de administrador.", "error");
     }
   };
 
@@ -6709,6 +6710,54 @@ const HelpView = () => {
   );
 };
 
+export interface ToastMessage {
+  id: string;
+  title: string;
+  message: string;
+  type: 'success' | 'info' | 'warning' | 'error';
+}
+
+export const showToast = (title: string, message: string, type: 'success' | 'info' | 'warning' | 'error' = 'success') => {
+  const event = new CustomEvent('app-toast', { detail: { title, message, type } });
+  window.dispatchEvent(event);
+};
+
+const ToastContainer = ({ toasts, setToasts }: { toasts: ToastMessage[], setToasts: React.Dispatch<React.SetStateAction<ToastMessage[]>> }) => {
+  return (
+    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full px-4 sm:px-0">
+      <AnimatePresence>
+        {toasts.map((toast) => (
+          <motion.div
+            key={toast.id}
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 50, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+            className="pointer-events-auto w-full bg-white dark:bg-zinc-950 border rounded-2xl shadow-lg dark:shadow-none p-4 flex items-start gap-3 border-zinc-150/80 dark:border-zinc-800 transition-colors duration-200"
+          >
+            <div className="flex-shrink-0 mt-0.5">
+              {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />}
+              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />}
+              {toast.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400" />}
+              {toast.type === 'info' && <Bell className="w-5 h-5 text-brand-blue dark:text-sky-400" />}
+            </div>
+            <div className="flex-1">
+              <h4 className="font-bold text-sm text-zinc-900 dark:text-white uppercase tracking-tight">{toast.title}</h4>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed font-medium">{toast.message}</p>
+            </div>
+            <button
+              onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              className="flex-shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors p-1 rounded-full hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -6797,6 +6846,44 @@ const AppLayout = ({
   // Single, cache-reliable global plants list for the app
   const [plants, setPlants] = useState<{ id: string; name: string }[]>([]);
 
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const seenNotificationIdsRef = useRef<Set<string>>(new Set());
+  const isFirstSnapshotRef = useRef(true);
+
+  useEffect(() => {
+    const handleToastEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<Omit<ToastMessage, 'id'>>;
+      const { title, message, type } = customEvent.detail;
+      const id = Math.random().toString(36).substr(2, 9);
+      setToasts(prev => [...prev, { id, title, message, type }]);
+      
+      // Auto dismiss after 5 seconds
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, 5000);
+    };
+
+    window.addEventListener('app-toast', handleToastEvent);
+    return () => window.removeEventListener('app-toast', handleToastEvent);
+  }, []);
+
+  useEffect(() => {
+    // Check for any newly added notifications
+    notifications.forEach(n => {
+      if (!seenNotificationIdsRef.current.has(n.id)) {
+        seenNotificationIdsRef.current.add(n.id);
+        
+        if (n.title === 'Hallazgo Cerrado' || n.message?.toLowerCase().includes('cerrado')) {
+          showToast('🔒 ' + n.title, n.message, 'success');
+        } else if (n.title === 'Hallazgo en Revisión' || n.message?.toLowerCase().includes('revisado')) {
+          showToast('🕵️ ' + n.title, n.message, 'info');
+        } else {
+          showToast('🔔 ' + n.title, n.message, 'info');
+        }
+      }
+    });
+  }, [notifications]);
+
   useEffect(() => {
     const unsubPlants = onSnapshot(collection(db, 'plants'), (snapshot) => {
       setPlants(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
@@ -6852,6 +6939,12 @@ const AppLayout = ({
         // Announcement type with no plantId is considered global
         return true;
       });
+
+      if (isFirstSnapshotRef.current) {
+        filtered.forEach(n => seenNotificationIdsRef.current.add(n.id));
+        isFirstSnapshotRef.current = false;
+      }
+
       setNotifications(filtered);
     }, (error) => {
       console.warn("Notification listener error:", error);
@@ -7233,6 +7326,7 @@ const AppLayout = ({
                 <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Developed by maisser.cl</p>
               </div>
             </nav>
+            <ToastContainer toasts={toasts} setToasts={setToasts} />
           </div>
     </div>
   );
