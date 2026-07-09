@@ -94,7 +94,9 @@ import {
   Activity,
   Download,
   HelpCircle,
-  BookOpen
+  BookOpen,
+  Smartphone,
+  Share
 } from 'lucide-react';
 
 import { EquipmentService } from './services/EquipmentService';
@@ -6861,6 +6863,64 @@ const AppLayout = ({
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const isFirstSnapshotRef = useRef(true);
 
+  // PWA states
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showIOSInstructions, setShowIOSInstructions] = useState(false);
+
+  useEffect(() => {
+    // 1. Detect if already in standalone mode (installed)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    if (isStandalone) {
+      return;
+    }
+
+    // 2. Check if dismissed in this session
+    const isDismissed = sessionStorage.getItem('pwa_install_dismissed') === 'true';
+    if (isDismissed) {
+      return;
+    }
+
+    // 3. Listen for the native browser install prompt
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // 4. Detect iOS devices
+    const ua = window.navigator.userAgent;
+    const isIOSDevice = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+    setIsIOS(isIOSDevice);
+    if (isIOSDevice && !isStandalone) {
+      setShowInstallBanner(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log('[PWA] Native install prompt outcome:', outcome);
+      setDeferredPrompt(null);
+      setShowInstallBanner(false);
+    } else if (isIOS) {
+      setShowIOSInstructions(true);
+    }
+  };
+
+  const handleDismissBanner = () => {
+    sessionStorage.setItem('pwa_install_dismissed', 'true');
+    setShowInstallBanner(false);
+  };
+
   useEffect(() => {
     const handleToastEvent = (e: Event) => {
       const customEvent = e as CustomEvent<Omit<ToastMessage, 'id'>>;
@@ -7337,6 +7397,115 @@ const AppLayout = ({
                 <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Developed by maisser.cl</p>
               </div>
             </nav>
+            
+            {/* PWA Install Banner */}
+            <AnimatePresence>
+              {showInstallBanner && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 50, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 50, scale: 0.95 }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                  className="fixed bottom-24 md:bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-96 bg-zinc-950/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-800 text-white rounded-2xl shadow-2xl p-4.5 z-50 flex flex-col gap-3.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white flex-shrink-0">
+                        <Smartphone className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-xs tracking-wider text-zinc-100 uppercase">Instalar Checkify</h4>
+                        <p className="text-[11px] text-zinc-400 font-medium leading-normal mt-0.5">Accede directamente desde tu pantalla de inicio con soporte de conexión mejorado.</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={handleDismissBanner}
+                      className="text-zinc-500 hover:text-zinc-300 p-1 rounded-full hover:bg-zinc-900 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleInstallClick}
+                    className="w-full bg-white hover:bg-zinc-100 text-zinc-950 font-black text-[10px] uppercase tracking-wider py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors duration-200 shadow-sm"
+                  >
+                    <Download className="w-4.5 h-4.5" />
+                    Instalar Aplicación
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* iOS PWA Instructions Modal */}
+            <AnimatePresence>
+              {showIOSInstructions && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-[100] flex items-center justify-center p-4">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4 text-zinc-900 dark:text-white"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-900 dark:text-white flex-shrink-0">
+                          <Smartphone className="w-5 h-5 text-emerald-500" />
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-sm uppercase tracking-tight">Instalar en iOS</h3>
+                          <p className="text-[10px] text-zinc-500 dark:text-zinc-400">Sigue estos sencillos pasos:</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setShowIOSInstructions(false)}
+                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3.5 my-1 text-xs">
+                      <div className="flex items-start gap-3">
+                        <div className="w-5.5 h-5.5 rounded-full bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">
+                          1
+                        </div>
+                        <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                          Abre la app usando el navegador <strong className="text-zinc-900 dark:text-white font-bold">Safari</strong>.
+                        </p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="w-5.5 h-5.5 rounded-full bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">
+                          2
+                        </div>
+                        <div className="text-zinc-600 dark:text-zinc-300 flex flex-col gap-1.5">
+                          <span className="leading-relaxed">Presiona el botón de <strong className="text-zinc-900 dark:text-white font-bold">Compartir</strong> en la barra de Safari:</span>
+                          <div className="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-900/50 px-2.5 py-1.5 rounded-lg border border-zinc-100 dark:border-zinc-800 text-[10px] w-fit text-zinc-500 dark:text-zinc-400 font-bold">
+                            <Share className="w-3.5 h-3.5 text-sky-500" />
+                            <span>Compartir / Share</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="w-5.5 h-5.5 rounded-full bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">
+                          3
+                        </div>
+                        <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                          Desplázate y pulsa <strong className="text-zinc-900 dark:text-white font-bold">"Añadir a pantalla de inicio"</strong>.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setShowIOSInstructions(false)}
+                      className="w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 font-bold text-[10px] uppercase tracking-wider py-3 px-4 rounded-xl transition-colors duration-200"
+                    >
+                      Entendido
+                    </button>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
             <ToastContainer toasts={toasts} setToasts={setToasts} />
           </div>
     </div>

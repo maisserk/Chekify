@@ -1,0 +1,37 @@
+{
+  "name": "Checkify - Inspecciones Industriales",
+  "short_name": "Checkify",
+  "description": "Sistema integral para la gestión de inspecciones industriales y reporte de hallazgos.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#18181b",
+  "theme_color": "#18181b",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/logo_small.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo_small.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
