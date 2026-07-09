@@ -1645,7 +1645,16 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
           </div>
 
           <div className="space-y-8">
-            <div className="flex items-center justify-between px-2">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentEquipment?.id || 'general'}
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -50 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className="space-y-8"
+              >
+                <div className="flex items-center justify-between px-2">
               <h4 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tighter flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-zinc-900 dark:bg-white flex items-center justify-center text-white dark:text-black text-[10px] font-black">
                    {currentEquipmentIndex + 1}
@@ -1826,8 +1835,10 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
                 <ChevronRight className={`w-5 h-5 transition-transform ${allItemsChecked() ? 'translate-x-1' : ''}`} />
               </button>
             </div>
+          </motion.div>
+        </AnimatePresence>
 
-            <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center justify-between pt-2">
               <button 
                 onClick={() => {
                   if (currentEquipmentIndex > 0) {
