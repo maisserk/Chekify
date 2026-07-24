@@ -96,15 +96,22 @@ import {
   HelpCircle,
   BookOpen,
   Smartphone,
-  Share
+  Share,
+  CloudSun,
+  Thermometer,
+  Droplets,
+  CloudRain,
+  CloudOff
 } from 'lucide-react';
 
 import { EquipmentService } from './services/EquipmentService';
 import { FindingService } from './services/FindingService';
 import { offlineQueueService } from './services/OfflineQueueService';
+import { meteoredService, WeatherData } from './services/meteoredService';
 import { OfflineImage } from './components/OfflineImage';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
+import { OrdenYLimpiezaDashboard, isOrdenYLimpiezaFinding, isVOSOFinding } from './components/OrdenYLimpiezaDashboard';
 
 const generateSafeId = (name: string): string => {
   return name
@@ -231,6 +238,7 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { sanitizeForPDF } from './utils/textSanitizer';
 
 import {
   UserRole,
@@ -748,7 +756,19 @@ const VOSOExecutionCategory = ({
 
 // --- Operator View ---
 
-const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab?: (tab: 'Home' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig') => void }) => {
+const OperatorDashboard = ({ 
+  user, 
+  setActiveTab,
+  weather = null,
+  loadingWeather = false,
+  weatherError = false
+}: { 
+  user: AppUser; 
+  setActiveTab?: (tab: 'Home' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig') => void;
+  weather?: WeatherData | null;
+  loadingWeather?: boolean;
+  weatherError?: boolean;
+}) => {
   const [scanning, setScanning] = useState(false);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -757,6 +777,8 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
   const [showFindingForm, setShowFindingForm] = useState(false);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const [findingDescription, setFindingDescription] = useState('');
+  const [findingCategory, setFindingCategory] = useState<'VOSO' | 'OrdenYLimpieza'>('VOSO');
+  const [findingSubcat, setFindingSubcat] = useState<'Residuos' | 'Herramientas' | 'Derrames' | 'Obstrucciones' | 'Limpieza' | 'General'>('Residuos');
   const [findingPhoto, setFindingPhoto] = useState<string | null>(null);
   const [immediateSolution, setImmediateSolution] = useState('');
   const [isClosingImmediately, setIsClosingImmediately] = useState(false);
@@ -780,6 +802,7 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
   const [vosoResponses, setVosoResponses] = useState<Record<string, VOSOResponse>>({});
   const [inspectionResults, setInspectionResults] = useState<Record<string, { trad: any, voso: any }>>({});
   const [showEquipmentSummary, setShowEquipmentSummary] = useState(false);
+  const [slideDirection, setSlideDirection] = useState<'next' | 'prev'>('next');
   
   // Tracking inspection times
   const [inspectionStartTime, setInspectionStartTime] = useState<Date | null>(null);
@@ -1125,6 +1148,7 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
 
     if (currentEquipmentIndex < areaEquipment.length - 1) {
       setInspectionResults(updatedResults);
+      setSlideDirection('next');
       // Load next equipment data (or empty if new)
       const nextIndex = currentEquipmentIndex + 1;
       const nextEquip = areaEquipment[nextIndex];
@@ -1151,6 +1175,16 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
         const inspectionId = doc(collection(db, 'inspections')).id;
         const isOnline = offlineQueueService.getConnectivityStatus();
 
+        const climaPayload = weather ? {
+          temperature: weather.temperature,
+          humidity: weather.humidity,
+          windSpeed: weather.windSpeed,
+          windDirection: weather.windDirection ?? 'N/A',
+          precipitation: weather.precipitation,
+          symbol: weather.symbol ?? 'N/A',
+          forecastDate: weather.forecastDate
+        } : null;
+
         const inspectionPayload = {
           id: inspectionId,
           areaId: selectedArea!.id,
@@ -1163,7 +1197,8 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
           completedAt: Timestamp.fromDate(inspectionCompletedTime),
           durationSeconds: totalDurationSeconds,
           status: hasFindings ? 'With Findings' : 'Completed',
-          results: updatedResults
+          results: updatedResults,
+          clima: climaPayload
         };
 
         if (isOnline) {
@@ -1248,6 +1283,7 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
               operatorId: user.uid,
               operatorName: user.name || user.email,
               source: 'Inspection',
+              clima: climaPayload,
               history: [
                 {
                   status: (vosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
@@ -1334,6 +1370,21 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
     }
 
     setIsSaving(true);
+    const isOrden = findingCategory === 'OrdenYLimpieza';
+    const finalDescription = isOrden 
+      ? `[ORDEN] [${findingSubcat}] ${findingDescription.trim()}`
+      : findingDescription.trim();
+
+    const climaPayload = weather ? {
+      temperature: weather.temperature,
+      humidity: weather.humidity,
+      windSpeed: weather.windSpeed,
+      windDirection: weather.windDirection ?? 'N/A',
+      precipitation: weather.precipitation,
+      symbol: weather.symbol ?? 'N/A',
+      forecastDate: weather.forecastDate
+    } : null;
+
     const findingData = {
       areaId: selectedArea.id,
       areaName: selectedArea.name,
@@ -1342,7 +1393,9 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
       plantId: selectedArea.plantId || user.plantId || 'default-plant',
       operatorId: user.uid,
       operatorName: user.name || user.email || 'Operador',
-      description: findingDescription,
+      description: finalDescription,
+      source: isOrden ? 'OrdenYLimpieza' : 'VOSO',
+      category: isOrden ? 'OrdenYLimpieza' : 'VOSO',
       status: isClosingImmediately ? 'Closed' : 'Open' as any,
       solution: isClosingImmediately ? immediateSolution : '',
       closedBy: isClosingImmediately ? user.uid : null,
@@ -1350,6 +1403,7 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
       inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
       inspectionCompletedAt: Timestamp.now(),
       date: new Date(),
+      clima: climaPayload,
       history: [
         {
           status: isClosingImmediately ? 'Closed' : 'Open' as any,
@@ -1647,13 +1701,20 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
           </div>
 
           <div className="space-y-8">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait" custom={slideDirection}>
               <motion.div
                 key={currentEquipment?.id || 'general'}
-                initial={{ opacity: 0, x: 50 }}
+                custom={slideDirection}
+                initial={(dir: 'next' | 'prev') => ({
+                  opacity: 0,
+                  x: dir === 'next' ? 120 : -120
+                })}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -50 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                exit={(dir: 'next' | 'prev') => ({
+                  opacity: 0,
+                  x: dir === 'next' ? -120 : 120
+                })}
+                transition={{ type: "spring", stiffness: 280, damping: 28 }}
                 className="space-y-8"
               >
                 <div className="flex items-center justify-between px-2">
@@ -1853,6 +1914,7 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
                       [currentEquipment.id]: currentData
                     };
                     setInspectionResults(updatedResults);
+                    setSlideDirection('prev');
                     
                     const prevIndex = currentEquipmentIndex - 1;
                     const prevEquip = areaEquipment[prevIndex];
@@ -1884,21 +1946,69 @@ const OperatorDashboard = ({ user, setActiveTab }: { user: AppUser, setActiveTab
           animate={{ opacity: 1, scale: 1 }}
           className="bg-white dark:bg-black rounded-3xl p-6 border border-zinc-100 dark:border-white/10 shadow-xl dark:shadow-none space-y-6"
         >
-          <h3 className="text-xl font-bold text-zinc-900">Detalle del Hallazgo</h3>
+          <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Detalle del Hallazgo</h3>
           
           <div className="space-y-4">
-            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-               <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1">Equipo afectado</p>
-               <p className="font-bold text-amber-900">{currentEquipment?.name || 'Área General'}</p>
+            <div className="p-4 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-100 dark:border-amber-500/20">
+               <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">Equipo afectado</p>
+               <p className="font-bold text-amber-900 dark:text-amber-200">{currentEquipment?.name || 'Área General'}</p>
             </div>
 
+            {/* Category Selector */}
+            <div className="space-y-2">
+              <label className="block text-xs font-black text-zinc-500 uppercase tracking-wider">Módulo / Categoría</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFindingCategory('VOSO')}
+                  className={`py-3 px-4 rounded-2xl text-xs font-black uppercase transition-all flex items-center justify-center gap-2 border ${
+                    findingCategory === 'VOSO'
+                      ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                      : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-white/10'
+                  }`}
+                >
+                  <span>👁️👂 VOSO</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFindingCategory('OrdenYLimpieza')}
+                  className={`py-3 px-4 rounded-2xl text-xs font-black uppercase transition-all flex items-center justify-center gap-2 border ${
+                    findingCategory === 'OrdenYLimpieza'
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                      : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-white/10'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 text-purple-300" />
+                  <span>Orden & Limpieza</span>
+                </button>
+              </div>
+            </div>
+
+            {findingCategory === 'OrdenYLimpieza' && (
+              <div className="space-y-2 bg-purple-50 dark:bg-purple-500/10 p-4 rounded-2xl border border-purple-100 dark:border-purple-500/20">
+                <label className="block text-xs font-black text-purple-700 dark:text-purple-300 uppercase tracking-wider">Subcategoría 5S</label>
+                <select
+                  value={findingSubcat}
+                  onChange={(e) => setFindingSubcat(e.target.value as any)}
+                  className="w-full p-3 bg-white dark:bg-zinc-900 border border-purple-200 dark:border-white/10 rounded-xl text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="Residuos">Residuos en el área</option>
+                  <option value="Herramientas">Herramientas fuera de lugar</option>
+                  <option value="Derrames">Derrame de lubricantes/fluidos</option>
+                  <option value="Obstrucciones">Obstrucciones en accesos/pasillos</option>
+                  <option value="Limpieza">Limpieza de equipo/área</option>
+                  <option value="General">General 5S</option>
+                </select>
+              </div>
+            )}
+
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Descripción</label>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Descripción</label>
               <textarea 
                 value={findingDescription}
                 onChange={(e) => setFindingDescription(e.target.value)}
-                className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-zinc-900 focus:border-transparent outline-none transition-all min-h-[100px]"
-                placeholder="¿Qué problema encontraste?"
+                className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-2xl focus:ring-2 focus:ring-brand-blue outline-none transition-all min-h-[100px] text-xs font-medium dark:text-white"
+                placeholder={findingCategory === 'OrdenYLimpieza' ? "Detalla el problema de orden, aseo o residuo..." : "¿Qué problema VOSO encontraste?"}
               />
             </div>
 
@@ -2574,12 +2684,16 @@ const SupervisorDashboard = ({
   }, [initialFindingId, findings, onClearPending]);
 
   // Extract unique operators for the filter dropdown
-  const uniqueOperators = React.useMemo(() => {
-    const operators = findings.map(f => f.operatorName).filter(Boolean);
-    return Array.from(new Set(operators)).sort();
+  const vosoFindings = React.useMemo(() => {
+    return findings.filter(isVOSOFinding);
   }, [findings]);
 
-  const filteredFindings = findings.filter(f => {
+  const uniqueOperators = React.useMemo(() => {
+    const operators = vosoFindings.map(f => f.operatorName).filter(Boolean);
+    return Array.from(new Set(operators)).sort();
+  }, [vosoFindings]);
+
+  const filteredFindings = vosoFindings.filter(f => {
     const matchesFilter = filter === 'All' || f.status === filter;
     
     const matchesSearch = f.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -2689,11 +2803,11 @@ const SupervisorDashboard = ({
     <div className="space-y-6">
       <div className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Panel de Hallazgos</h2>
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Panel VOSO (Ver, Oír, Sentir, Oler)</h2>
         </div>
 
-        {/* Global Statistics (Fixed) */}
-        <SupervisorStats findings={findings} />
+        {/* Global Statistics (Fixed for VOSO) */}
+        <SupervisorStats findings={vosoFindings} />
 
         {/* Advanced Filters Panel (Fixed) */}
         <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-4 mb-4">
@@ -3189,7 +3303,7 @@ const ReportsView = ({
   onClearPending?: () => void 
 }) => {
   const [findings, setFindings] = useState<Finding[]>([]);
-  const [stats, setStats] = useState({ total: 0, open: 0, inReview: 0, closed: 0 });
+  const [moduleTab, setModuleTab] = useState<'VOSO' | 'OrdenYLimpieza'>('VOSO');
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Finding; direction: 'asc' | 'desc' } | null>({
@@ -3197,6 +3311,19 @@ const ReportsView = ({
     direction: 'desc'
   });
   const [subTab, setSubTab] = useState<'active' | 'closed'>('active');
+
+  const moduleFindings = React.useMemo(() => {
+    return findings.filter(f => moduleTab === 'VOSO' ? isVOSOFinding(f) : isOrdenYLimpiezaFinding(f));
+  }, [findings, moduleTab]);
+
+  const stats = React.useMemo(() => {
+    return {
+      total: moduleFindings.length,
+      open: moduleFindings.filter(f => f.status === 'Open').length,
+      inReview: moduleFindings.filter(f => f.status === 'InReview').length,
+      closed: moduleFindings.filter(f => f.status === 'Closed').length,
+    };
+  }, [moduleFindings]);
 
   const handleSort = (key: keyof Finding) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -3207,7 +3334,7 @@ const ReportsView = ({
   };
 
   const sortedFindings = React.useMemo(() => {
-    let sortableItems = [...findings];
+    let sortableItems = [...moduleFindings];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         const aValue = a[sortConfig.key];
@@ -3233,7 +3360,7 @@ const ReportsView = ({
       });
     }
     return sortableItems;
-  }, [findings, sortConfig]);
+  }, [moduleFindings, sortConfig]);
 
   const activeFindingsList = React.useMemo(() => {
     return sortedFindings.filter(f => f.status !== 'Closed');
@@ -3248,12 +3375,6 @@ const ReportsView = ({
     const plantIdScope = user.role !== 'Administrador' ? user.plantId : undefined;
     return FindingService.subscribeToFindings((data) => {
       setFindings(data);
-      setStats({
-        total: data.length,
-        open: data.filter(f => f.status === 'Open').length,
-        inReview: data.filter(f => f.status === 'InReview').length,
-        closed: data.filter(f => f.status === 'Closed').length,
-      });
     }, plantIdScope);
   }, [user]);
 
@@ -3278,7 +3399,7 @@ const ReportsView = ({
   };
 
   const exportToPDF = async () => {
-    if (findings.length === 0) {
+    if (moduleFindings.length === 0) {
       alert("No hay hallazgos para exportar en este momento.");
       return;
     }
@@ -3288,18 +3409,19 @@ const ReportsView = ({
       const sett = settingsDoc.exists() ? settingsDoc.data() as ReportSettings : {};
 
       const docPDF = new jsPDF();
+      const reportTitle = moduleTab === 'VOSO' ? 'Reporte de Inspecciones VOSO' : 'Reporte de Orden y Limpieza (5S)';
       
       // Header Text & Company
-      docPDF.setFontSize(20);
+      docPDF.setFontSize(18);
       docPDF.setTextColor(24, 24, 27); // zinc-900
-      docPDF.text(sett.companyName || 'Reporte de Hallazgos', 14, 22);
+      docPDF.text(sanitizeForPDF(sett.companyName || reportTitle, 40), 14, 22);
       
       docPDF.setFontSize(10);
       docPDF.setTextColor(113, 113, 122); // zinc-500
-      docPDF.text(sett.headerText || 'Sistema de Gestión de Inspecciones', 14, 30);
+      docPDF.text(sanitizeForPDF(sett.headerText || (moduleTab === 'VOSO' ? 'Sistema de Gestión VOSO' : 'Módulo de Orden y Limpieza'), 80), 14, 30);
       docPDF.text(`Generado el: ${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}`, 14, 36);
 
-      // Add Logo if exists (at the end for layering if needed, but simple for now)
+      // Add Logo if exists
       if (sett.logoUrl) {
         try {
           docPDF.addImage(sett.logoUrl, 'JPEG', 160, 10, 35, 35);
@@ -3308,11 +3430,11 @@ const ReportsView = ({
         }
       }
 
-      const tableData = findings.map(f => [
+      const tableData = moduleFindings.map(f => [
         getFindingDate(f) ? format(getFindingDate(f)!, 'dd/MM/yy') : '-',
-        f.areaName || '-',
-        f.operatorName || '-',
-        f.description || '-',
+        sanitizeForPDF(f.areaName, 25),
+        sanitizeForPDF(f.operatorName, 25),
+        sanitizeForPDF(f.description, 130),
         f.status === 'Open' ? 'Pendiente' : f.status === 'InReview' ? 'En Revisión' : 'Cerrado',
         f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy') : '-'
       ]);
@@ -3322,7 +3444,7 @@ const ReportsView = ({
         head: [['Fecha', 'Área', 'Operador', 'Descripción', 'Estado', 'Cierre']],
         body: tableData,
         theme: 'striped',
-        headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255], fontStyle: 'bold' },
+        headStyles: { fillColor: moduleTab === 'VOSO' ? [24, 24, 27] : [147, 51, 234], textColor: [255, 255, 255], fontStyle: 'bold' },
         styles: { fontSize: 8, cellPadding: 3 },
         margin: { top: 45 }
       });
@@ -3334,17 +3456,18 @@ const ReportsView = ({
         docPDF.setFontSize(8);
         docPDF.setTextColor(161, 161, 170); // zinc-400
         docPDF.text(
-          sett.footerText || 'Este documento es un reporte oficial generado por el sistema de inspecciones.',
+          sanitizeForPDF(sett.footerText || 'Este documento es un reporte oficial del sistema.', 90),
           14, 
           docPDF.internal.pageSize.height - 10
         );
         docPDF.text(`Página ${i} de ${pageCount}`, docPDF.internal.pageSize.width - 30, docPDF.internal.pageSize.height - 10);
       }
 
-      docPDF.save(`reporte-inspecciones-${format(new Date(), 'yyyyMMdd')}.pdf`);
+      const fileName = moduleTab === 'VOSO' ? 'reporte-voso' : 'reporte-orden-limpieza';
+      docPDF.save(`${fileName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
     } catch (err) {
       console.error("Error generating PDF", err);
-      alert("Error al generar el PDF. Verifica la configuración del logo (debe ser una URL válida o Base64 JPEG).");
+      alert("Error al generar el PDF.");
     }
   };
 
@@ -3435,7 +3558,34 @@ const ReportsView = ({
 
   return (
     <div className="space-y-8">
-      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Reportes Históricos</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Reportes Históricos</h2>
+        
+        {/* Module Tab Selector */}
+        <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/10 gap-1">
+          <button
+            onClick={() => setModuleTab('VOSO')}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 ${
+              moduleTab === 'VOSO'
+                ? 'bg-brand-blue text-white shadow-sm'
+                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            <span>👁️👂 Metodología VOSO</span>
+          </button>
+          <button
+            onClick={() => setModuleTab('OrdenYLimpieza')}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 ${
+              moduleTab === 'OrdenYLimpieza'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+            <span>Orden y Limpieza</span>
+          </button>
+        </div>
+      </div>
       
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none">
@@ -4008,6 +4158,15 @@ const NotificationCenter = ({
   readIds: string[],
   user: AppUser
 }) => {
+  const [filterMode, setFilterMode] = useState<'unread' | 'all'>('unread');
+
+  const unreadNotifications = notifications.filter(n => !readIds.includes(n.id));
+  const displayNotifications = filterMode === 'unread' ? unreadNotifications : notifications;
+
+  const handleMarkAllRead = () => {
+    unreadNotifications.forEach(n => onRead(n.id));
+  };
+
   return (
     <AnimatePresence>
       {show && (
@@ -4026,26 +4185,80 @@ const NotificationCenter = ({
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             className="fixed top-0 right-0 w-full max-w-sm h-screen bg-white dark:bg-black shadow-2xl dark:shadow-none z-50 flex flex-col border-l border-transparent dark:border-white/20"
           >
-            <div className="p-6 border-b border-zinc-100 dark:border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BellRing className="w-5 h-5 text-brand-blue dark:text-sky-400" />
-                <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Notificaciones</h3>
+            <div className="p-6 border-b border-zinc-100 dark:border-white/10 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BellRing className="w-5 h-5 text-brand-blue dark:text-sky-400" />
+                  <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Notificaciones</h3>
+                </div>
+                <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-full transition-colors text-zinc-400 dark:text-zinc-600">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-full transition-colors text-zinc-400 dark:text-zinc-600">
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* Filter Tabs */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode('unread')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      filterMode === 'unread'
+                        ? 'bg-white dark:bg-black text-brand-blue dark:text-sky-400 shadow-xs font-black'
+                        : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>Nuevas</span>
+                    {unreadNotifications.length > 0 && (
+                      <span className="px-1.5 py-0.2 bg-brand-blue dark:bg-sky-500 text-white text-[9px] font-black rounded-full">
+                        {unreadNotifications.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      filterMode === 'all'
+                        ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs font-black'
+                        : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Todas ({notifications.length})
+                  </button>
+                </div>
+
+                {unreadNotifications.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllRead}
+                    className="text-[10px] font-bold text-brand-blue dark:text-sky-400 hover:underline uppercase tracking-tight cursor-pointer"
+                  >
+                    Marcar leídas
+                  </button>
+                )}
+              </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar dark:bg-black">
-              {notifications.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-zinc-400 gap-4 opacity-50">
-                  <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center border dark:border-white/10">
-                    <Bell className="w-8 h-8 text-zinc-400 dark:text-white" />
+              {displayNotifications.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-zinc-400 gap-3 opacity-60 p-6 text-center">
+                  <div className="w-14 h-14 bg-zinc-50 dark:bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-100 dark:border-white/10">
+                    <CheckCircle2 className="w-7 h-7 text-emerald-500/60" />
                   </div>
-                  <p className="font-medium text-sm dark:text-white">No tienes notificaciones</p>
+                  <div>
+                    <p className="font-bold text-sm text-zinc-800 dark:text-white">
+                      {filterMode === 'unread' ? '¡Estás al día!' : 'Sin notificaciones'}
+                    </p>
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
+                      {filterMode === 'unread' 
+                        ? 'No tienes notificaciones nuevas sin leer.' 
+                        : 'No se encontraron notificaciones registradas.'}
+                    </p>
+                  </div>
                 </div>
               ) : (
-                notifications.map((n, idx) => {
+                displayNotifications.map((n, idx) => {
                   const isRead = readIds.includes(n.id);
                   const isAdmin = user.role === 'Administrador';
                   
@@ -6850,7 +7063,7 @@ const AppLayout = ({
   theme: 'light' | 'dark',
   setTheme: (t: 'light' | 'dark') => void
 }) => {
-  const [activeTab, setActiveTab] = useState<'Home' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig'>('Home');
+  const [activeTab, setActiveTab] = useState<'Home' | 'OrdenLimpieza' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig' | 'Help'>('Home');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -6868,6 +7081,45 @@ const AppLayout = ({
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
+
+  // Meteored Weather state for global Header
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
+  const [weatherError, setWeatherError] = useState<boolean>(false);
+  const [isWeatherExpanded, setIsWeatherExpanded] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchWeatherConditions = async () => {
+      setLoadingWeather(true);
+      setWeatherError(false);
+      try {
+        const data = await meteoredService.getHourlyForecast();
+        if (isMounted) {
+          if (data) {
+            setWeather(data);
+          } else {
+            setWeatherError(true);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching Meteored weather:", err);
+        if (isMounted) {
+          setWeatherError(true);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingWeather(false);
+        }
+      }
+    };
+
+    fetchWeatherConditions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     // 1. Detect if already in standalone mode (installed)
@@ -7072,7 +7324,7 @@ const AppLayout = ({
     <div data-theme={theme} className="min-h-screen bg-zinc-50 dark:bg-black bg-concrete flex flex-col md:flex-row transition-colors duration-200">
           {/* Sidebar Navigation (Desktop & Tablet) */}
           <aside className={`hidden md:flex flex-col ${isSidebarCollapsed ? 'w-24' : 'w-64'} bg-white dark:bg-black border-r border-zinc-100 dark:border-white/10 h-screen sticky top-0 z-40 p-6 transition-all duration-300 ease-in-out`}>
-            <div className={`flex flex-col mb-10 gap-6 ${isSidebarCollapsed ? 'items-center' : ''}`}>
+            <div className={`flex flex-col mb-6 gap-4 ${isSidebarCollapsed ? 'items-center' : ''}`}>
               <div className="flex items-center justify-between w-full">
                 <button 
                   onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -7094,6 +7346,48 @@ const AppLayout = ({
               <div className={isSidebarCollapsed ? 'w-full flex justify-center' : 'px-2'}>
                 <Logo isCollapsed={isSidebarCollapsed} className={isSidebarCollapsed ? 'h-24 px-2' : 'h-12'} />
               </div>
+
+              {/* Operator Profile Card directly under Logo */}
+              <div className={`w-full p-3 bg-gradient-to-br from-zinc-50 via-sky-500/5 to-blue-500/5 dark:from-zinc-900 dark:via-zinc-900 dark:to-sky-950/20 rounded-2xl border border-zinc-200/70 dark:border-white/10 ${isSidebarCollapsed ? 'flex justify-center p-2' : ''} transition-all shadow-2xs`}>
+                {isSidebarCollapsed ? (
+                  <div className="relative group cursor-pointer" title={`Operador: ${user.name} (${user.role})`}>
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white font-black text-sm flex items-center justify-center border border-white/20 shadow-md shadow-sky-500/20 shrink-0">
+                      {user.name?.charAt(0) || user.email.charAt(0)}
+                    </div>
+                    {isOffline && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white dark:border-black rounded-full animate-ping" />
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white font-black text-sm flex items-center justify-center border border-white/20 shadow-md shadow-sky-500/20 shrink-0">
+                      {user.name?.charAt(0) || user.email.charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] font-black uppercase text-zinc-400 dark:text-zinc-500 tracking-wider">
+                          Usuario
+                        </span>
+                        <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 shrink-0">
+                          {user.role}
+                        </span>
+                      </div>
+                      <p className="text-xs font-black text-zinc-900 dark:text-white truncate transition-colors leading-tight mt-0.5">
+                        {user.name}
+                      </p>
+                      <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 truncate mt-0.5">
+                        {user.email.replace('@chekify.local', '')}
+                      </p>
+                      {isOffline && (
+                        <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-extrabold uppercase rounded-md">
+                          <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                          <span>Desconectado</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex-1 space-y-2">
@@ -7102,10 +7396,20 @@ const AppLayout = ({
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
                   activeTab === 'Home' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                 }`}
-                title={isSidebarCollapsed ? "Panel" : undefined}
+                title={isSidebarCollapsed ? "Panel VOSO" : undefined}
               >
                 <LayoutDashboard className="w-5 h-5 shrink-0" />
-                {!isSidebarCollapsed && <span>Panel</span>}
+                {!isSidebarCollapsed && <span>Panel VOSO</span>}
+              </button>
+              <button 
+                onClick={() => setActiveTab('OrdenLimpieza')}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                  activeTab === 'OrdenLimpieza' ? 'bg-purple-600 text-white shadow-md shadow-purple-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                }`}
+                title={isSidebarCollapsed ? "Orden & Limpieza" : undefined}
+              >
+                <Sparkles className="w-5 h-5 shrink-0 text-purple-400" />
+                {!isSidebarCollapsed && <span>Orden & Limpieza</span>}
               </button>
               <button 
                 onClick={() => setActiveTab('History')}
@@ -7173,21 +7477,6 @@ const AppLayout = ({
                   {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
                 </button>
               )}
-              <div className={`px-4 py-4 bg-zinc-50 dark:bg-zinc-900 rounded-2xl ${isSidebarCollapsed ? 'flex justify-center' : ''} border border-transparent dark:border-white/5`}>
-                {isSidebarCollapsed ? (
-                  <div className="w-10 h-10 rounded-full bg-zinc-900 dark:bg-black flex items-center justify-center text-[10px] text-white font-black border-2 border-white dark:border-white/20 shadow-sm dark:shadow-none shrink-0">
-                    {user.name?.charAt(0) || user.email.charAt(0)}
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-1">
-                      {user.role}
-                    </p>
-                    <p className="text-xs font-bold text-zinc-900 dark:text-white transition-colors truncate">{user.name}</p>
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate mt-1">{user.email.replace('@chekify.local', '')}</p>
-                  </>
-                )}
-              </div>
               <button 
                 onClick={() => signOut(auth)}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all font-bold text-sm`}
@@ -7207,58 +7496,202 @@ const AppLayout = ({
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Header (Mobile & Sticky desktop header) */}
-            <header className="bg-white/80 dark:bg-black/80 border-b border-zinc-100 dark:border-white/10 px-4 md:px-8 py-4 sticky top-0 z-40 backdrop-blur-md transition-colors duration-200">
-              <div className="max-w-7xl mx-auto flex items-center justify-between">
-                {/* Mobile Identity */}
-                <div className="flex items-center gap-3 md:hidden h-10">
-                  <Logo />
-                </div>
-
-                {/* Welcome & Time (Desktop) */}
-                <div className="hidden md:flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-zinc-900 dark:text-white font-bold text-lg leading-tight transition-colors">
-                      ¡Bienvenido! {user.name}
-                    </h2>
-                    {isOffline && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-bold uppercase rounded-full animate-pulse">
-                        <AlertCircle className="w-2.5 h-2.5" />
-                        Desconectado
-                      </span>
-                    )}
+            <header className="bg-white/90 dark:bg-zinc-950/90 border-b border-zinc-200/80 dark:border-white/10 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3 sticky top-0 z-40 backdrop-blur-md transition-colors duration-200 shadow-xs">
+              <div className="max-w-7xl mx-auto flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2 sm:gap-4 min-w-0">
+                  {/* Mobile Identity / Welcome */}
+                  <div className="flex items-center gap-2.5 md:hidden min-w-0 flex-1">
+                    <Logo className="h-8 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-zinc-900 dark:text-white font-black text-xs sm:text-sm truncate leading-tight">
+                        ¡Bienvenido! <span className="text-brand-blue dark:text-sky-400">{user.name}</span>
+                      </h2>
+                      {isOffline && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-bold uppercase rounded-full mt-0.5">
+                          <AlertCircle className="w-2 h-2 shrink-0" />
+                          Desconectado
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs text-zinc-400 dark:text-zinc-500 font-medium">
-                    {format(currentTime, "EEEE, dd 'de' MMMM • HH:mm:ss", { locale: es })}
-                  </p>
+
+                  {/* Active View Title & Date/Time (Desktop) */}
+                  <div className="hidden md:flex flex-col min-w-0 flex-1 pr-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <h1 className="text-zinc-900 dark:text-white font-black text-sm lg:text-base leading-tight transition-colors truncate tracking-tight">
+                        {activeTab === 'Home' ? 'Panel VOSO' : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial de Inspecciones' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda / Instructivo'}
+                      </h1>
+                      {isOffline && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-extrabold uppercase rounded-full animate-pulse shrink-0">
+                          <AlertCircle className="w-2.5 h-2.5" />
+                          Desconectado
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] lg:text-xs text-zinc-400 dark:text-zinc-500 font-semibold truncate mt-0.5">
+                      {format(currentTime, "EEEE, dd 'de' MMMM • HH:mm:ss", { locale: es })}
+                    </p>
+                  </div>
+
+                  {/* Header Actions & Weather Summary Pill */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    
+                    {/* Compact Weather Summary Pill in Header */}
+                    <button
+                      onClick={() => setIsWeatherExpanded(!isWeatherExpanded)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer ${
+                        isWeatherExpanded 
+                          ? 'bg-sky-500/20 border-sky-500/40 text-sky-900 dark:text-sky-200 ring-2 ring-sky-500/20' 
+                          : 'bg-gradient-to-r from-sky-500/10 via-blue-500/5 to-indigo-500/10 hover:bg-sky-500/15 border-sky-500/20 text-sky-900 dark:text-sky-300'
+                      }`}
+                      title="Ver condiciones meteorológicas detalladas"
+                    >
+                      {loadingWeather ? (
+                        <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span className="hidden sm:inline text-[11px]">Cargando clima...</span>
+                        </div>
+                      ) : weatherError || !weather ? (
+                        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                          <CloudOff className="w-3.5 h-3.5" />
+                          <span className="text-[11px]">Clima N/A</span>
+                        </div>
+                      ) : (
+                        <>
+                          <CloudSun className="w-4 h-4 text-sky-500 shrink-0" />
+                          <div className="flex items-center gap-1.5 text-[11px] sm:text-xs">
+                            <span className="font-extrabold text-zinc-900 dark:text-white">{weather.temperature}</span>
+                            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                            <span className="text-zinc-600 dark:text-zinc-300 hidden sm:inline">💧 {weather.humidity}</span>
+                            <span className="text-zinc-300 dark:text-zinc-700 hidden md:inline">•</span>
+                            <span className="text-zinc-600 dark:text-zinc-300 hidden md:inline">🌬 {weather.windSpeed}</span>
+                          </div>
+                          <ChevronDown className={`w-3.5 h-3.5 text-sky-500 transition-transform duration-200 ${isWeatherExpanded ? 'rotate-180' : ''}`} />
+                        </>
+                      )}
+                    </button>
+
+                    <div className="h-4 w-px bg-zinc-200 dark:bg-white/10 hidden sm:block mx-0.5" />
+
+                    <button
+                      onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                      className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 shrink-0"
+                      title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
+                    >
+                      {theme === 'light' ? <Moon className="w-4 h-4 sm:w-5 sm:h-5" /> : <Sun className="w-4 h-4 sm:w-5 sm:h-5" />}
+                    </button>
+                    <button 
+                      onClick={() => signOut(auth)}
+                      className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10 shrink-0"
+                      title="Cerrar Sesión"
+                    >
+                      <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </button>
+                    <button 
+                      onClick={() => setShowNotificationCenter(true)}
+                      className="relative text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 shrink-0"
+                      title="Notificaciones"
+                    >
+                      <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-black animate-pulse-subtle">
+                          {unreadCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                    className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-2"
-                    title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
-                  >
-                    {theme === 'light' ? <Moon className="w-6 h-6" /> : <Sun className="w-6 h-6" />}
-                  </button>
-                  <button 
-                    onClick={() => setShowNotificationCenter(true)}
-                    className="relative text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-2"
-                  >
-                    <Bell className="w-6 h-6" />
-                    {unreadCount > 0 && (
-                      <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-black animate-pulse-subtle">
-                        {unreadCount}
-                      </span>
-                    )}
-                  </button>
-                  {/* Mobile logout */}
-                  <button 
-                    onClick={() => signOut(auth)}
-                    className="md:hidden text-zinc-400 hover:text-red-500 transition-colors p-2"
-                  >
-                    <LogOut className="w-6 h-6" />
-                  </button>
-                </div>
+                {/* Expandable Weather Detail Drawer in Header */}
+                <AnimatePresence>
+                  {isWeatherExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0, y: -6 }}
+                      animate={{ opacity: 1, height: 'auto', y: 0 }}
+                      exit={{ opacity: 0, height: 0, y: -6 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden pt-2 pb-1 border-t border-sky-500/15"
+                    >
+                      <div className="bg-gradient-to-br from-sky-500/10 via-blue-500/5 to-indigo-500/10 border border-sky-500/20 rounded-2xl p-3.5 backdrop-blur-md">
+                        <div className="flex items-center justify-between mb-2.5">
+                          <div className="flex items-center gap-2">
+                            <CloudSun className="w-4 h-4 text-sky-500" />
+                            <h4 className="font-extrabold text-xs uppercase tracking-wider text-zinc-900 dark:text-white">
+                              Condiciones Meteorológicas
+                            </h4>
+                          </div>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
+                            Meteored Business API
+                          </span>
+                        </div>
+
+                        {loadingWeather ? (
+                          <div className="flex items-center justify-center gap-2 py-3 text-xs font-bold text-sky-600 dark:text-sky-400">
+                            <Loader2 className="w-4 h-4 animate-spin text-sky-500" />
+                            <span>Cargando condiciones meteorológicas...</span>
+                          </div>
+                        ) : weatherError || !weather ? (
+                          <div className="flex items-center justify-center gap-2 py-3 text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/5 rounded-xl border border-amber-500/10">
+                            <CloudOff className="w-4 h-4 text-amber-500" />
+                            <span>Clima no disponible</span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-1">
+                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
+                              <span className="text-base">🌡</span>
+                              <div className="min-w-0">
+                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Temp</p>
+                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">{weather.temperature}</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
+                              <span className="text-base">💧</span>
+                              <div className="min-w-0">
+                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Humedad</p>
+                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">{weather.humidity}</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
+                              <span className="text-base">🌬</span>
+                              <div className="min-w-0">
+                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Viento</p>
+                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">
+                                  {weather.windSpeed} {weather.windDirection && weather.windDirection !== 'N/A' ? `(${weather.windDirection})` : ''}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
+                              <span className="text-base">🌧</span>
+                              <div className="min-w-0">
+                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Precip.</p>
+                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">{weather.precipitation}</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
+                              <span className="text-base">☁</span>
+                              <div className="min-w-0">
+                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Estado</p>
+                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">{weather.symbol}</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
+                              <span className="text-base">🕒</span>
+                              <div className="min-w-0">
+                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Hora Pronóst.</p>
+                                <p className="text-[11px] font-black text-zinc-900 dark:text-white truncate">{weather.forecastDate}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </header>
 
@@ -7283,10 +7716,26 @@ const AppLayout = ({
                     exit={{ opacity: 0, y: -10 }}
                   >
                     {user.role === 'Operador' ? (
-                      <OperatorDashboard user={user} setActiveTab={setActiveTab} />
+                      <OperatorDashboard 
+                        user={user} 
+                        setActiveTab={setActiveTab} 
+                        weather={weather}
+                        loadingWeather={loadingWeather}
+                        weatherError={weatherError}
+                      />
                     ) : (
                       <SupervisorDashboard user={user} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
                     )}
+                  </motion.div>
+                )}
+                {activeTab === 'OrdenLimpieza' && (
+                  <motion.div 
+                    key="orden-limpieza"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <OrdenYLimpiezaDashboard user={user} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
                   </motion.div>
                 )}
                 {activeTab === 'History' && (
@@ -7344,21 +7793,28 @@ const AppLayout = ({
             <SyncStatusTray />
 
             {/* Mobile Navigation */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 px-6 pt-4 pb-2 z-40 transition-colors duration-200">
-              <div className="max-w-2xl mx-auto flex items-center justify-around mb-2">
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 px-4 pt-3 pb-2 z-40 transition-colors duration-200">
+              <div className="max-w-2xl mx-auto flex items-center justify-around mb-1">
                 <button 
                   onClick={() => setActiveTab('Home')}
-                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Home' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
+                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Home' ? 'text-brand-blue dark:text-sky-400' : 'text-zinc-400'}`}
                 >
-                  <LayoutDashboard className="w-6 h-6" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Inicio</span>
+                  <LayoutDashboard className="w-5 h-5" />
+                  <span className="text-[9px] font-bold uppercase tracking-wider">VOSO</span>
+                </button>
+                <button 
+                  onClick={() => setActiveTab('OrdenLimpieza')}
+                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'OrdenLimpieza' ? 'text-purple-600 dark:text-purple-400' : 'text-zinc-400'}`}
+                >
+                  <Sparkles className="w-5 h-5" />
+                  <span className="text-[9px] font-bold uppercase tracking-wider">Orden & Limp.</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('History')}
-                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'History' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
+                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'History' ? 'text-brand-blue dark:text-sky-400' : 'text-zinc-400'}`}
                 >
-                  <History className="w-6 h-6" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Historial</span>
+                  <History className="w-5 h-5" />
+                  <span className="text-[9px] font-bold uppercase tracking-wider">Historial</span>
                 </button>
                 {user.role === 'Administrador' && (
                   <>

@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { WeatherData } from './services/meteoredService';
+
 export type UserRole = 'Administrador' | 'Supervisor' | 'Operador';
 
 export interface AppUser {
@@ -87,6 +89,7 @@ export interface Finding {
   equipmentCompletedAt?: any;
   equipmentDurationSeconds?: number;
   history?: HistoryEntry[];
+  clima?: WeatherData | null;
 }
 
 export interface Notification {
