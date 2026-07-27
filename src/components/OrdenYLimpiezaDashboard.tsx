@@ -490,7 +490,7 @@ export const OrdenYLimpiezaDashboard = ({
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-3 py-1 bg-purple-500/25 border border-purple-400/30 text-purple-200 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0">
                 <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-                Módulo 5S
+                Modulo Orden & Limpieza (5S)
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black uppercase tracking-tight text-white leading-tight break-words">
