@@ -12,10 +12,16 @@
 @variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+
   body {
-    @apply bg-zinc-50 text-zinc-900 transition-colors duration-500;
+    @apply bg-zinc-50 text-zinc-900 transition-colors duration-300;
     margin: 0;
     font-family: var(--font-sans);
+    overflow-x: hidden;
   }
   
   .dark body {

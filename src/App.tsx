@@ -1549,12 +1549,12 @@ const OperatorDashboard = ({
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={startScanner}
-            className="w-full aspect-square max-w-md mx-auto bg-white dark:bg-black border-2 border-dashed border-zinc-200 dark:border-white/20 rounded-3xl flex flex-col items-center justify-center gap-4 hover:border-zinc-900 dark:hover:border-white transition-colors group"
+            className="w-full max-w-md mx-auto py-5 px-4 bg-white dark:bg-black border-2 border-dashed border-zinc-200 dark:border-white/20 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-zinc-900 dark:hover:border-white transition-colors group cursor-pointer shadow-2xs"
           >
-            <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center group-hover:bg-zinc-900 dark:group-hover:bg-white transition-colors">
-              <QrCode className="w-10 h-10 text-zinc-400 dark:text-zinc-500 group-hover:text-white dark:group-hover:text-black" />
+            <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center group-hover:bg-zinc-900 dark:group-hover:bg-white transition-colors">
+              <QrCode className="w-6 h-6 text-zinc-400 dark:text-zinc-500 group-hover:text-white dark:group-hover:text-black" />
             </div>
-            <span className="text-zinc-500 dark:text-zinc-400 font-medium group-hover:text-brand-blue dark:group-hover:text-white transition-colors text-center px-4 uppercase tracking-tight text-xs">Escanear Código QR de Área</span>
+            <span className="text-zinc-600 dark:text-zinc-300 font-bold group-hover:text-brand-blue dark:group-hover:text-white transition-colors text-center px-4 uppercase tracking-tight text-xs">Escanear Código QR de Área</span>
           </motion.button>
           
           <div className="max-w-md mx-auto">
@@ -1734,16 +1734,16 @@ const OperatorDashboard = ({
               )}
             </div>
             
-            <div className="p-10 bg-zinc-900 dark:bg-zinc-950/40 border border-transparent dark:border-white/10 rounded-[3.5rem] text-white shadow-2xl dark:shadow-none relative overflow-hidden group">
+            <div className="p-5 sm:p-7 bg-zinc-900 dark:bg-zinc-950/40 border border-transparent dark:border-white/10 rounded-2xl sm:rounded-3xl text-white shadow-xl dark:shadow-none relative overflow-hidden group">
                <div className="absolute top-0 right-0 w-80 h-80 bg-brand-blue/20 rounded-full -mr-32 -mt-32 blur-[100px] group-hover:bg-brand-green/20 transition-all duration-1000" />
                <div className="relative z-10">
-                 <div className="flex items-center gap-4 mb-6">
-                    <div className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full border border-white/10 text-[10px] font-black uppercase tracking-[0.3em] text-sky-400">
+                 <div className="flex items-center gap-4 mb-3 sm:mb-5">
+                    <div className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/10 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.25em] text-sky-400">
                       {areaEquipment.length > 0 ? 'Ruta de Inspección' : 'Área sin equipos'}
                     </div>
                  </div>
 
-                 <h2 className="text-5xl font-black tracking-tighter mb-6 leading-none text-white">
+                 <h2 className="text-2xl sm:text-4xl font-black tracking-tighter mb-4 leading-tight text-white">
                     {currentEquipment?.name || selectedArea.name}
                  </h2>
                  
@@ -1765,7 +1765,7 @@ const OperatorDashboard = ({
             </div>
 
             {areaEquipment.length > 0 && (
-              <div className="space-y-4 bg-zinc-50/50 dark:bg-black/20 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-white/5 shadow-sm dark:shadow-none">
+              <div className="space-y-3 bg-zinc-50/50 dark:bg-black/20 p-4 sm:p-5 rounded-2xl border border-zinc-100 dark:border-white/5 shadow-2xs dark:shadow-none">
                  <div className="flex items-center justify-between text-zinc-900 dark:text-white px-1">
                    <div className="flex items-center gap-2">
                      <span className="text-xs font-black uppercase tracking-[0.2em]">Progreso</span>
@@ -1886,7 +1886,7 @@ const OperatorDashboard = ({
               <button
                 onClick={() => setShowEquipmentSummary(true)}
                 disabled={!allItemsChecked()}
-                className={`w-full py-6 rounded-3xl font-bold flex items-center justify-center gap-3 transition-all border ${
+                className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 sm:gap-3 transition-all border ${
                   allItemsChecked() 
                     ? 'bg-zinc-900 text-white shadow-xl shadow-zinc-200 dark:shadow-none active:scale-[0.98]' 
                     : 'bg-zinc-100 text-zinc-300 border-zinc-200 grayscale cursor-not-allowed'
@@ -7066,6 +7066,7 @@ const AppLayout = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'Home' | 'OrdenLimpieza' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig' | 'Help'>('Home');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
@@ -7501,20 +7502,28 @@ const AppLayout = ({
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Header (Mobile & Sticky desktop header) */}
-            <header className="bg-white/90 dark:bg-zinc-950/90 border-b border-zinc-200/80 dark:border-white/10 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3 sticky top-0 z-40 backdrop-blur-md transition-colors duration-200 shadow-xs">
+            <header className="bg-white/90 dark:bg-zinc-950/90 border-b border-zinc-200/80 dark:border-white/10 px-2.5 sm:px-6 md:px-8 py-2 sm:py-3 sticky top-0 z-40 backdrop-blur-md transition-colors duration-200 shadow-xs">
               <div className="max-w-7xl mx-auto flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-2 sm:gap-4 min-w-0">
+                <div className="flex items-center justify-between gap-1.5 sm:gap-4 min-w-0">
                   {/* Mobile Identity / Welcome */}
-                  <div className="flex items-center gap-2.5 md:hidden min-w-0 flex-1">
-                    <Logo className="h-8 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-zinc-900 dark:text-white font-black text-xs sm:text-sm truncate leading-tight">
-                        ¡Bienvenido! <span className="text-brand-blue dark:text-sky-400">{user.name}</span>
-                      </h2>
+                  <div className="flex items-center gap-2 md:hidden min-w-0 flex-1">
+                    <Logo className="h-7 shrink-0" />
+                    <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-sky-600 to-blue-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 shadow-xs">
+                        {user.name?.charAt(0) || user.email.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="text-zinc-900 dark:text-white font-extrabold text-[11px] truncate leading-tight">
+                          {user.name?.split(' ')[0] || 'Usuario'}
+                        </h2>
+                        <span className="text-[8px] font-black uppercase text-sky-600 dark:text-sky-400 block leading-none">
+                          {user.role}
+                        </span>
+                      </div>
                       {isOffline && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-bold uppercase rounded-full mt-0.5">
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[7px] font-black uppercase rounded-full shrink-0">
                           <AlertCircle className="w-2 h-2 shrink-0" />
-                          Desconectado
+                          Offline
                         </span>
                       )}
                     </div>
@@ -7539,12 +7548,12 @@ const AppLayout = ({
                   </div>
 
                   {/* Header Actions & Weather Summary Pill */}
-                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                     
                     {/* Compact Weather Summary Pill in Header */}
                     <button
                       onClick={() => setIsWeatherExpanded(!isWeatherExpanded)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl border text-[10px] sm:text-xs font-bold transition-all shadow-2xs shrink-0 cursor-pointer ${
                         isWeatherExpanded 
                           ? 'bg-sky-500/20 border-sky-500/40 text-sky-900 dark:text-sky-200 ring-2 ring-sky-500/20' 
                           : 'bg-gradient-to-r from-sky-500/10 via-blue-500/5 to-indigo-500/10 hover:bg-sky-500/15 border-sky-500/20 text-sky-900 dark:text-sky-300'
@@ -7552,26 +7561,24 @@ const AppLayout = ({
                       title="Ver condiciones meteorológicas detalladas"
                     >
                       {loadingWeather ? (
-                        <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span className="hidden sm:inline text-[11px]">Cargando clima...</span>
+                        <div className="flex items-center gap-1 text-sky-600 dark:text-sky-400">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span className="hidden sm:inline text-[10px]">Clima...</span>
                         </div>
                       ) : weatherError || !weather ? (
-                        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                          <CloudOff className="w-3.5 h-3.5" />
-                          <span className="text-[11px]">Clima N/A</span>
+                        <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                          <CloudOff className="w-3 h-3" />
+                          <span className="text-[10px]">N/A</span>
                         </div>
                       ) : (
                         <>
-                          <CloudSun className="w-4 h-4 text-sky-500 shrink-0" />
-                          <div className="flex items-center gap-1.5 text-[11px] sm:text-xs">
+                          <CloudSun className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                          <div className="flex items-center gap-1 text-[10px] sm:text-xs">
                             <span className="font-extrabold text-zinc-900 dark:text-white">{weather.temperature}</span>
-                            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                            <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline">•</span>
                             <span className="text-zinc-600 dark:text-zinc-300 hidden sm:inline">💧 {weather.humidity}</span>
-                            <span className="text-zinc-300 dark:text-zinc-700 hidden md:inline">•</span>
-                            <span className="text-zinc-600 dark:text-zinc-300 hidden md:inline">🌬 {weather.windSpeed}</span>
                           </div>
-                          <ChevronDown className={`w-3.5 h-3.5 text-sky-500 transition-transform duration-200 ${isWeatherExpanded ? 'rotate-180' : ''}`} />
+                          <ChevronDown className={`w-3 h-3 text-sky-500 transition-transform duration-200 ${isWeatherExpanded ? 'rotate-180' : ''}`} />
                         </>
                       )}
                     </button>
@@ -7580,29 +7587,29 @@ const AppLayout = ({
 
                     <button
                       onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                      className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 shrink-0"
+                      className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200/50 dark:border-white/5 shrink-0"
                       title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
                     >
-                      {theme === 'light' ? <Moon className="w-4 h-4 sm:w-5 sm:h-5" /> : <Sun className="w-4 h-4 sm:w-5 sm:h-5" />}
-                    </button>
-                    <button 
-                      onClick={() => signOut(auth)}
-                      className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10 shrink-0"
-                      title="Cerrar Sesión"
-                    >
-                      <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                      {theme === 'light' ? <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                     </button>
                     <button 
                       onClick={() => setShowNotificationCenter(true)}
-                      className="relative text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 shrink-0"
+                      className="relative text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200/50 dark:border-white/5 shrink-0"
                       title="Notificaciones"
                     >
-                      <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       {unreadCount > 0 && (
-                        <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-black animate-pulse-subtle">
+                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[7px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-black animate-pulse-subtle">
                           {unreadCount}
                         </span>
                       )}
+                    </button>
+                    <button 
+                      onClick={() => signOut(auth)}
+                      className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1.5 sm:p-2 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100/50 dark:border-red-500/20 text-red-500 shrink-0"
+                      title="Cerrar Sesión"
+                    >
+                      <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </button>
                   </div>
                 </div>
@@ -7625,7 +7632,7 @@ const AppLayout = ({
             </header>
 
             {/* Content Body */}
-            <main className="flex-1 p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full mb-24 md:mb-0 transitioning-all duration-300 dark:text-white">
+            <main className="flex-1 p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full pb-20 sm:pb-24 md:pb-8 transition-all duration-300 dark:text-white">
               <NotificationCenter 
                 show={showNotificationCenter}
                 onClose={() => setShowNotificationCenter(false)}
@@ -7721,67 +7728,218 @@ const AppLayout = ({
             </main>
             <SyncStatusTray />
 
-            {/* Mobile Navigation */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 px-4 pt-3 pb-2 z-40 transition-colors duration-200">
-              <div className="max-w-2xl mx-auto flex items-center justify-around mb-1">
+            {/* Mobile Navigation Dock */}
+            <nav className="md:hidden fixed bottom-3 left-3 right-3 bg-white/95 dark:bg-zinc-900/95 border border-zinc-200/80 dark:border-white/10 rounded-2xl p-1.5 shadow-xl shadow-black/10 z-40 backdrop-blur-xl transition-all duration-200">
+              <div className="flex items-center justify-around gap-1">
+                {/* 1. Home VOSO */}
                 <button 
-                  onClick={() => setActiveTab('Home')}
-                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Home' ? 'text-brand-blue dark:text-sky-400' : 'text-zinc-400'}`}
+                  onClick={() => { setActiveTab('Home'); setIsMobileMoreOpen(false); }}
+                  className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                    activeTab === 'Home' 
+                      ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/25' 
+                      : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
                 >
-                  <LayoutDashboard className="w-5 h-5" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">VOSO</span>
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  <span className="text-[9px] font-black uppercase tracking-wider leading-none">VOSO</span>
                 </button>
+
+                {/* 2. Orden & Limpieza */}
                 <button 
-                  onClick={() => setActiveTab('OrdenLimpieza')}
-                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'OrdenLimpieza' ? 'text-purple-600 dark:text-purple-400' : 'text-zinc-400'}`}
+                  onClick={() => { setActiveTab('OrdenLimpieza'); setIsMobileMoreOpen(false); }}
+                  className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                    activeTab === 'OrdenLimpieza' 
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25' 
+                      : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
                 >
-                  <Sparkles className="w-5 h-5" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">Orden & Limp.</span>
+                  <Sparkles className="w-4 h-4 shrink-0" />
+                  <span className="text-[9px] font-black uppercase tracking-wider leading-none">5S Limp.</span>
                 </button>
+
+                {/* 3. Historial */}
                 <button 
-                  onClick={() => setActiveTab('History')}
-                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'History' ? 'text-brand-blue dark:text-sky-400' : 'text-zinc-400'}`}
+                  onClick={() => { setActiveTab('History'); setIsMobileMoreOpen(false); }}
+                  className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                    activeTab === 'History' 
+                      ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/25' 
+                      : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
                 >
-                  <History className="w-5 h-5" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">Historial</span>
+                  <History className="w-4 h-4 shrink-0" />
+                  <span className="text-[9px] font-black uppercase tracking-wider leading-none">Historial</span>
                 </button>
-                {user.role === 'Administrador' && (
-                  <>
-                    <button 
-                      onClick={() => setActiveTab('Admin')}
-                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Admin' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
-                    >
-                      <Users className="w-6 h-6" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-center leading-[1]">General</span>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab('Notifications')}
-                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Notifications' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
-                    >
-                      <Bell className="w-6 h-6" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-center leading-[1]">Msjes</span>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab('PDFConfig')}
-                      className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'PDFConfig' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
-                    >
-                      <Shield className="w-6 h-6" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-center leading-[1]">PDF</span>
-                    </button>
-                  </>
+
+                {/* 4. If Non-Admin -> Help */}
+                {user.role !== 'Administrador' && (
+                  <button 
+                    onClick={() => { setActiveTab('Help'); setIsMobileMoreOpen(false); }}
+                    className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                      activeTab === 'Help' 
+                        ? 'bg-gradient-to-r from-zinc-800 to-zinc-950 dark:from-zinc-100 dark:to-white text-white dark:text-zinc-950 shadow-md' 
+                        : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <HelpCircle className="w-4 h-4 shrink-0" />
+                    <span className="text-[9px] font-black uppercase tracking-wider leading-none">Ayuda</span>
+                  </button>
                 )}
-                <button 
-                  onClick={() => setActiveTab('Help')}
-                  className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'Help' ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400'}`}
-                >
-                  <HelpCircle className="w-6 h-6" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-center leading-[1]">Ayuda</span>
-                </button>
-              </div>
-              <div className="text-center">
-                <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-[0.2em]">Developed by maisser.cl</p>
+
+                {/* 4. If Admin -> More / Admin Sheet trigger */}
+                {user.role === 'Administrador' && (
+                  <button 
+                    onClick={() => setIsMobileMoreOpen(!isMobileMoreOpen)}
+                    className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all relative ${
+                      ['Admin', 'Notifications', 'PDFConfig', 'Help'].includes(activeTab) || isMobileMoreOpen
+                        ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 shadow-md' 
+                        : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <div className="relative">
+                      <Menu className="w-4 h-4 shrink-0" />
+                      {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                      )}
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-wider leading-none">Menú</span>
+                  </button>
+                )}
               </div>
             </nav>
+
+            {/* Mobile "Más" Slide-Up Sheet for Admins / Extra links */}
+            <AnimatePresence>
+              {isMobileMoreOpen && (
+                <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
+                  {/* Backdrop */}
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsMobileMoreOpen(false)}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+                  />
+
+                  {/* Sheet */}
+                  <motion.div 
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                    className="relative bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 rounded-t-3xl p-5 shadow-2xl z-10 space-y-4 max-h-[85vh] overflow-y-auto"
+                  >
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-900">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-black text-sm uppercase tracking-tight text-zinc-900 dark:text-white">Menú de Control</h3>
+                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                            {user.role}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 font-semibold mt-0.5">Opciones avanzadas y configuración</p>
+                      </div>
+                      <button 
+                        onClick={() => setIsMobileMoreOpen(false)}
+                        className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button 
+                        onClick={() => { setActiveTab('Admin'); setIsMobileMoreOpen(false); }}
+                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all ${
+                          activeTab === 'Admin'
+                            ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                            : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        <Users className="w-5 h-5 text-sky-500" />
+                        <div>
+                          <p className="text-xs font-extrabold uppercase tracking-tight">Administración</p>
+                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Gestión de usuarios y plantas</p>
+                        </div>
+                      </button>
+
+                      <button 
+                        onClick={() => { setActiveTab('Notifications'); setIsMobileMoreOpen(false); }}
+                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all relative ${
+                          activeTab === 'Notifications'
+                            ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                            : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <Bell className="w-5 h-5 text-amber-500" />
+                          {unreadCount > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[8px] font-black">
+                              {unreadCount}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs font-extrabold uppercase tracking-tight">Notificaciones</p>
+                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Mensajes del sistema</p>
+                        </div>
+                      </button>
+
+                      <button 
+                        onClick={() => { setActiveTab('PDFConfig'); setIsMobileMoreOpen(false); }}
+                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all ${
+                          activeTab === 'PDFConfig'
+                            ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                            : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        <Shield className="w-5 h-5 text-emerald-500" />
+                        <div>
+                          <p className="text-xs font-extrabold uppercase tracking-tight">Config. PDF</p>
+                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Encabezados e imágenes</p>
+                        </div>
+                      </button>
+
+                      <button 
+                        onClick={() => { setActiveTab('Help'); setIsMobileMoreOpen(false); }}
+                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all ${
+                          activeTab === 'Help'
+                            ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                            : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        <HelpCircle className="w-5 h-5 text-indigo-500" />
+                        <div>
+                          <p className="text-xs font-extrabold uppercase tracking-tight">Ayuda</p>
+                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Manuales e instructivos</p>
+                        </div>
+                      </button>
+                    </div>
+
+                    <div className="pt-2 flex items-center gap-2">
+                      <button 
+                        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                        className="flex-1 py-3 px-4 rounded-xl bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-zinc-200/50 dark:border-white/5"
+                      >
+                        {theme === 'light' ? <Moon className="w-4 h-4 text-indigo-500" /> : <Sun className="w-4 h-4 text-amber-500" />}
+                        <span>Modo {theme === 'light' ? 'Oscuro' : 'Claro'}</span>
+                      </button>
+
+                      <button 
+                        onClick={() => signOut(auth)}
+                        className="flex-1 py-3 px-4 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-red-200/50 dark:border-red-500/20"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Salir</span>
+                      </button>
+                    </div>
+
+                    <div className="text-center pt-1 pb-1">
+                      <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Developed by maisser.cl</p>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
             
             {/* PWA Install Banner */}
             <AnimatePresence>
