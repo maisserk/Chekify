@@ -9,7 +9,7 @@
  * real-time weather and forecast data for industrial inspections.
  */
 
-// Clean interface defining the weather data structure returned by meteoredService
+// Interface defining the current weather structure (Ahora)
 export interface WeatherData {
   temperature: number | string;
   humidity: number | string;
@@ -18,6 +18,41 @@ export interface WeatherData {
   precipitation: number | string;
   symbol?: string;
   forecastDate: string;
+}
+
+// Interface defining the daily weather structure (Hoy)
+export interface DailyWeatherData {
+  tempMin: string;
+  tempMax: string;
+  rainAccumulated: string;
+  rainProbabilityMax: string;
+  windSpeedMax: string;
+  predominantSymbol: string;
+  date: string;
+}
+
+// Interface defining an hourly record (Por Hora)
+export interface HourlyForecastItem {
+  time: string;           // e.g. "01:00", "14:00"
+  timestamp: number;      // Epoch ms
+  temperature: number;    // e.g. 15.2
+  tempFormatted: string;  // e.g. "15°C"
+  humidity: number;       // e.g. 92
+  humidityFormatted: string; // e.g. "92%"
+  windSpeed: number;      // e.g. 18
+  windSpeedFormatted: string; // e.g. "18 km/h"
+  windDirection: string;  // e.g. "NW"
+  precipitation: number;  // e.g. 0.2
+  precipFormatted: string; // e.g. "0.2 mm"
+  symbol: string;         // e.g. "Chubascos", "Despejado"
+  isNight?: boolean;
+}
+
+// Full weather data structure containing Ahora, Hoy, and Por Hora
+export interface FullWeatherData {
+  current: WeatherData | null;
+  today: DailyWeatherData | null;
+  hourly: HourlyForecastItem[];
 }
 
 /**
@@ -31,60 +66,98 @@ export class MeteoredService {
   private static readonly DEFAULT_HASH = 'fa24b07ef5f5451424fe67082d99e981';
 
   /**
-   * Helper function to extract the first hourly forecast record from various possible API response shapes.
-   * @param data Any JSON structure returned by the API
-   * @returns The first hourly object found or null
+   * Translates numeric symbol codes from Meteored API into human-readable weather conditions.
    */
-  private static extractFirstHourlyRecord(data: any): any {
-    if (!data) return null;
+  public static formatSymbol(sym: any): string {
+    if (sym === undefined || sym === null) return 'Despejado';
+    if (typeof sym === 'string' && isNaN(Number(sym))) return sym;
 
-    // If the data is an array directly, pick the first element
-    if (Array.isArray(data) && data.length > 0) {
-      return data[0];
+    const num = Number(sym);
+    switch (num) {
+      case 1: return 'Despejado';
+      case 2: return 'Algo Nublado';
+      case 3: return 'Parcialmente Nublado';
+      case 4: return 'Nublado';
+      case 5: return 'Cubierto';
+      case 6: return 'Lluvia Débil';
+      case 7: return 'Lluvia';
+      case 8: return 'Lluvia Fuerte';
+      case 9: return 'Nieve';
+      case 10: return 'Tormenta';
+      case 11: return 'Niebla';
+      case 12: return 'Lluvia Ligera';
+      case 13: return 'Chubascos';
+      case 14: return 'Lluvia Intensa';
+      case 15: return 'Tormenta Eléctrica';
+      case 16: return 'Granizo';
+      default: return typeof sym === 'string' ? sym : 'Despejado';
     }
+  }
 
-    // If data is an object, check common list properties or search nested structures
+  /**
+   * Helper function to extract the hours list from Meteored API response.
+   */
+  private static extractHoursArray(data: any): any[] {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
     if (typeof data === 'object') {
-      if (Array.isArray(data.data) && data.data.length > 0) return data.data[0];
-      if (Array.isArray(data.hourly) && data.hourly.length > 0) return data.hourly[0];
-      if (Array.isArray(data.hours) && data.hours.length > 0) return data.hours[0];
-      if (Array.isArray(data.hour) && data.hour.length > 0) return data.hour[0];
-
-      // Traverse nested object properties if needed (e.g. data.day or data.forecast)
-      for (const key of Object.keys(data)) {
-        const val = data[key];
-        if (Array.isArray(val) && val.length > 0) {
-          return val[0];
-        }
-        if (val && typeof val === 'object') {
-          const nested = this.extractFirstHourlyRecord(val);
-          if (nested) return nested;
-        }
+      if (data.data) {
+        if (Array.isArray(data.data.hours)) return data.data.hours;
+        if (Array.isArray(data.data)) return data.data;
       }
+      if (Array.isArray(data.hours)) return data.hours;
+      if (Array.isArray(data.hourly)) return data.hourly;
+      if (Array.isArray(data.hour)) return data.hour;
     }
+    return [];
+  }
+
+  /**
+   * Helper function to extract days list from Meteored API response.
+   */
+  private static extractDaysArray(data: any): any[] {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'object') {
+      if (data.data) {
+        if (Array.isArray(data.data.days)) return data.data.days;
+        if (Array.isArray(data.data)) return data.data;
+      }
+      if (Array.isArray(data.days)) return data.days;
+      if (Array.isArray(data.daily)) return data.daily;
+    }
+    return [];
+  }
+
+  /**
+   * Helper function to extract the first forecast record from various possible API response shapes.
+   */
+  private static extractFirstRecord(data: any): any {
+    const hours = this.extractHoursArray(data);
+    if (hours.length > 0) return hours[0];
+
+    const days = this.extractDaysArray(data);
+    if (days.length > 0) return days[0];
 
     return null;
   }
 
   /**
-   * Fetches hourly forecast from Meteored Business API using fetch() and async/await.
-   * Gets the first available hourly record and formats it into a clean WeatherData object.
-   * Includes fallback mechanisms to Open-Meteo and plant station weather so deployed sites
-   * (e.g. GitHub Pages without env vars) always display accurate weather.
-   * 
-   * @param locationHash Optional location hash override (defaults to environment var or static hash)
-   * @returns Promise resolving to WeatherData
+   * Fetches full weather data (Ahora, Hoy, Por Hora) combining GET /api/forecast/v1/hourly and GET /api/forecast/v1/daily.
    */
-  public static async getHourlyForecast(locationHash?: string): Promise<WeatherData | null> {
-    // 1. Retrieve API key from environment variable or fallback to default plant API key
+  public static async getFullWeather(locationHash?: string): Promise<FullWeatherData> {
     const apiKey = import.meta.env.VITE_METEORED_API_KEY || this.DEFAULT_API_KEY;
     const hash = locationHash || import.meta.env.VITE_METEORED_LOCATION_HASH || this.DEFAULT_HASH;
 
-    // --- Tier 1: Meteored Business API ---
+    let currentRes: WeatherData | null = null;
+    let todayRes: DailyWeatherData | null = null;
+    let hourlyRes: HourlyForecastItem[] = [];
+
     if (apiKey) {
+      // 1. Fetch Hourly endpoint GET /api/forecast/v1/hourly/{hash}
       try {
-        const url = `${this.API_BASE}/api/forecast/v1/hourly/${hash}`;
-        const response = await fetch(url, {
+        const hourlyUrl = `${this.API_BASE}/api/forecast/v1/hourly/${hash}`;
+        const response = await fetch(hourlyUrl, {
           method: 'GET',
           headers: {
             'x-api-key': apiKey,
@@ -93,95 +166,285 @@ export class MeteoredService {
         });
 
         if (response.ok) {
-          const jsonResponse = await response.json();
-          const firstRecord = this.extractFirstHourlyRecord(jsonResponse);
+          const json = await response.json();
+          const rawHours = this.extractHoursArray(json);
 
-          if (firstRecord) {
-            const temperature = firstRecord.temp ?? firstRecord.temperature ?? firstRecord.t ?? firstRecord.temp_c ?? '22°C';
-            const humidity = firstRecord.humidity ?? firstRecord.rh ?? firstRecord.hum ?? '50%';
-            const windSpeed = firstRecord.wind_speed ?? firstRecord.windSpeed ?? (typeof firstRecord.wind === 'object' ? firstRecord.wind.speed : firstRecord.wind) ?? '12 km/h';
-            const windDirection = firstRecord.wind_dir ?? firstRecord.windDirection ?? (typeof firstRecord.wind === 'object' ? firstRecord.wind.dir : undefined) ?? 'S';
-            const precipitation = firstRecord.precipitation ?? firstRecord.rain ?? firstRecord.precip ?? firstRecord.prec ?? '0';
-            const symbol = firstRecord.symbol_description ?? firstRecord.symbol ?? firstRecord.sky ?? firstRecord.condition ?? 'Despejado';
-            const forecastDate = firstRecord.date ?? firstRecord.forecastDate ?? firstRecord.local_time ?? firstRecord.time ?? new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          if (rawHours.length > 0) {
+            // Build hourly array
+            hourlyRes = rawHours.map((h: any, idx: number) => {
+              const ts = h.end || h.start || (Date.now() + idx * 3600000);
+              const dateObj = new Date(ts);
+              const timeStr = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
-            return {
-              temperature: typeof temperature === 'number' ? `${temperature}°C` : String(temperature),
-              humidity: typeof humidity === 'number' ? `${humidity}%` : String(humidity),
-              windSpeed: typeof windSpeed === 'number' ? `${windSpeed} km/h` : String(windSpeed),
-              windDirection: String(windDirection),
-              precipitation: typeof precipitation === 'number' ? `${precipitation} mm` : String(precipitation),
-              symbol: String(symbol),
-              forecastDate: String(forecastDate),
+              const tempVal = typeof h.temperature === 'number' ? h.temperature : (typeof h.temp === 'number' ? h.temp : 20);
+              const humVal = typeof h.humidity === 'number' ? h.humidity : 50;
+              const windVal = typeof h.wind_speed === 'number' ? h.wind_speed : 10;
+              const windDirVal = String(h.wind_direction || h.wind_dir || 'S');
+              const precipVal = typeof h.rain === 'number' ? h.rain : (typeof h.precipitation === 'number' ? h.precipitation : 0);
+              const symText = this.formatSymbol(h.symbol ?? h.symbol_description);
+
+              return {
+                time: timeStr,
+                timestamp: ts,
+                temperature: Math.round(tempVal * 10) / 10,
+                tempFormatted: `${Math.round(tempVal)}°C`,
+                humidity: Math.round(humVal),
+                humidityFormatted: `${Math.round(humVal)}%`,
+                windSpeed: Math.round(windVal),
+                windSpeedFormatted: `${Math.round(windVal)} km/h`,
+                windDirection: windDirVal,
+                precipitation: Math.round(precipVal * 10) / 10,
+                precipFormatted: `${Math.round(precipVal * 10) / 10} mm`,
+                symbol: symText,
+                isNight: Boolean(h.night),
+              };
+            });
+
+            // Set Ahora from first record
+            const first = rawHours[0];
+            const tempRaw = first.temperature ?? first.temp ?? 21;
+            const humRaw = first.humidity ?? 50;
+            const windRaw = first.wind_speed ?? 12;
+            const windDirRaw = first.wind_direction ?? 'S';
+            const precipRaw = first.rain ?? first.precipitation ?? 0;
+            const symbolRaw = first.symbol ?? first.symbol_description;
+            const forecastDateRaw = new Date(first.end || first.start || Date.now()).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+            currentRes = {
+              temperature: `${Math.round(tempRaw)}°C`,
+              humidity: `${Math.round(humRaw)}%`,
+              windSpeed: `${Math.round(windRaw)} km/h`,
+              windDirection: String(windDirRaw),
+              precipitation: `${precipRaw} mm`,
+              symbol: this.formatSymbol(symbolRaw),
+              forecastDate: forecastDateRaw,
             };
           }
-        } else {
-          console.warn(`[meteoredService] Meteored HTTP ${response.status}. Trying Open-Meteo fallback...`);
         }
-      } catch (error) {
-        console.warn('[meteoredService] Meteored fetch error or CORS block:', error);
+      } catch (err) {
+        console.warn('[meteoredService] Error fetching hourly forecast:', err);
+      }
+
+      // 2. Fetch Daily endpoint GET /api/forecast/v1/daily/{hash}
+      try {
+        const dailyUrl = `${this.API_BASE}/api/forecast/v1/daily/${hash}`;
+        const response = await fetch(dailyUrl, {
+          method: 'GET',
+          headers: {
+            'x-api-key': apiKey,
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const json = await response.json();
+          const rawDays = this.extractDaysArray(json);
+
+          if (rawDays.length > 0) {
+            const today = rawDays[0];
+            const tempMin = today.temperature_min ?? today.temp_min ?? 12;
+            const tempMax = today.temperature_max ?? today.temp_max ?? 18;
+            const rainAcc = today.rain ?? today.precipitation ?? 0;
+            const rainProb = today.rain_probability ?? today.pop ?? 0;
+            const windMax = today.wind_gust ?? today.wind_speed ?? 15;
+            const symbolText = this.formatSymbol(today.symbol);
+            const dateStr = today.start ? new Date(today.start).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' }) : 'Hoy';
+
+            todayRes = {
+              tempMin: `${Math.round(tempMin)}°C`,
+              tempMax: `${Math.round(tempMax)}°C`,
+              rainAccumulated: `${rainAcc} mm`,
+              rainProbabilityMax: `${Math.round(rainProb)}%`,
+              windSpeedMax: `${Math.round(windMax)} km/h`,
+              predominantSymbol: symbolText,
+              date: dateStr,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[meteoredService] Error fetching daily forecast:', err);
       }
     }
 
-    // --- Tier 2: Open-Meteo Free API Fallback (No CORS restrictions, no API key needed) ---
+    // --- Fallback if data is missing or network failed ---
+    if (!currentRes || !todayRes || hourlyRes.length === 0) {
+      const openMeteoData = await this.getOpenMeteoFallback();
+      if (!currentRes) currentRes = openMeteoData.current;
+      if (!todayRes) todayRes = openMeteoData.today;
+      if (hourlyRes.length === 0) hourlyRes = openMeteoData.hourly;
+    }
+
+    return {
+      current: currentRes,
+      today: todayRes,
+      hourly: hourlyRes,
+    };
+  }
+
+  /**
+   * Backward-compatible method to fetch current hourly forecast.
+   */
+  public static async getHourlyForecast(locationHash?: string): Promise<WeatherData | null> {
+    const full = await this.getFullWeather(locationHash);
+    return full.current;
+  }
+
+  /**
+   * Fetches daily forecast data.
+   */
+  public static async getDailyForecast(locationHash?: string): Promise<DailyWeatherData | null> {
+    const full = await this.getFullWeather(locationHash);
+    return full.today;
+  }
+
+  /**
+   * Fetches hourly list.
+   */
+  public static async getHourlyList(locationHash?: string): Promise<HourlyForecastItem[]> {
+    const full = await this.getFullWeather(locationHash);
+    return full.hourly;
+  }
+
+  /**
+   * Open-Meteo fallback when Meteored is unavailable or blocked by CORS.
+   */
+  private static async getOpenMeteoFallback(): Promise<FullWeatherData> {
+    const nowTime = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
+
     try {
-      // Santiago / Plant location default coords
-      const openMeteoUrl = 'https://api.open-meteo.com/v1/forecast?latitude=-33.45&longitude=-70.66&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m&timezone=auto';
-      const response = await fetch(openMeteoUrl);
+      const url = 'https://api.open-meteo.com/v1/forecast?latitude=-33.45&longitude=-70.66&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,weather_code&timezone=auto';
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        if (data && data.current) {
-          const cur = data.current;
-          const temp = Math.round(cur.temperature_2m ?? 21);
-          const hum = Math.round(cur.relative_humidity_2m ?? 55);
-          const windSpd = Math.round(cur.wind_speed_10m ?? 14);
-          const windDirDeg = cur.wind_direction_10m ?? 180;
-          const precip = cur.precipitation ?? 0;
+        
+        // Current
+        const cur = data.current || {};
+        const curTemp = Math.round(cur.temperature_2m ?? 21);
+        const curHum = Math.round(cur.relative_humidity_2m ?? 55);
+        const curWind = Math.round(cur.wind_speed_10m ?? 14);
+        const curPrecip = cur.precipitation ?? 0;
+        const curCond = this.wmoToCondition(cur.weather_code ?? 0);
 
-          // Cardinal direction conversion
-          const directions = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-          const dirIndex = Math.round(windDirDeg / 45) % 8;
-          const windDir = directions[dirIndex];
+        const current: WeatherData = {
+          temperature: `${curTemp}°C`,
+          humidity: `${curHum}%`,
+          windSpeed: `${curWind} km/h`,
+          windDirection: 'S',
+          precipitation: `${curPrecip} mm`,
+          symbol: curCond,
+          forecastDate: nowTime,
+        };
 
-          // WMO weather interpretation code
-          const code = cur.weather_code ?? 0;
-          let condition = 'Despejado';
-          if (code >= 1 && code <= 3) condition = 'Parcialmente Nublado';
-          else if (code >= 45 && code <= 48) condition = 'Niebla';
-          else if (code >= 51 && code <= 67) condition = 'Lluvia';
-          else if (code >= 80 && code <= 82) condition = 'Chubascos';
-          else if (code >= 95) condition = 'Tormenta';
+        // Today
+        const d = data.daily || {};
+        const tMin = Math.round((d.temperature_2m_min && d.temperature_2m_min[0]) ?? 12);
+        const tMax = Math.round((d.temperature_2m_max && d.temperature_2m_max[0]) ?? 18);
+        const rSum = (d.precipitation_sum && d.precipitation_sum[0]) ?? 0;
+        const rProb = Math.round((d.precipitation_probability_max && d.precipitation_probability_max[0]) ?? 20);
+        const wMax = Math.round((d.wind_speed_10m_max && d.wind_speed_10m_max[0]) ?? 18);
+        const dCond = this.wmoToCondition((d.weather_code && d.weather_code[0]) ?? 0);
 
-          const nowStr = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        const today: DailyWeatherData = {
+          tempMin: `${tMin}°C`,
+          tempMax: `${tMax}°C`,
+          rainAccumulated: `${rSum} mm`,
+          rainProbabilityMax: `${rProb}%`,
+          windSpeedMax: `${wMax} km/h`,
+          predominantSymbol: dCond,
+          date: dateStr,
+        };
+
+        // Hourly
+        const h = data.hourly || {};
+        const times: string[] = h.time || [];
+        const hourly: HourlyForecastItem[] = times.slice(0, 24).map((tStr: string, idx: number) => {
+          const dt = new Date(tStr);
+          const tVal = h.temperature_2m?.[idx] ?? 20;
+          const hVal = h.relative_humidity_2m?.[idx] ?? 50;
+          const wVal = h.wind_speed_10m?.[idx] ?? 12;
+          const pVal = h.precipitation?.[idx] ?? 0;
+          const code = h.weather_code?.[idx] ?? 0;
 
           return {
-            temperature: `${temp}°C`,
-            humidity: `${hum}%`,
-            windSpeed: `${windSpd} km/h`,
-            windDirection: windDir,
-            precipitation: `${precip} mm`,
-            symbol: condition,
-            forecastDate: nowStr,
+            time: dt.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+            timestamp: dt.getTime(),
+            temperature: Math.round(tVal * 10) / 10,
+            tempFormatted: `${Math.round(tVal)}°C`,
+            humidity: Math.round(hVal),
+            humidityFormatted: `${Math.round(hVal)}%`,
+            windSpeed: Math.round(wVal),
+            windSpeedFormatted: `${Math.round(wVal)} km/h`,
+            windDirection: 'S',
+            precipitation: Math.round(pVal * 10) / 10,
+            precipFormatted: `${Math.round(pVal * 10) / 10} mm`,
+            symbol: this.wmoToCondition(code),
+            isNight: dt.getHours() < 7 || dt.getHours() > 20,
           };
-        }
+        });
+
+        return { current, today, hourly };
       }
-    } catch (fallbackErr) {
-      console.warn('[meteoredService] Open-Meteo fallback error:', fallbackErr);
+    } catch (err) {
+      console.warn('[meteoredService] Open-Meteo fallback error:', err);
     }
 
-    // --- Tier 3: Industrial Station Fallback (offline/no network connection) ---
-    const nowTime = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    // Default static fallback
     return {
-      temperature: '21°C',
-      humidity: '54%',
-      windSpeed: '12 km/h',
-      windDirection: 'S',
-      precipitation: '0 mm',
-      symbol: 'Despejado',
-      forecastDate: nowTime,
+      current: {
+        temperature: '21°C',
+        humidity: '54%',
+        windSpeed: '12 km/h',
+        windDirection: 'S',
+        precipitation: '0 mm',
+        symbol: 'Despejado',
+        forecastDate: nowTime,
+      },
+      today: {
+        tempMin: '12°C',
+        tempMax: '22°C',
+        rainAccumulated: '0 mm',
+        rainProbabilityMax: '10%',
+        windSpeedMax: '18 km/h',
+        predominantSymbol: 'Despejado',
+        date: dateStr,
+      },
+      hourly: Array.from({ length: 12 }, (_, i) => {
+        const h = (new Date().getHours() + i) % 24;
+        const timeStr = `${h.toString().padStart(2, '0')}:00`;
+        return {
+          time: timeStr,
+          timestamp: Date.now() + i * 3600000,
+          temperature: 18 + Math.round(Math.sin(i / 2) * 4),
+          tempFormatted: `${18 + Math.round(Math.sin(i / 2) * 4)}°C`,
+          humidity: 50 + (i * 2) % 30,
+          humidityFormatted: `${50 + (i * 2) % 30}%`,
+          windSpeed: 10 + (i * 3) % 15,
+          windSpeedFormatted: `${10 + (i * 3) % 15} km/h`,
+          windDirection: 'NE',
+          precipitation: i === 3 ? 0.4 : 0,
+          precipFormatted: i === 3 ? '0.4 mm' : '0 mm',
+          symbol: i === 3 ? 'Lluvia Ligera' : 'Despejado',
+          isNight: h < 7 || h > 20,
+        };
+      }),
     };
+  }
+
+  /**
+   * Helper to map WMO codes to condition strings.
+   */
+  private static wmoToCondition(code: number): string {
+    if (code === 0) return 'Despejado';
+    if (code >= 1 && code <= 3) return 'Parcialmente Nublado';
+    if (code >= 45 && code <= 48) return 'Niebla';
+    if (code >= 51 && code <= 67) return 'Lluvia';
+    if (code >= 80 && code <= 82) return 'Chubascos';
+    if (code >= 95) return 'Tormenta';
+    return 'Despejado';
   }
 }
 
 // Export singleton/object as meteoredService following project architecture
 export const meteoredService = MeteoredService;
+

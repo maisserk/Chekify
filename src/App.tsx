@@ -108,6 +108,7 @@ import { EquipmentService } from './services/EquipmentService';
 import { FindingService } from './services/FindingService';
 import { offlineQueueService } from './services/OfflineQueueService';
 import { meteoredService, WeatherData } from './services/meteoredService';
+import { WeatherModule } from './components/WeatherModule';
 import { OfflineImage } from './components/OfflineImage';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
@@ -7394,21 +7395,25 @@ const AppLayout = ({
               <button 
                 onClick={() => setActiveTab('Home')}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                  activeTab === 'Home' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                  activeTab === 'Home' 
+                    ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/25 ring-1 ring-sky-400/30' 
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-sky-500/10 hover:text-sky-600 dark:hover:text-sky-400'
                 }`}
-                title={isSidebarCollapsed ? "Panel VOSO" : undefined}
+                title={isSidebarCollapsed ? "Inspección Primaria" : undefined}
               >
-                <LayoutDashboard className="w-5 h-5 shrink-0" />
-                {!isSidebarCollapsed && <span>Panel VOSO</span>}
+                <ShieldCheck className={`w-5 h-5 shrink-0 ${activeTab === 'Home' ? 'text-white' : 'text-sky-500'}`} />
+                {!isSidebarCollapsed && <span>Inspección Primaria</span>}
               </button>
               <button 
                 onClick={() => setActiveTab('OrdenLimpieza')}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                  activeTab === 'OrdenLimpieza' ? 'bg-purple-600 text-white shadow-md shadow-purple-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                  activeTab === 'OrdenLimpieza' 
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 ring-1 ring-purple-400/30' 
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-purple-500/10 hover:text-purple-600 dark:hover:text-purple-400'
                 }`}
                 title={isSidebarCollapsed ? "Orden & Limpieza" : undefined}
               >
-                <Sparkles className="w-5 h-5 shrink-0 text-purple-400" />
+                <Sparkles className={`w-5 h-5 shrink-0 ${activeTab === 'OrdenLimpieza' ? 'text-white' : 'text-purple-500'}`} />
                 {!isSidebarCollapsed && <span>Orden & Limpieza</span>}
               </button>
               <button 
@@ -7519,7 +7524,7 @@ const AppLayout = ({
                   <div className="hidden md:flex flex-col min-w-0 flex-1 pr-2">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <h1 className="text-zinc-900 dark:text-white font-black text-sm lg:text-base leading-tight transition-colors truncate tracking-tight">
-                        {activeTab === 'Home' ? 'Panel VOSO' : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial de Inspecciones' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda / Instructivo'}
+                        {activeTab === 'Home' ? 'Inspección Primaria' : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial de Inspecciones' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda / Instructivo'}
                       </h1>
                       {isOffline && (
                         <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-extrabold uppercase rounded-full animate-pulse shrink-0">
@@ -7612,83 +7617,7 @@ const AppLayout = ({
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden pt-2 pb-1 border-t border-sky-500/15"
                     >
-                      <div className="bg-gradient-to-br from-sky-500/10 via-blue-500/5 to-indigo-500/10 border border-sky-500/20 rounded-2xl p-3.5 backdrop-blur-md">
-                        <div className="flex items-center justify-between mb-2.5">
-                          <div className="flex items-center gap-2">
-                            <CloudSun className="w-4 h-4 text-sky-500" />
-                            <h4 className="font-extrabold text-xs uppercase tracking-wider text-zinc-900 dark:text-white">
-                              Condiciones Meteorológicas
-                            </h4>
-                          </div>
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
-                            Meteored Business API
-                          </span>
-                        </div>
-
-                        {loadingWeather ? (
-                          <div className="flex items-center justify-center gap-2 py-3 text-xs font-bold text-sky-600 dark:text-sky-400">
-                            <Loader2 className="w-4 h-4 animate-spin text-sky-500" />
-                            <span>Cargando condiciones meteorológicas...</span>
-                          </div>
-                        ) : weatherError || !weather ? (
-                          <div className="flex items-center justify-center gap-2 py-3 text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/5 rounded-xl border border-amber-500/10">
-                            <CloudOff className="w-4 h-4 text-amber-500" />
-                            <span>Clima no disponible</span>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-1">
-                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
-                              <span className="text-base">🌡</span>
-                              <div className="min-w-0">
-                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Temp</p>
-                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">{weather.temperature}</p>
-                              </div>
-                            </div>
-
-                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
-                              <span className="text-base">💧</span>
-                              <div className="min-w-0">
-                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Humedad</p>
-                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">{weather.humidity}</p>
-                              </div>
-                            </div>
-
-                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
-                              <span className="text-base">🌬</span>
-                              <div className="min-w-0">
-                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Viento</p>
-                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">
-                                  {weather.windSpeed} {weather.windDirection && weather.windDirection !== 'N/A' ? `(${weather.windDirection})` : ''}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
-                              <span className="text-base">🌧</span>
-                              <div className="min-w-0">
-                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Precip.</p>
-                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">{weather.precipitation}</p>
-                              </div>
-                            </div>
-
-                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
-                              <span className="text-base">☁</span>
-                              <div className="min-w-0">
-                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Estado</p>
-                                <p className="text-xs font-black text-zinc-900 dark:text-white truncate">{weather.symbol}</p>
-                              </div>
-                            </div>
-
-                            <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-sky-100 dark:border-white/5 flex items-center gap-2.5">
-                              <span className="text-base">🕒</span>
-                              <div className="min-w-0">
-                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-0.5">Hora Pronóst.</p>
-                                <p className="text-[11px] font-black text-zinc-900 dark:text-white truncate">{weather.forecastDate}</p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <WeatherModule onClose={() => setIsWeatherExpanded(false)} />
                     </motion.div>
                   )}
                 </AnimatePresence>
