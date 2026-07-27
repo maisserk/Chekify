@@ -2861,7 +2861,7 @@ const SupervisorDashboard = ({
               Panel VOSO (Ver, Oír, Sentir, Oler)
             </h2>
             <p className="text-xs sm:text-sm md:text-base text-emerald-100/90 font-medium max-w-2xl leading-relaxed">
-              Consolidador de hallazgos en terreno, indicadores HSEC, gestión de criticidades y seguimiento de acciones correctivas.
+              Consolidador de hallazgos en terreno, indicadores, gestión de criticidades y seguimiento de acciones correctivas.
             </p>
           </div>
 
