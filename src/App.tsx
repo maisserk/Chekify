@@ -1502,6 +1502,46 @@ const OperatorDashboard = ({
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Header Banner Card for Inspección Primaria */}
+      <div className="bg-gradient-to-r from-sky-950 via-blue-900 to-zinc-950 p-5 sm:p-7 md:p-8 rounded-3xl md:rounded-[2.5rem] border border-sky-500/20 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-sky-500/10 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6 min-w-0">
+          <div className="space-y-2.5 min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-3 py-1 bg-sky-500/25 border border-sky-400/30 text-sky-200 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0">
+                <ShieldCheck className="w-3.5 h-3.5 text-sky-300" />
+                Módulo Inspección Primaria
+              </span>
+              <span className="px-2.5 py-1 bg-white/10 border border-white/10 text-white/90 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                {user.plantId || 'Planta General'}
+              </span>
+            </div>
+            <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black uppercase tracking-tight text-white leading-tight break-words">
+              Inspección Primaria de Planta
+            </h2>
+            <p className="text-xs sm:text-sm md:text-base text-sky-100/90 font-medium max-w-2xl leading-relaxed">
+              Verificación operativa y control de condiciones en terreno para áreas, equipos y procesos productivos (VOSO).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-sky-500/20">
+            {!selectedArea && !scanning && (
+              <button
+                onClick={startScanner}
+                className="px-4 py-3 bg-sky-600 hover:bg-sky-500 text-white font-black text-xs uppercase tracking-wider rounded-2xl flex items-center gap-2 transition-all shadow-lg shadow-sky-900/50 active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                <QrCode className="w-4 h-4 shrink-0" />
+                <span>Escanear QR</span>
+              </button>
+            )}
+            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-right min-w-[130px]">
+              <p className="text-[9px] font-black uppercase text-sky-300 tracking-wider">Operador Activo</p>
+              <p className="text-xs font-black text-white truncate max-w-[150px]">{user.name}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Plant Stats for Operator */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
         <div className="bg-brand-blue text-white p-4 rounded-3xl shadow-lg shadow-sky-100 dark:shadow-none border border-sky-400/20">
