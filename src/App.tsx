@@ -2843,9 +2843,40 @@ const SupervisorDashboard = ({
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Panel VOSO (Ver, Oír, Sentir, Oler)</h2>
+      {/* Header Banner Card for Panel VOSO Administrador */}
+      <div className="bg-gradient-to-r from-slate-950 via-emerald-950 to-zinc-950 p-5 sm:p-7 md:p-8 rounded-3xl md:rounded-[2.5rem] border border-emerald-500/20 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6 min-w-0">
+          <div className="space-y-2.5 min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-3 py-1 bg-emerald-500/25 border border-emerald-400/30 text-emerald-200 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0">
+                <Activity className="w-3.5 h-3.5 text-emerald-300" />
+                Módulo VOSO Admin
+              </span>
+              <span className="px-2.5 py-1 bg-white/10 border border-white/10 text-white/90 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                {user.plantId || 'Todas las Plantas'}
+              </span>
+            </div>
+            <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black uppercase tracking-tight text-white leading-tight break-words">
+              Panel VOSO (Ver, Oír, Sentir, Oler)
+            </h2>
+            <p className="text-xs sm:text-sm md:text-base text-emerald-100/90 font-medium max-w-2xl leading-relaxed">
+              Consolidador de hallazgos en terreno, indicadores HSEC, gestión de criticidades y seguimiento de acciones correctivas.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-emerald-500/20">
+            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-right min-w-[120px]">
+              <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">Hallazgos VOSO</p>
+              <p className="text-xs font-black text-white">{vosoFindings.length} Registros</p>
+            </div>
+            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-right min-w-[120px]">
+              <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">Administrador</p>
+              <p className="text-xs font-black text-white truncate max-w-[140px]">{user.name}</p>
+            </div>
+          </div>
         </div>
+      </div>
 
         {/* Global Statistics (Fixed for VOSO) */}
         <SupervisorStats findings={vosoFindings} />
