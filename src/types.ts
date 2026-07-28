@@ -13,6 +13,11 @@ export interface AppUser {
   name: string;
   role: UserRole;
   plantId?: string;
+  avatarUrl?: string;
+  phone?: string;
+  cargo?: string;
+  rut?: string;
+  departamento?: string;
   dismissedNotifications?: string[];
   readNotifications?: string[];
 }

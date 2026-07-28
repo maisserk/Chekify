@@ -101,7 +101,8 @@ import {
   Thermometer,
   Droplets,
   CloudRain,
-  CloudOff
+  CloudOff,
+  UserCheck
 } from 'lucide-react';
 
 import { EquipmentService } from './services/EquipmentService';
@@ -109,6 +110,7 @@ import { FindingService } from './services/FindingService';
 import { offlineQueueService } from './services/OfflineQueueService';
 import { meteoredService, WeatherData } from './services/meteoredService';
 import { WeatherModule } from './components/WeatherModule';
+import { UserProfileModal } from './components/UserProfileModal';
 import { OfflineImage } from './components/OfflineImage';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
@@ -7141,6 +7143,7 @@ const AppLayout = ({
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   
   // Single, cache-reliable global plants list for the app
   const [plants, setPlants] = useState<{ id: string; name: string }[]>([]);
@@ -7421,11 +7424,19 @@ const AppLayout = ({
               </div>
 
               {/* Operator Profile Card directly under Logo */}
-              <div className={`w-full p-3 bg-gradient-to-br from-zinc-50 via-sky-500/5 to-blue-500/5 dark:from-zinc-900 dark:via-zinc-900 dark:to-sky-950/20 rounded-2xl border border-zinc-200/70 dark:border-white/10 ${isSidebarCollapsed ? 'flex justify-center p-2' : ''} transition-all shadow-2xs`}>
+              <div 
+                onClick={() => setShowProfileModal(true)}
+                className={`w-full p-3 bg-gradient-to-br from-zinc-50 via-sky-500/5 to-blue-500/5 dark:from-zinc-900 dark:via-zinc-900 dark:to-sky-950/20 rounded-2xl border border-zinc-200/70 dark:border-white/10 hover:border-sky-500/40 hover:shadow-md cursor-pointer transition-all shadow-2xs group ${isSidebarCollapsed ? 'flex justify-center p-2' : ''}`}
+                title="Ver y editar mi perfil personal"
+              >
                 {isSidebarCollapsed ? (
-                  <div className="relative group cursor-pointer" title={`Operador: ${user.name} (${user.role})`}>
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white font-black text-sm flex items-center justify-center border border-white/20 shadow-md shadow-sky-500/20 shrink-0">
-                      {user.name?.charAt(0) || user.email.charAt(0)}
+                  <div className="relative group/avatar cursor-pointer">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white font-black text-sm flex items-center justify-center border border-white/20 shadow-md shadow-sky-500/20 shrink-0 overflow-hidden">
+                      {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                      ) : (
+                        user.name?.charAt(0) || user.email.charAt(0)
+                      )}
                     </div>
                     {isOffline && (
                       <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white dark:border-black rounded-full animate-ping" />
@@ -7433,23 +7444,28 @@ const AppLayout = ({
                   </div>
                 ) : (
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white font-black text-sm flex items-center justify-center border border-white/20 shadow-md shadow-sky-500/20 shrink-0">
-                      {user.name?.charAt(0) || user.email.charAt(0)}
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white font-black text-sm flex items-center justify-center border border-white/20 shadow-md shadow-sky-500/20 shrink-0 overflow-hidden relative">
+                      {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                      ) : (
+                        user.name?.charAt(0) || user.email.charAt(0)
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </div>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-[9px] font-black uppercase text-zinc-400 dark:text-zinc-500 tracking-wider">
-                          Usuario
-                        </span>
-                        <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 shrink-0">
+                        <span className="text-[9px] font-black uppercase text-sky-600 dark:text-sky-400 tracking-wider flex items-center gap-1">
                           {user.role}
+                          <Edit3 className="w-2.5 h-2.5 text-sky-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </span>
                       </div>
-                      <p className="text-xs font-black text-zinc-900 dark:text-white truncate transition-colors leading-tight mt-0.5">
+                      <p className="text-xs font-black text-zinc-900 dark:text-white truncate transition-colors leading-tight mt-0.5 group-hover:text-sky-600 dark:group-hover:text-sky-400">
                         {user.name}
                       </p>
                       <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 truncate mt-0.5">
-                        {user.email.replace('@chekify.local', '')}
+                        {user.cargo || user.email.replace('@chekify.local', '')}
                       </p>
                       {isOffline && (
                         <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-extrabold uppercase rounded-md">
@@ -7464,6 +7480,14 @@ const AppLayout = ({
             </div>
 
             <div className="flex-1 space-y-2">
+              <button 
+                onClick={() => setShowProfileModal(true)}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm text-zinc-600 dark:text-zinc-400 hover:bg-sky-500/10 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer`}
+                title={isSidebarCollapsed ? "Mi Perfil" : undefined}
+              >
+                <UserCheck className="w-5 h-5 shrink-0 text-sky-500" />
+                {!isSidebarCollapsed && <span>Mi Perfil</span>}
+              </button>
               <button 
                 onClick={() => setActiveTab('Home')}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
@@ -7579,9 +7603,17 @@ const AppLayout = ({
                   {/* Mobile Identity / Welcome */}
                   <div className="flex items-center gap-2 md:hidden min-w-0 flex-1">
                     <Logo className="h-7 shrink-0" />
-                    <div className="min-w-0 flex-1 flex items-center gap-1.5">
-                      <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-sky-600 to-blue-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 shadow-xs">
-                        {user.name?.charAt(0) || user.email.charAt(0)}
+                    <button 
+                      onClick={() => setShowProfileModal(true)}
+                      className="min-w-0 flex-1 flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left cursor-pointer"
+                      title="Ver y editar mi perfil"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-sky-600 to-blue-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 shadow-xs overflow-hidden border border-white/20">
+                        {user.avatarUrl ? (
+                          <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                        ) : (
+                          user.name?.charAt(0) || user.email.charAt(0)
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <h2 className="text-zinc-900 dark:text-white font-extrabold text-[11px] truncate leading-tight">
@@ -7597,7 +7629,7 @@ const AppLayout = ({
                           Offline
                         </span>
                       )}
-                    </div>
+                    </button>
                   </div>
 
                   {/* Active View Title & Date/Time (Desktop) */}
@@ -7919,6 +7951,17 @@ const AppLayout = ({
 
                     <div className="grid grid-cols-2 gap-2.5">
                       <button 
+                        onClick={() => { setShowProfileModal(true); setIsMobileMoreOpen(false); }}
+                        className="p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all bg-sky-50 dark:bg-sky-500/10 border-sky-200/60 dark:border-sky-500/20 text-zinc-800 dark:text-zinc-200 hover:bg-sky-100 dark:hover:bg-sky-500/20"
+                      >
+                        <UserCheck className="w-5 h-5 text-sky-500" />
+                        <div>
+                          <p className="text-xs font-extrabold uppercase tracking-tight">Mi Perfil</p>
+                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Editar foto y datos personales</p>
+                        </div>
+                      </button>
+
+                      <button 
                         onClick={() => { setActiveTab('Admin'); setIsMobileMoreOpen(false); }}
                         className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all ${
                           activeTab === 'Admin'
@@ -8119,6 +8162,13 @@ const AppLayout = ({
                 </div>
               )}
             </AnimatePresence>
+
+            <UserProfileModal
+              user={user}
+              isOpen={showProfileModal}
+              onClose={() => setShowProfileModal(false)}
+              plants={plants}
+            />
 
             <ToastContainer toasts={toasts} setToasts={setToasts} />
           </div>
