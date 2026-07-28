@@ -20,8 +20,10 @@ import {
   Calendar as CalendarIcon,
   Compass,
   Activity,
-  Plus
+  Plus,
+  HelpCircle
 } from 'lucide-react';
+import { QuickHelpModal } from './QuickHelpModal';
 import { 
   doc, 
   getDoc, 
@@ -267,6 +269,7 @@ export const OrdenYLimpiezaDashboard = ({
   const [endDate, setEndDate] = useState('');
   const [operatorFilter, setOperatorFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showQuickHelp, setShowQuickHelp] = useState(false);
 
   useEffect(() => {
     const plantIdScope = user.role !== 'Administrador' ? user.plantId : undefined;
@@ -501,17 +504,24 @@ export const OrdenYLimpiezaDashboard = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-purple-500/20">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-purple-500/20">
+            <button
+              onClick={() => setShowQuickHelp(true)}
+              className="px-3.5 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
+            >
+              <HelpCircle className="w-4 h-4 text-purple-300 shrink-0" />
+              <span>Ayuda rápida</span>
+            </button>
             <button
               onClick={() => exportFindingsToCSV(filteredFindings, 'reporte-orden-limpieza')}
-              className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial justify-center whitespace-nowrap"
+              className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
             >
               <Download className="w-4 h-4 text-purple-300 shrink-0" />
               <span>CSV ({filteredFindings.length})</span>
             </button>
             <button
               onClick={() => exportFindingsToPDF(filteredFindings, 'Reporte de Orden y Limpieza', 'reporte-orden-limpieza')}
-              className="px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-purple-900/50 flex-1 sm:flex-initial justify-center whitespace-nowrap"
+              className="px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-purple-900/50 flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
             >
               <FileText className="w-4 h-4 shrink-0" />
               <span>Exportar PDF</span>
@@ -897,6 +907,11 @@ export const OrdenYLimpiezaDashboard = ({
           </div>
         )}
       </AnimatePresence>
+      <QuickHelpModal
+        isOpen={showQuickHelp}
+        onClose={() => setShowQuickHelp(false)}
+        moduleKey="5S"
+      />
     </div>
   );
 };

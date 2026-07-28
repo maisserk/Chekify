@@ -111,6 +111,7 @@ import { offlineQueueService } from './services/OfflineQueueService';
 import { meteoredService, WeatherData } from './services/meteoredService';
 import { WeatherModule } from './components/WeatherModule';
 import { UserProfileModal } from './components/UserProfileModal';
+import { QuickHelpModal } from './components/QuickHelpModal';
 import { OfflineImage } from './components/OfflineImage';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
@@ -773,6 +774,7 @@ const OperatorDashboard = ({
   weatherError?: boolean;
 }) => {
   const [scanning, setScanning] = useState(false);
+  const [showQuickHelp, setShowQuickHelp] = useState(false);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -1526,19 +1528,26 @@ const OperatorDashboard = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-sky-500/20">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-sky-500/20">
+            <button
+              onClick={() => setShowQuickHelp(true)}
+              className="px-3.5 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl border border-white/20 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer whitespace-nowrap shadow-sm flex-1 sm:flex-initial"
+            >
+              <HelpCircle className="w-4 h-4 text-sky-300 shrink-0" />
+              <span>Ayuda rápida</span>
+            </button>
             {!selectedArea && !scanning && (
               <button
                 onClick={startScanner}
-                className="px-4 py-3 bg-sky-600 hover:bg-sky-500 text-white font-black text-xs uppercase tracking-wider rounded-2xl flex items-center gap-2 transition-all shadow-lg shadow-sky-900/50 active:scale-95 cursor-pointer whitespace-nowrap"
+                className="px-4 py-3 bg-sky-600 hover:bg-sky-500 text-white font-black text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-sky-900/50 active:scale-95 cursor-pointer whitespace-nowrap flex-1 sm:flex-initial"
               >
                 <QrCode className="w-4 h-4 shrink-0" />
                 <span>Escanear QR</span>
               </button>
             )}
-            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-right min-w-[130px]">
+            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center sm:text-right min-w-[120px] flex-1 sm:flex-initial">
               <p className="text-[9px] font-black uppercase text-sky-300 tracking-wider">Operador Activo</p>
-              <p className="text-xs font-black text-white truncate max-w-[150px]">{user.name}</p>
+              <p className="text-xs font-black text-white truncate max-w-[150px] mx-auto sm:ml-auto">{user.name}</p>
             </div>
           </div>
         </div>
@@ -1599,9 +1608,9 @@ const OperatorDashboard = ({
             <span className="text-zinc-600 dark:text-zinc-300 font-bold group-hover:text-brand-blue dark:group-hover:text-white transition-colors text-center px-4 uppercase tracking-tight text-xs">Escanear Código QR de Área</span>
           </motion.button>
           
-          <div className="max-w-md mx-auto">
+          <div className="max-w-2xl mx-auto">
             <p className="text-center text-xs font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-3">O selecciona manualmente</p>
-            <div className="grid gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {areas.length > 0 ? (
                 areas.slice(0, 3).map((area, idx) => (
                   <button 
@@ -1611,26 +1620,28 @@ const OperatorDashboard = ({
                       setInspectionStartTime(new Date());
                       setEquipmentStartTime(new Date());
                     }}
-                    className="w-full p-4 bg-white dark:bg-black border border-zinc-100 dark:border-white/20 rounded-2xl flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors shadow-sm dark:shadow-none"
+                    className="w-full p-4 bg-white dark:bg-black border border-zinc-100 dark:border-white/20 rounded-2xl flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-all shadow-sm dark:shadow-none hover:border-sky-500/30 cursor-pointer active:scale-95"
                   >
-                    <span className="font-bold text-zinc-900 dark:text-white tracking-tight">{area.name}</span>
-                    <Plus className="w-4 h-4 text-zinc-400 dark:text-zinc-600" />
+                    <span className="font-bold text-zinc-900 dark:text-white tracking-tight truncate mr-2">{area.name}</span>
+                    <Plus className="w-4 h-4 text-sky-500 shrink-0" />
                   </button>
                 ))
               ) : (
-                <p className="text-center text-sm text-zinc-400 dark:text-zinc-600 py-4 bg-zinc-50 dark:bg-black rounded-2xl border border-dashed border-zinc-200 dark:border-white/10 italic">
+                <p className="col-span-full text-center text-sm text-zinc-400 dark:text-zinc-600 py-4 bg-zinc-50 dark:bg-black rounded-2xl border border-dashed border-zinc-200 dark:border-white/10 italic">
                   Cargando áreas...
                 </p>
               )}
-              {areas.length > 3 && (
+            </div>
+            {areas.length > 3 && (
+               <div className="text-center mt-3">
                  <button 
                    onClick={() => setSearchingArea(true)}
-                   className="text-center text-zinc-400 text-xs font-bold py-2 hover:text-zinc-900 transition-colors"
+                   className="text-center text-sky-600 dark:text-sky-400 text-xs font-bold py-2 hover:underline tracking-wider uppercase transition-colors cursor-pointer"
                  >
                    Ver todas las áreas ({areas.length})
                  </button>
-              )}
-            </div>
+               </div>
+            )}
           </div>
         </div>
       )}
@@ -2411,6 +2422,11 @@ const OperatorDashboard = ({
           </div>
         )}
       </AnimatePresence>
+      <QuickHelpModal
+        isOpen={showQuickHelp}
+        onClose={() => setShowQuickHelp(false)}
+        moduleKey="Inspeccion"
+      />
     </div>
   );
 };
@@ -2700,6 +2716,7 @@ const SupervisorDashboard = ({
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [supervisorComments, setSupervisorComments] = useState('');
+  const [showQuickHelp, setShowQuickHelp] = useState(false);
   
   // Advanced Filter States
   const [startDate, setStartDate] = useState('');
@@ -2867,14 +2884,21 @@ const SupervisorDashboard = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-emerald-500/20">
-            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-right min-w-[120px]">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-emerald-500/20">
+            <button
+              onClick={() => setShowQuickHelp(true)}
+              className="px-3.5 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl border border-white/20 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer whitespace-nowrap shadow-sm flex-1 sm:flex-initial"
+            >
+              <HelpCircle className="w-4 h-4 text-emerald-300 shrink-0" />
+              <span>Ayuda rápida</span>
+            </button>
+            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center sm:text-right min-w-[120px] flex-1 sm:flex-initial">
               <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">Hallazgos VOSO</p>
               <p className="text-xs font-black text-white">{vosoFindings.length} Registros</p>
             </div>
-            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-right min-w-[120px]">
-              <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">Administrador</p>
-              <p className="text-xs font-black text-white truncate max-w-[140px]">{user.name}</p>
+            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center sm:text-right min-w-[120px] flex-1 sm:flex-initial">
+              <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">ADMINISTRADOR</p>
+              <p className="text-xs font-black text-white truncate max-w-[140px] mx-auto sm:ml-auto">{user.name}</p>
             </div>
           </div>
         </div>
@@ -3158,6 +3182,11 @@ const SupervisorDashboard = ({
           </div>
         )}
       </AnimatePresence>
+      <QuickHelpModal
+        isOpen={showQuickHelp}
+        onClose={() => setShowQuickHelp(false)}
+        moduleKey="VOSO"
+      />
     </div>
   );
 };
@@ -7515,11 +7544,13 @@ const AppLayout = ({
               <button 
                 onClick={() => setActiveTab('History')}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                  activeTab === 'History' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                  activeTab === 'History' 
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/25 ring-1 ring-emerald-400/30' 
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400'
                 }`}
                 title={isSidebarCollapsed ? "Historial" : undefined}
               >
-                <History className="w-5 h-5 shrink-0" />
+                <History className={`w-5 h-5 shrink-0 ${activeTab === 'History' ? 'text-white' : 'text-emerald-500'}`} />
                 {!isSidebarCollapsed && <span>Historial</span>}
               </button>
               {user.role === 'Administrador' && (
@@ -7527,31 +7558,37 @@ const AppLayout = ({
                   <button 
                     onClick={() => setActiveTab('Admin')}
                     className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                      activeTab === 'Admin' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                      activeTab === 'Admin' 
+                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 ring-1 ring-indigo-400/30' 
+                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400'
                     }`}
                     title={isSidebarCollapsed ? "Administración" : undefined}
                   >
-                    <Users className="w-5 h-5 shrink-0" />
+                    <Users className={`w-5 h-5 shrink-0 ${activeTab === 'Admin' ? 'text-white' : 'text-indigo-500'}`} />
                     {!isSidebarCollapsed && <span>Administración</span>}
                   </button>
                   <button 
                     onClick={() => setActiveTab('Notifications')}
                     className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                      activeTab === 'Notifications' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                      activeTab === 'Notifications' 
+                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md shadow-amber-500/25 ring-1 ring-amber-400/30' 
+                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400'
                     }`}
                     title={isSidebarCollapsed ? "Notificaciones" : undefined}
                   >
-                    <Bell className="w-5 h-5 shrink-0" />
+                    <Bell className={`w-5 h-5 shrink-0 ${activeTab === 'Notifications' ? 'text-white' : 'text-amber-500'}`} />
                     {!isSidebarCollapsed && <span>Notificaciones</span>}
                   </button>
                   <button 
                     onClick={() => setActiveTab('PDFConfig')}
                     className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                      activeTab === 'PDFConfig' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                      activeTab === 'PDFConfig' 
+                        ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-500/25 ring-1 ring-rose-400/30' 
+                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400'
                     }`}
                     title={isSidebarCollapsed ? "Configuración PDF" : undefined}
                   >
-                    <Shield className="w-5 h-5 shrink-0" />
+                    <Shield className={`w-5 h-5 shrink-0 ${activeTab === 'PDFConfig' ? 'text-white' : 'text-rose-500'}`} />
                     {!isSidebarCollapsed && <span>Configuración PDF</span>}
                   </button>
                 </>
@@ -7559,11 +7596,13 @@ const AppLayout = ({
               <button 
                 onClick={() => setActiveTab('Help')}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
-                  activeTab === 'Help' ? 'bg-brand-blue text-white shadow-md shadow-sky-100 dark:shadow-none' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                  activeTab === 'Help' 
+                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/25 ring-1 ring-cyan-400/30' 
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400'
                 }`}
                 title={isSidebarCollapsed ? "Ayuda" : undefined}
               >
-                <HelpCircle className="w-5 h-5 shrink-0" />
+                <HelpCircle className={`w-5 h-5 shrink-0 ${activeTab === 'Help' ? 'text-white' : 'text-cyan-500'}`} />
                 {!isSidebarCollapsed && <span>Ayuda / Instructivo</span>}
               </button>
             </div>
