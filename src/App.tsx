@@ -1520,7 +1520,7 @@ const OperatorDashboard = ({
               Inspección Primaria de Planta
             </h2>
             <p className="text-xs sm:text-sm md:text-base text-sky-100/90 font-medium max-w-2xl leading-relaxed">
-              Verificación operativa y control de condiciones en terreno para áreas, equipos y procesos productivos (VOSO).
+              Transformando inspecciones en decisiones.
             </p>
           </div>
 

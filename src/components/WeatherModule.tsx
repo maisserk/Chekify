@@ -24,6 +24,172 @@ interface WeatherModuleProps {
   isEmbedded?: boolean;
 }
 
+// Background Animation Component for Weather Cards
+const WeatherAnimatedBackground: React.FC<{ symbol?: string; isNight?: boolean }> = ({ symbol = '', isNight = false }) => {
+  const sym = symbol.toLowerCase();
+
+  const isClear = sym.includes('despejado') || sym.includes('soleado');
+  const isPartial = sym.includes('parcialmente') || sym.includes('algo');
+  const isCloudy = sym.includes('cubierto') || sym.includes('nublado');
+  const isRain = sym.includes('lluvia') || sym.includes('chubasco') || sym.includes('precipitac');
+  const isStorm = sym.includes('tormenta') || sym.includes('eléctrica');
+  const isFog = sym.includes('niebla') || sym.includes('bruma');
+  const isSnow = sym.includes('nieve') || sym.includes('granizo');
+  const isWind = sym.includes('viento');
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
+      {/* 1. SUN / CLEAR / SOLEADO ANIMATION */}
+      {(isClear || (isPartial && !isNight)) && (
+        <>
+          {/* Glowing Sun Aura */}
+          <motion.div
+            animate={{ scale: [1, 1.25, 1], opacity: [0.3, 0.6, 0.3] }}
+            transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+            className="absolute -top-10 -right-10 w-64 h-64 bg-amber-400/40 rounded-full blur-2xl pointer-events-none"
+          />
+          {/* Rotating Sun Rays SVG */}
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 25, ease: "linear" }}
+            className="absolute -top-2 right-2 w-40 h-40 opacity-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 100" className="w-full h-full stroke-amber-200 fill-none" strokeWidth="1.5">
+              <circle cx="50" cy="50" r="28" strokeDasharray="4 6" />
+              <line x1="50" y1="5" x2="50" y2="15" />
+              <line x1="50" y1="85" x2="50" y2="95" />
+              <line x1="5" y1="50" x2="15" y2="50" />
+              <line x1="85" y1="50" x2="95" y2="50" />
+              <line x1="18" y1="18" x2="25" y2="25" />
+              <line x1="75" y1="75" x2="82" y2="82" />
+              <line x1="82" y1="18" x2="75" y2="25" />
+              <line x1="18" y1="75" x2="25" y2="82" />
+            </svg>
+          </motion.div>
+        </>
+      )}
+
+      {/* 2. MOVING CLOUDS ANIMATION */}
+      {(isCloudy || isPartial || isRain || isStorm || isFog) && (
+        <>
+          <motion.div
+            animate={{ x: [-80, 320] }}
+            transition={{ repeat: Infinity, duration: 18, ease: "linear" }}
+            className="absolute top-2 left-0 opacity-25 text-white/80 pointer-events-none"
+          >
+            <Cloud className="w-20 h-20 fill-white/20" />
+          </motion.div>
+
+          <motion.div
+            animate={{ x: [-120, 350] }}
+            transition={{ repeat: Infinity, duration: 26, ease: "linear", delay: 4 }}
+            className="absolute top-8 left-0 opacity-35 text-white/90 pointer-events-none"
+          >
+            <Cloud className="w-28 h-28 fill-white/30" />
+          </motion.div>
+
+          <motion.div
+            animate={{ x: [-60, 300] }}
+            transition={{ repeat: Infinity, duration: 22, ease: "linear", delay: 10 }}
+            className="absolute top-0 right-10 opacity-20 text-white pointer-events-none"
+          >
+            <Cloud className="w-24 h-24 fill-white/10" />
+          </motion.div>
+        </>
+      )}
+
+      {/* 3. RAIN STREAKS */}
+      {(isRain || isStorm) && (
+        <div className="absolute inset-0 pointer-events-none">
+          {[...Array(12)].map((_, i) => (
+            <motion.div
+              key={`rain-${i}`}
+              initial={{ y: -20, x: i * 28 + (i % 3) * 10, opacity: 0 }}
+              animate={{
+                y: [0, 160],
+                x: [i * 28, i * 28 - 25],
+                opacity: [0, 0.7, 0]
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 0.8 + (i % 4) * 0.2,
+                ease: "linear",
+                delay: i * 0.12
+              }}
+              className="absolute w-0.5 h-6 bg-gradient-to-b from-sky-200 to-white/90 rounded-full"
+            />
+          ))}
+        </div>
+      )}
+
+      {/* 4. LIGHTNING FLASHES FOR STORM */}
+      {isStorm && (
+        <motion.div
+          animate={{ opacity: [0, 0, 0.85, 0, 0.4, 0, 0] }}
+          transition={{ repeat: Infinity, duration: 4.5, ease: "linear", delay: 1 }}
+          className="absolute inset-0 bg-amber-200/25 mix-blend-overlay pointer-events-none"
+        />
+      )}
+
+      {/* 5. WIND LINES */}
+      {isWind && (
+        <div className="absolute inset-0 pointer-events-none">
+          {[...Array(5)].map((_, i) => (
+            <motion.div
+              key={`wind-${i}`}
+              animate={{ x: [-60, 320], opacity: [0, 0.6, 0] }}
+              transition={{ repeat: Infinity, duration: 2 + i * 0.5, ease: "easeInOut", delay: i * 0.6 }}
+              className="absolute h-0.5 bg-gradient-to-r from-transparent via-teal-200 to-transparent rounded-full"
+              style={{ top: `${20 + i * 25}%`, width: `${60 + i * 20}px` }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* 6. FOG / MIST */}
+      {isFog && (
+        <motion.div
+          animate={{ x: [-20, 20], opacity: [0.3, 0.6, 0.3] }}
+          transition={{ repeat: Infinity, duration: 8, ease: "easeInOut" }}
+          className="absolute inset-0 bg-gradient-to-r from-zinc-300/20 via-white/30 to-zinc-300/20 backdrop-blur-[2px] pointer-events-none"
+        />
+      )}
+
+      {/* 7. SNOW PARTICLES */}
+      {isSnow && (
+        <div className="absolute inset-0 pointer-events-none">
+          {[...Array(14)].map((_, i) => (
+            <motion.div
+              key={`snow-${i}`}
+              animate={{
+                y: [-10, 150],
+                x: [i * 24, i * 24 + (i % 2 === 0 ? 15 : -15)],
+                opacity: [0, 0.9, 0]
+              }}
+              transition={{ repeat: Infinity, duration: 3 + (i % 3), ease: "easeInOut", delay: i * 0.3 }}
+              className="absolute w-2 h-2 bg-white rounded-full shadow-sm shadow-white"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const getWeatherCardGradient = (symbol?: string, isNight?: boolean) => {
+  const sym = (symbol || '').toLowerCase();
+  if (sym.includes('tormenta')) return 'bg-gradient-to-br from-slate-950 via-indigo-950 to-blue-950';
+  if (sym.includes('lluvia') || sym.includes('chubasco')) return 'bg-gradient-to-br from-slate-900 via-sky-900 to-blue-950';
+  if (sym.includes('cubierto') || sym.includes('niebla')) return 'bg-gradient-to-br from-zinc-800 via-slate-800 to-zinc-900';
+  if (sym.includes('parcialmente') || sym.includes('algo')) return 'bg-gradient-to-br from-sky-600 via-blue-600 to-indigo-700';
+  if (sym.includes('despejado') || sym.includes('soleado')) {
+    return isNight 
+      ? 'bg-gradient-to-br from-indigo-950 via-slate-900 to-sky-950'
+      : 'bg-gradient-to-br from-amber-500 via-sky-500 to-blue-600';
+  }
+  return 'bg-gradient-to-br from-sky-500 via-sky-600 to-blue-700';
+};
+
 export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedded = false }) => {
   const [activeTab, setActiveTab] = useState<'ahora' | 'hoy' | 'porHora'>('ahora');
   const [weatherData, setWeatherData] = useState<FullWeatherData | null>(null);
@@ -103,7 +269,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                 Checkify Weather
               </span>
             </div>
-            <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">Estación San Antonio — Planta Industrial</p>
+            <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">Datos obtenidos de meteored.cl</p>
           </div>
         </div>
 
@@ -188,26 +354,30 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
               exit={{ opacity: 0, y: -8 }}
               className="space-y-6"
             >
-              {/* Highlight Card */}
-              <div className="p-6 rounded-2xl bg-gradient-to-br from-sky-500 via-sky-600 to-blue-700 text-white shadow-lg relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+              {/* Highlight Card with Dynamic Condition Animation */}
+              <div className={`p-6 rounded-2xl ${getWeatherCardGradient(current?.symbol, false)} text-white shadow-xl relative overflow-hidden transition-all duration-700 border border-white/20`}>
+                <WeatherAnimatedBackground symbol={current?.symbol} isNight={false} />
                 <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
                   <div>
-                    <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur text-[10px] font-black uppercase tracking-widest text-sky-100 border border-white/20">
+                    <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-black uppercase tracking-widest text-white border border-white/25 shadow-sm">
                       Condición Actual
                     </span>
                     <div className="flex items-baseline gap-2 mt-3">
-                      <h1 className="text-5xl font-black tracking-tight">{current?.temperature || '21°C'}</h1>
-                      <span className="text-lg font-bold text-sky-100">{current?.symbol || 'Despejado'}</span>
+                      <h1 className="text-5xl font-black tracking-tight drop-shadow-sm">{current?.temperature || '21°C'}</h1>
+                      <span className="text-lg font-bold text-white/95 drop-shadow-sm">{current?.symbol || 'Despejado'}</span>
                     </div>
-                    <p className="text-xs text-sky-100/80 font-medium mt-1">
+                    <p className="text-xs text-white/80 font-medium mt-1">
                       Último registro de la hora: <strong className="text-white">{current?.forecastDate || 'Actual'}</strong>
                     </p>
                   </div>
 
-                  <div className="w-20 h-20 rounded-2xl bg-white/10 backdrop-blur border border-white/20 flex items-center justify-center shrink-0 shadow-inner">
+                  <motion.div 
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                    className="w-20 h-20 rounded-2xl bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center shrink-0 shadow-lg"
+                  >
                     {renderWeatherIcon(current?.symbol, false, "w-12 h-12")}
-                  </div>
+                  </motion.div>
                 </div>
               </div>
 
@@ -276,23 +446,24 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
               className="space-y-6"
             >
               {/* Daily Banner */}
-              <div className="p-5 rounded-2xl bg-zinc-900 dark:bg-zinc-950 text-white border border-zinc-800 dark:border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
+              <div className={`p-5 rounded-2xl ${getWeatherCardGradient(today?.predominantSymbol, false)} text-white border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative overflow-hidden shadow-lg`}>
+                <WeatherAnimatedBackground symbol={today?.predominantSymbol} isNight={false} />
+                <div className="relative z-10">
                   <div className="flex items-center gap-2 mb-1">
-                    <Calendar className="w-4 h-4 text-sky-400" />
-                    <span className="text-xs font-bold uppercase text-sky-400 tracking-wider">Resumen del Día</span>
+                    <Calendar className="w-4 h-4 text-sky-200" />
+                    <span className="text-xs font-black uppercase text-sky-200 tracking-wider">Resumen del Día</span>
                   </div>
                   <h4 className="text-xl font-black uppercase tracking-tight">{today?.date || 'Hoy'}</h4>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="px-3 py-1.5 rounded-xl bg-zinc-800/80 border border-white/10 text-center">
-                    <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest block">Mínima</span>
-                    <span className="text-base font-black text-cyan-400">{today?.tempMin || 'N/A'}</span>
+                <div className="flex items-center gap-3 relative z-10">
+                  <div className="px-3 py-1.5 rounded-xl bg-black/30 backdrop-blur-md border border-white/15 text-center">
+                    <span className="text-[9px] font-extrabold text-sky-200 uppercase tracking-widest block">Mínima</span>
+                    <span className="text-base font-black text-cyan-300">{today?.tempMin || 'N/A'}</span>
                   </div>
-                  <div className="px-3 py-1.5 rounded-xl bg-zinc-800/80 border border-white/10 text-center">
-                    <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest block">Máxima</span>
-                    <span className="text-base font-black text-amber-400">{today?.tempMax || 'N/A'}</span>
+                  <div className="px-3 py-1.5 rounded-xl bg-black/30 backdrop-blur-md border border-white/15 text-center">
+                    <span className="text-[9px] font-extrabold text-amber-200 uppercase tracking-widest block">Máxima</span>
+                    <span className="text-base font-black text-amber-300">{today?.tempMax || 'N/A'}</span>
                   </div>
                 </div>
               </div>
