@@ -79,3 +79,73 @@ self.addEventListener('fetch', (event) => {
       })
   );
 });
+
+// Push Notification Event (works even when app is closed in background)
+self.addEventListener('push', (event) => {
+  let data = {
+    title: '⚠️ ¡ALERTA: Hallazgo Crítico!',
+    body: 'Se ha reportado un hallazgo crítico que requiere atención inmediata.',
+    url: '/',
+    tag: 'critical-alert',
+    priority: 'Alta'
+  };
+
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      data = { ...data, ...parsed };
+    } catch (e) {
+      data.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: '/logo.png',
+    badge: '/favicon.png',
+    tag: data.tag || 'critical-alert',
+    renotify: true,
+    requireInteraction: true,
+    vibrate: [300, 100, 300, 100, 300],
+    data: {
+      url: data.url || '/',
+      findingId: data.findingId || null
+    },
+    actions: [
+      {
+        action: 'open',
+        title: 'Ver Hallazgo'
+      },
+      {
+        action: 'close',
+        title: 'Cerrar'
+      }
+    ]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+// Notification Click Event (opens or focuses app window)
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  if (event.action === 'close') return;
+
+  const targetUrl = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
+});

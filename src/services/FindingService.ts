@@ -28,6 +28,7 @@ import { Finding, HistoryEntry } from '../types';
 import { offlineQueueService } from './OfflineQueueService';
 import { offlineMediaService } from './OfflineMediaService';
 import { compressImage, blobToBase64 } from '../utils/imageCompressor';
+import { PushNotificationService } from './PushNotificationService';
 
 export class FindingService {
   private static readonly COLLECTION_NAME = 'findings';
@@ -163,6 +164,8 @@ export class FindingService {
     if (isOnline && !hasLocalPhoto) {
       try {
         await setDoc(doc(db, this.COLLECTION_NAME, findingId), payload);
+        // Trigger push notification to supervisors/admins if finding is critical
+        PushNotificationService.broadcastCriticalAlert(payload, payload.areaName || 'Área general', payload.equipmentName || 'Equipo', payload.inspector);
         return { queued: false, id: findingId, photoUrl: imageUrl };
       } catch (err) {
         console.warn('[FindingService] Direct online save failed. Queuing for offline sync.');
@@ -181,6 +184,11 @@ export class FindingService {
     // we should process and upload the offline-cached photo
     if (hasLocalPhoto) {
       this.schedulePhotoBackgroundSync(findingId);
+    }
+
+    // Trigger push notification even if queued (will broadcast to connected supervisors immediately if online)
+    if (isOnline) {
+      PushNotificationService.broadcastCriticalAlert(payload, payload.areaName || 'Área general', payload.equipmentName || 'Equipo', payload.inspector);
     }
 
     return { queued: true, id: findingId, photoUrl: imageUrl };

@@ -161,6 +161,10 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    match /push_subscriptions/{subId} {
+      allow read, write: if isAuthenticated();
+    }
+
     match /settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();

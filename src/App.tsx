@@ -116,6 +116,7 @@ import { OfflineImage } from './components/OfflineImage';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
 import { OrdenYLimpiezaDashboard, isOrdenYLimpiezaFinding, isVOSOFinding } from './components/OrdenYLimpiezaDashboard';
+import { PushNotificationWidget } from './components/PushNotificationWidget';
 
 const generateSafeId = (name: string): string => {
   return name
@@ -2862,6 +2863,7 @@ const SupervisorDashboard = ({
   return (
     <div className="space-y-6">
       <div className="space-y-4">
+      <PushNotificationWidget user={user} />
       {/* Header Banner Card for Panel VOSO Administrador */}
       <div className="bg-gradient-to-r from-slate-950 via-emerald-950 to-zinc-950 p-5 sm:p-7 md:p-8 rounded-3xl md:rounded-[2.5rem] border border-emerald-500/20 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
@@ -4299,6 +4301,8 @@ const NotificationCenter = ({
                 </button>
               </div>
 
+              <PushNotificationWidget user={user} compact={true} />
+
               {/* Filter Tabs */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
@@ -4545,6 +4549,8 @@ const AdminNotificationManagement = ({ plants }: { plants: {id: string, name: st
           Nueva Notificación
         </button>
       </div>
+
+      <PushNotificationWidget user={{ uid: auth.currentUser?.uid || 'admin', email: auth.currentUser?.email || '', name: 'Administrador', role: 'Supervisor' }} />
 
       {feedback && <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest ml-1">{feedback.text}</p>}
 
