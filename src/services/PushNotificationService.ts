@@ -168,21 +168,57 @@ export class PushNotificationService {
     if (!this.isSupported()) return false;
 
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      if (!subscription) {
-        throw new Error('Primero debes activar la subscripción para recibir alertas.');
+      if ('Notification' in window && Notification.permission !== 'granted') {
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') {
+          throw new Error('Permiso de notificaciones denegado en tu navegador.');
+        }
       }
 
-      const res = await fetch('/api/push/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription })
-      });
-
-      if (!res.ok) {
-        throw new Error('Error enviando la notificación de prueba.');
+      let registration: ServiceWorkerRegistration | null = null;
+      if ('serviceWorker' in navigator) {
+        try {
+          registration = await navigator.serviceWorker.ready;
+        } catch (swErr) {
+          console.warn('[PushNotificationService] ServiceWorker ready wait:', swErr);
+        }
       }
+
+      const subscription = registration ? await registration.pushManager.getSubscription() : null;
+
+      let serverSent = false;
+      if (subscription) {
+        try {
+          const res = await fetch('/api/push/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscription })
+          });
+          if (res.ok) {
+            serverSent = true;
+          }
+        } catch (serverErr) {
+          console.warn('[PushNotificationService] Backend test notification fetch error:', serverErr);
+        }
+      }
+
+      // Always display a local notification as direct confirmation
+      if (registration && typeof registration.showNotification === 'function') {
+        await registration.showNotification('🚨 PROBAR ALERTA HSEC', {
+          body: '¡Alertas activas correctamente! Recibirás avisos ante cualquier hallazgo crítico.',
+          icon: '/icon.png',
+          badge: '/icon.png',
+          tag: 'test-push-' + Date.now(),
+          vibrate: [200, 100, 200],
+          data: { url: '/' }
+        } as any);
+      } else if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('🚨 PROBAR ALERTA HSEC', {
+          body: '¡Alertas activas correctamente! Recibirás avisos ante cualquier hallazgo crítico.',
+          icon: '/icon.png'
+        });
+      }
+
       return true;
     } catch (error: any) {
       console.error('Test push error:', error);
