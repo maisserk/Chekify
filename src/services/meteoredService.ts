@@ -130,11 +130,61 @@ export class MeteoredService {
   }
 
   /**
+   * Helper function to extract the forecast record matching the current hour/time.
+   */
+  private static findCurrentRecord(rawHours: any[]): any {
+    if (!rawHours || rawHours.length === 0) return null;
+
+    const now = Date.now();
+    const currentHour = new Date().getHours();
+    let bestItem = rawHours[0];
+    let minDiff = Infinity;
+
+    for (let i = 0; i < rawHours.length; i++) {
+      const h = rawHours[i];
+      let ts: number | null = null;
+      if (h.end || h.start) {
+        ts = Number(h.end || h.start);
+        if (ts < 10000000000) ts = ts * 1000;
+      } else if (typeof h.hour === 'number') {
+        const d = new Date();
+        d.setHours(h.hour, 0, 0, 0);
+        ts = d.getTime();
+      } else if (typeof h.time === 'string') {
+        const parts = h.time.split(':');
+        if (parts.length >= 1) {
+          const hr = parseInt(parts[0], 10);
+          if (!isNaN(hr)) {
+            const d = new Date();
+            d.setHours(hr, 0, 0, 0);
+            ts = d.getTime();
+          }
+        }
+      }
+
+      if (ts !== null) {
+        const diff = Math.abs(ts - now);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestItem = h;
+        }
+      } else {
+        if (i === currentHour) {
+          bestItem = h;
+          break;
+        }
+      }
+    }
+
+    return bestItem;
+  }
+
+  /**
    * Helper function to extract the first forecast record from various possible API response shapes.
    */
   private static extractFirstRecord(data: any): any {
     const hours = this.extractHoursArray(data);
-    if (hours.length > 0) return hours[0];
+    if (hours.length > 0) return this.findCurrentRecord(hours) || hours[0];
 
     const days = this.extractDaysArray(data);
     if (days.length > 0) return days[0];
@@ -200,15 +250,15 @@ export class MeteoredService {
               };
             });
 
-            // Set Ahora from first record
-            const first = rawHours[0];
-            const tempRaw = first.temperature ?? first.temp ?? 21;
-            const humRaw = first.humidity ?? 50;
-            const windRaw = first.wind_speed ?? 12;
-            const windDirRaw = first.wind_direction ?? 'S';
-            const precipRaw = first.rain ?? first.precipitation ?? 0;
-            const symbolRaw = first.symbol ?? first.symbol_description;
-            const forecastDateRaw = new Date(first.end || first.start || Date.now()).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+            // Set Ahora from current time record
+            const currentRec = this.findCurrentRecord(rawHours) || rawHours[0];
+            const tempRaw = currentRec.temperature ?? currentRec.temp ?? 21;
+            const humRaw = currentRec.humidity ?? 50;
+            const windRaw = currentRec.wind_speed ?? 12;
+            const windDirRaw = currentRec.wind_direction ?? 'S';
+            const precipRaw = currentRec.rain ?? currentRec.precipitation ?? 0;
+            const symbolRaw = currentRec.symbol ?? currentRec.symbol_description;
+            const forecastDateRaw = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
             currentRes = {
               temperature: `${Math.round(tempRaw)}°C`,
