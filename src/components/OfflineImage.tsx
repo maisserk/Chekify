@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CameraOff } from 'lucide-react';
 import { offlineMediaService } from '../services/OfflineMediaService';
 
 interface OfflineImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
@@ -8,21 +9,23 @@ interface OfflineImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
 
 export const OfflineImage: React.FC<OfflineImageProps> = ({
   src,
-  fallbackUrl = 'https://picsum.photos/seed/finding_fallback/400/300',
+  fallbackUrl = '',
   alt = '',
-  className,
+  className = '',
   referrerPolicy,
   ...props
 }) => {
   const [localSrc, setLocalSrc] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     let active = true;
     let objectUrl: string | null = null;
+    setHasError(false);
 
     if (!src) {
-      setLocalSrc(fallbackUrl);
+      setLocalSrc(fallbackUrl || null);
       setIsLoading(false);
       return;
     }
@@ -39,14 +42,16 @@ export const OfflineImage: React.FC<OfflineImageProps> = ({
           } else if (typeof data === 'string' && data.length > 0) {
             setLocalSrc(data);
           } else {
-            setLocalSrc(fallbackUrl);
+            setLocalSrc(fallbackUrl || null);
+            if (!fallbackUrl) setHasError(true);
           }
           setIsLoading(false);
         })
         .catch((err) => {
           console.warn('[OfflineImage] Error retrieving offline media:', err);
           if (active) {
-            setLocalSrc(fallbackUrl);
+            setLocalSrc(fallbackUrl || null);
+            if (!fallbackUrl) setHasError(true);
             setIsLoading(false);
           }
         });
@@ -65,17 +70,30 @@ export const OfflineImage: React.FC<OfflineImageProps> = ({
 
   if (isLoading) {
     return (
-      <div className={`animate-pulse bg-zinc-200 dark:bg-zinc-800 ${className}`} />
+      <div className={`animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded-xl ${className}`} />
+    );
+  }
+
+  const finalSrc = localSrc || fallbackUrl;
+
+  if (hasError || !finalSrc) {
+    return (
+      <div className={`flex flex-col items-center justify-center bg-zinc-100 dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 rounded-xl p-3 border border-zinc-200/50 dark:border-white/5 text-center ${className}`}>
+        <CameraOff className="w-6 h-6 mb-1 opacity-50" />
+        <span className="text-[10px] font-bold uppercase tracking-wider">Sin Fotografía</span>
+      </div>
     );
   }
 
   return (
     <img
-      src={localSrc || fallbackUrl}
+      src={finalSrc}
       className={className}
       alt={alt}
+      onError={() => setHasError(true)}
       referrerPolicy={referrerPolicy || "no-referrer"}
       {...props}
     />
   );
 };
+

@@ -149,7 +149,7 @@ export class FindingService {
     const rawPayload: Partial<Finding> = {
       ...findingData,
       id: findingId,
-      photoUrl: imageUrl || 'https://picsum.photos/seed/finding/400/300',
+      photoUrl: imageUrl || (hasLocalPhoto ? `offline-cached://media_fnd_${findingId}` : ''),
       createdAt: isOnline ? serverTimestamp() : new Date(),
     };
 

@@ -117,6 +117,7 @@ import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
 import { OrdenYLimpiezaDashboard, isOrdenYLimpiezaFinding, isVOSOFinding } from './components/OrdenYLimpiezaDashboard';
 import { PushNotificationWidget } from './components/PushNotificationWidget';
+import { FlashlightWidget } from './components/FlashlightWidget';
 
 const generateSafeId = (name: string): string => {
   return name
@@ -1725,12 +1726,15 @@ const OperatorDashboard = ({
       {scanning && (
         <div className="relative">
           <div id="reader" className="overflow-hidden rounded-3xl border-2 border-zinc-900"></div>
-          <button 
-            onClick={stopScanner}
-            className="absolute top-4 right-4 bg-white/80 backdrop-blur p-2 rounded-full shadow-lg dark:shadow-none z-10"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+            <FlashlightWidget variant="compact" />
+            <button 
+              onClick={stopScanner}
+              className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur p-2 rounded-full shadow-lg dark:shadow-none text-zinc-900 dark:text-white"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1742,7 +1746,7 @@ const OperatorDashboard = ({
         >
           <div className="flex items-center justify-between border-b border-zinc-50 dark:border-white/5 pb-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-brand-blue to-brand-green rounded-2xl flex items-center justify-center shadow-md dark:shadow-none">
+              <div className="w-12 h-12 bg-gradient-to-br from-brand-blue to-brand-green rounded-2xl flex items-center justify-center shadow-md dark:shadow-none flex-shrink-0">
                 <MapPin className="text-white w-6 h-6" />
               </div>
               <div>
@@ -1750,9 +1754,12 @@ const OperatorDashboard = ({
                 <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{selectedArea.name}</h3>
               </div>
             </div>
-            <button onClick={() => setSelectedArea(null)} className="p-2 bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <FlashlightWidget variant="compact" />
+              <button onClick={() => setSelectedArea(null)} className="p-2 bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="space-y-8">
@@ -2068,7 +2075,10 @@ const OperatorDashboard = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Foto del Hallazgo</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Foto del Hallazgo</label>
+                <FlashlightWidget variant="compact" />
+              </div>
               <div className="flex items-center gap-4">
                 <input 
                   type="file" 

@@ -15,6 +15,8 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+const DEFAULT_VAPID_PUBLIC_KEY = 'BLoAyNRWGSv3W5HaN23dUw5IM_KSfJQHNgebTl245nGkmjtXkbumNb5rx-PfmHboxOSt_CTE6IO4jXYRfwqhSGI';
+
 export class PushNotificationService {
   /**
    * Check if web push notifications are supported in this browser
@@ -65,16 +67,35 @@ export class PushNotificationService {
     }
 
     try {
-      // 1. Get VAPID public key from backend
-      const vapidRes = await fetch('/api/push/vapid-key');
-      if (!vapidRes.ok) {
-        throw new Error('No se pudo obtener la clave VAPID del servidor.');
+      // 1. Get VAPID public key from backend (with embedded fallback)
+      let publicKey = DEFAULT_VAPID_PUBLIC_KEY;
+      try {
+        const vapidRes = await fetch('/api/push/vapid-key');
+        if (vapidRes.ok) {
+          const data = await vapidRes.json();
+          if (data && data.publicKey) {
+            publicKey = data.publicKey;
+          }
+        }
+      } catch (keyErr) {
+        console.warn('[PushNotificationService] Failed to fetch VAPID key from server, using default key:', keyErr);
       }
-      const { publicKey } = await vapidRes.json();
+
       const applicationServerKey = urlBase64ToUint8Array(publicKey);
 
-      // 2. Get Service Worker registration
-      const registration = await navigator.serviceWorker.ready;
+      // 2. Ensure Service Worker registration is ready
+      let registration: ServiceWorkerRegistration;
+      if ('serviceWorker' in navigator) {
+        try {
+          registration = await navigator.serviceWorker.register('/sw.js');
+          await navigator.serviceWorker.ready;
+        } catch (swErr) {
+          console.warn('[PushNotificationService] SW registration check:', swErr);
+          registration = await navigator.serviceWorker.ready;
+        }
+      } else {
+        throw new Error('Servicio de notificaciones (ServiceWorker) no disponible.');
+      }
 
       // 3. Subscribe with PushManager
       let subscription = await registration.pushManager.getSubscription();
@@ -86,17 +107,21 @@ export class PushNotificationService {
       }
 
       // 4. Send subscription to server
-      const subRes = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subscription,
-          user: user || { role: 'Supervisor' }
-        })
-      });
+      try {
+        const subRes = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscription,
+            user: user || { role: 'Supervisor' }
+          })
+        });
 
-      if (!subRes.ok) {
-        throw new Error('Error al registrar la subscripción en el servidor.');
+        if (!subRes.ok) {
+          console.warn('[PushNotificationService] Server returned non-ok status for subscription sync, but browser push registration succeeded.');
+        }
+      } catch (syncErr) {
+        console.warn('[PushNotificationService] Offline/Server sync issue while registering push, subscription remains active locally:', syncErr);
       }
 
       console.log('Subscrito a notificaciones Push exitosamente.');
