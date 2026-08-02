@@ -7652,45 +7652,31 @@ const AppLayout = ({
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Header (Mobile & Sticky desktop header) */}
-            <header className="bg-white/90 dark:bg-zinc-950/90 border-b border-zinc-200/80 dark:border-white/10 px-2.5 sm:px-6 md:px-8 py-2 sm:py-3 sticky top-0 z-40 backdrop-blur-md transition-colors duration-200 shadow-xs">
-              <div className="max-w-7xl mx-auto flex flex-col gap-2">
+            <header className="bg-white/95 dark:bg-zinc-950/95 border-b border-zinc-200/80 dark:border-white/10 px-2.5 sm:px-6 md:px-8 py-2.5 sm:py-3.5 sticky top-0 z-40 backdrop-blur-md transition-colors duration-200 shadow-xs">
+              <div className="max-w-7xl mx-auto flex flex-col gap-2 sm:gap-2.5">
                 <div className="flex items-center justify-between gap-1.5 sm:gap-4 min-w-0">
-                  {/* Mobile Identity / Welcome */}
-                  <div className="flex items-center gap-2 md:hidden min-w-0 flex-1">
-                    <Logo className="h-7 shrink-0" />
+                  {/* Mobile Identity / Avatar Photo */}
+                  <div className="flex items-center gap-2 md:hidden shrink-0">
+                    <Logo className="h-7 sm:h-8 shrink-0" />
                     <button 
                       onClick={() => setShowProfileModal(true)}
-                      className="min-w-0 flex-1 flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left cursor-pointer"
-                      title="Ver y editar mi perfil"
+                      className="hover:opacity-80 transition-opacity cursor-pointer p-0.5 rounded-full ring-2 ring-sky-500/30 hover:ring-sky-500/80 shrink-0 ml-0.5"
+                      title={`Perfil: ${user.name || user.email}`}
                     >
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-sky-600 to-blue-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 shadow-xs overflow-hidden border border-white/20">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs overflow-hidden border border-white/20">
                         {user.avatarUrl ? (
                           <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
                         ) : (
                           user.name?.charAt(0) || user.email.charAt(0)
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <h2 className="text-zinc-900 dark:text-white font-extrabold text-[11px] truncate leading-tight">
-                          {user.name?.split(' ')[0] || 'Usuario'}
-                        </h2>
-                        <span className="text-[8px] font-black uppercase text-sky-600 dark:text-sky-400 block leading-none">
-                          {user.role}
-                        </span>
-                      </div>
-                      {isOffline && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[7px] font-black uppercase rounded-full shrink-0">
-                          <AlertCircle className="w-2 h-2 shrink-0" />
-                          Offline
-                        </span>
-                      )}
                     </button>
                   </div>
 
                   {/* Active View Title & Date/Time (Desktop) */}
                   <div className="hidden md:flex flex-col min-w-0 flex-1 pr-2">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <h1 className="text-zinc-900 dark:text-white font-black text-sm lg:text-base leading-tight transition-colors truncate tracking-tight">
+                      <h1 className="text-zinc-900 dark:text-white font-black text-base lg:text-lg leading-tight transition-colors truncate tracking-tight">
                         {activeTab === 'Home' ? 'Inspección Primaria' : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial de Inspecciones' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda / Instructivo'}
                       </h1>
                       {isOffline && (
@@ -7711,7 +7697,7 @@ const AppLayout = ({
                     {/* Compact Weather Summary Pill in Header */}
                     <button
                       onClick={() => setIsWeatherExpanded(!isWeatherExpanded)}
-                      className={`flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl border text-[10px] sm:text-xs font-bold transition-all shadow-2xs shrink-0 cursor-pointer ${
+                      className={`flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all shadow-2xs shrink-0 cursor-pointer ${
                         isWeatherExpanded 
                           ? 'bg-sky-500/20 border-sky-500/40 text-sky-900 dark:text-sky-200 ring-2 ring-sky-500/20' 
                           : 'bg-gradient-to-r from-sky-500/10 via-blue-500/5 to-indigo-500/10 hover:bg-sky-500/15 border-sky-500/20 text-sky-900 dark:text-sky-300'
@@ -7720,18 +7706,18 @@ const AppLayout = ({
                     >
                       {loadingWeather ? (
                         <div className="flex items-center gap-1 text-sky-600 dark:text-sky-400">
-                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           <span className="hidden sm:inline text-[10px]">Clima...</span>
                         </div>
                       ) : weatherError || !weather ? (
                         <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                          <CloudOff className="w-3 h-3" />
+                          <CloudOff className="w-3.5 h-3.5" />
                           <span className="text-[10px]">N/A</span>
                         </div>
                       ) : (
                         <>
                           <CloudSun className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                          <div className="flex items-center gap-1 text-[10px] sm:text-xs">
+                          <div className="flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-xs">
                             <span className="font-extrabold text-zinc-900 dark:text-white">{weather.temperature}</span>
                             <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline">•</span>
                             <span className="text-zinc-600 dark:text-zinc-300 hidden sm:inline">💧 {weather.humidity}</span>
@@ -7745,14 +7731,14 @@ const AppLayout = ({
 
                     <button
                       onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                      className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200/50 dark:border-white/5 shrink-0"
+                      className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200/50 dark:border-white/5 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9"
                       title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
                     >
                       {theme === 'light' ? <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                     </button>
                     <button 
                       onClick={() => setShowNotificationCenter(true)}
-                      className="relative text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200/50 dark:border-white/5 shrink-0"
+                      className="relative text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200/50 dark:border-white/5 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9"
                       title="Notificaciones"
                     >
                       <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -7764,12 +7750,30 @@ const AppLayout = ({
                     </button>
                     <button 
                       onClick={() => signOut(auth)}
-                      className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1.5 sm:p-2 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100/50 dark:border-red-500/20 text-red-500 shrink-0"
+                      className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1.5 sm:p-2 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100/50 dark:border-red-500/20 text-red-500 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9"
                       title="Cerrar Sesión"
                     >
                       <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </button>
                   </div>
+                </div>
+
+                {/* Mobile Sub-Header: Active Module Title & Time Bar */}
+                <div className="md:hidden flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-white/5 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
+                    <h1 className="text-zinc-900 dark:text-white font-extrabold text-xs tracking-tight truncate">
+                      {activeTab === 'Home' ? 'Inspección Primaria' : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda'}
+                    </h1>
+                    {isOffline && (
+                      <span className="px-1.5 py-0.2 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-black uppercase rounded-full shrink-0">
+                        Offline
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold shrink-0">
+                    {format(currentTime, "HH:mm:ss", { locale: es })}
+                  </span>
                 </div>
 
                 {/* Expandable Weather Detail Drawer in Header */}
