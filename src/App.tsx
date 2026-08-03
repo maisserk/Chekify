@@ -37,6 +37,7 @@ import {
   QrCode, 
   Camera, 
   CheckCircle2, 
+  XCircle,
   AlertCircle, 
   History, 
   Users, 
@@ -805,6 +806,45 @@ const OperatorDashboard = ({
   const [allActiveFindings, setAllActiveFindings] = useState<Finding[]>([]);
   const [duplicateFinding, setDuplicateFinding] = useState<Finding | null>(null);
   
+  // Collapsible areas and inspection tracking
+  const [expandedAreaIds, setExpandedAreaIds] = useState<Record<string, boolean>>({});
+  const [todayInspections, setTodayInspections] = useState<any[]>([]);
+
+  const toggleAreaExpand = (areaId: string) => {
+    setExpandedAreaIds(prev => ({ ...prev, [areaId]: !prev[areaId] }));
+  };
+
+  const getEquipInspectionStatus = (areaId: string, equipId: string): 'completed' | 'pending' => {
+    // Check current active session first
+    if (selectedArea?.id === areaId && inspectionResults[equipId]) {
+      const res = inspectionResults[equipId];
+      if (res.trad || res.voso) return 'completed';
+    }
+
+    // Check today's completed inspections from DB
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const isDone = todayInspections.some((insp: any) => {
+      if (insp.areaId !== areaId) return false;
+
+      let inspDate: Date | null = null;
+      if (insp.completedAt?.toDate) inspDate = insp.completedAt.toDate();
+      else if (insp.timestamp?.toDate) inspDate = insp.timestamp.toDate();
+      else if (insp.completedAt) inspDate = new Date(insp.completedAt);
+      else if (insp.timestamp) inspDate = new Date(insp.timestamp);
+
+      if (!inspDate || inspDate < startOfToday) return false;
+
+      if (insp.results && (insp.results[equipId] || Object.keys(insp.results).length > 0)) {
+        if (insp.results[equipId]) return true;
+      }
+      return false;
+    });
+
+    return isDone ? 'completed' : 'pending';
+  };
+  
   const [checkItemStates, setCheckItemStates] = useState<Record<string, 'Bueno' | 'Regular' | 'Malo'>>({});
   const [vosoResponses, setVosoResponses] = useState<Record<string, VOSOResponse>>({});
   const [inspectionResults, setInspectionResults] = useState<Record<string, { trad: any, voso: any }>>({});
@@ -946,6 +986,13 @@ const OperatorDashboard = ({
       console.error("Error listening to equipment:", error);
     });
 
+    // Listen for inspections
+    const unsubInspections = onSnapshot(collection(db, 'inspections'), (snapshot) => {
+      setTodayInspections(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error("Error listening to inspections:", error);
+    });
+
     // Listen for all findings in the user's plant to calculate KPIs using enterprise service layer
     if (!user.plantId) {
       return unsubAreas;
@@ -1005,6 +1052,7 @@ const OperatorDashboard = ({
     return () => {
       unsubAreas();
       unsubEquip();
+      unsubInspections();
       unsubStats();
     };
   }, [user.plantId, user.role]);
@@ -1597,7 +1645,7 @@ const OperatorDashboard = ({
         </div>
       </div>
 
-      {!selectedArea && !scanning && (
+      {!selectedArea && (
         <div className="space-y-4">
           <motion.button
             whileTap={{ scale: 0.95 }}
@@ -1610,40 +1658,179 @@ const OperatorDashboard = ({
             <span className="text-zinc-600 dark:text-zinc-300 font-bold group-hover:text-brand-blue dark:group-hover:text-white transition-colors text-center px-4 uppercase tracking-tight text-xs">Escanear Código QR de Área</span>
           </motion.button>
           
-          <div className="max-w-2xl mx-auto">
-            <p className="text-center text-xs font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-3">O selecciona manualmente</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="max-w-3xl mx-auto space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+                Áreas y Estado de Equipos a Revisar
+              </p>
+              <span className="text-[10px] font-extrabold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-2.5 py-0.5 rounded-full border border-sky-200/50 dark:border-sky-500/20">
+                {areas.length} {areas.length === 1 ? 'Área' : 'Áreas'}
+              </span>
+            </div>
+
+            <div className="space-y-3">
               {areas.length > 0 ? (
-                areas.slice(0, 3).map((area, idx) => (
-                  <button 
-                    key={`quick-${area.id}-${idx}`}
-                    onClick={() => {
-                      setSelectedArea(area);
-                      setInspectionStartTime(new Date());
-                      setEquipmentStartTime(new Date());
-                    }}
-                    className="w-full p-4 bg-white dark:bg-black border border-zinc-100 dark:border-white/20 rounded-2xl flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-all shadow-sm dark:shadow-none hover:border-sky-500/30 cursor-pointer active:scale-95"
-                  >
-                    <span className="font-bold text-zinc-900 dark:text-white tracking-tight truncate mr-2">{area.name}</span>
-                    <Plus className="w-4 h-4 text-sky-500 shrink-0" />
-                  </button>
-                ))
+                areas.map((area, idx) => {
+                  const areaEquip = equipment
+                    .filter(e => e.areaId === area.id && (e as any).status !== 'deleted')
+                    .sort((a, b) => (a.inspectionOrder || 0) - (b.inspectionOrder || 0));
+
+                  const completedEquip = areaEquip.filter(e => getEquipInspectionStatus(area.id, e.id) === 'completed').length;
+                  const totalEquip = areaEquip.length;
+                  const isAllDone = totalEquip > 0 && completedEquip === totalEquip;
+                  const isExpanded = !!expandedAreaIds[area.id];
+
+                  return (
+                    <div 
+                      key={`area-accordion-${area.id}-${idx}`}
+                      className="bg-white dark:bg-black border border-zinc-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-xs transition-all duration-200 hover:border-sky-500/40"
+                    >
+                      {/* Accordion Trigger Header */}
+                      <div className="p-3.5 sm:p-4 flex items-center justify-between gap-2.5 bg-zinc-50/50 dark:bg-zinc-900/40">
+                        <button
+                          type="button"
+                          onClick={() => toggleAreaExpand(area.id)}
+                          className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer group"
+                        >
+                          <div className={`p-2 rounded-xl shrink-0 transition-colors ${
+                            isAllDone 
+                              ? 'bg-emerald-500/10 text-emerald-500' 
+                              : completedEquip > 0 
+                                ? 'bg-amber-500/10 text-amber-500' 
+                                : 'bg-sky-500/10 text-sky-500'
+                          }`}>
+                            <MapPin className="w-5 h-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-extrabold text-zinc-900 dark:text-white text-sm sm:text-base tracking-tight truncate group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
+                              {area.name}
+                            </h3>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {totalEquip > 0 ? (
+                                <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                                  isAllDone 
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
+                                    : completedEquip > 0 
+                                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' 
+                                      : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                }`}>
+                                  {isAllDone ? (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                      {completedEquip}/{totalEquip} Listos
+                                    </>
+                                  ) : (
+                                    <>
+                                      <XCircle className="w-3 h-3 text-red-500" />
+                                      {completedEquip}/{totalEquip} Equipos
+                                    </>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-zinc-400">Sin equipos</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="p-1.5 rounded-lg hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 text-zinc-400">
+                            <ChevronDown className={`w-5 h-5 transition-transform duration-200 shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedArea(area);
+                            setInspectionStartTime(new Date());
+                            setEquipmentStartTime(new Date());
+                          }}
+                          className="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center gap-1 shrink-0 transition-all shadow-xs active:scale-95 cursor-pointer"
+                        >
+                          <span>Inspeccionar</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Collapsible Equipment List Body */}
+                      {isExpanded && (
+                        <div className="border-t border-zinc-100 dark:border-white/5 p-3 sm:p-4 bg-white dark:bg-zinc-950 space-y-2">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">
+                            Equipos en este área ({totalEquip})
+                          </p>
+                          {totalEquip > 0 ? (
+                            <div className="grid grid-cols-1 gap-2">
+                              {areaEquip.map((equip) => {
+                                const status = getEquipInspectionStatus(area.id, equip.id);
+                                const isInspected = status === 'completed';
+
+                                return (
+                                  <div
+                                    key={`equip-row-${equip.id}`}
+                                    onClick={() => {
+                                      setSelectedArea(area);
+                                      const equipIdx = areaEquip.findIndex(e => e.id === equip.id);
+                                      setCurrentEquipmentIndex(equipIdx >= 0 ? equipIdx : 0);
+                                      setInspectionStartTime(new Date());
+                                      setEquipmentStartTime(new Date());
+                                    }}
+                                    className={`p-3 rounded-xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                                      isInspected 
+                                        ? 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/60' 
+                                        : 'bg-red-500/5 dark:bg-red-500/10 border-red-500/30 hover:border-red-500/60'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      {isInspected ? (
+                                        <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                                          <Check className="w-4 h-4 stroke-[3]" />
+                                        </div>
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-full bg-red-500/20 text-red-500 border border-red-500/40 flex items-center justify-center shrink-0">
+                                          <X className="w-3.5 h-3.5 stroke-[3]" />
+                                        </div>
+                                      )}
+                                      <div className="min-w-0">
+                                        <p className="font-extrabold text-xs sm:text-sm text-zinc-900 dark:text-white truncate">
+                                          {equip.name}
+                                        </p>
+                                        <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                                          {equip.code || `ID: ${equip.id.substring(0, 8)}`}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    <div className="shrink-0">
+                                      {isInspected ? (
+                                        <span className="px-2.5 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-2xs">
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          Listo
+                                        </span>
+                                      ) : (
+                                        <span className="px-2.5 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                          <XCircle className="w-3 h-3 text-red-500" />
+                                          Pendiente
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-zinc-400 dark:text-zinc-600 italic py-2 text-center">
+                              No hay equipos configurados en esta área.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               ) : (
-                <p className="col-span-full text-center text-sm text-zinc-400 dark:text-zinc-600 py-4 bg-zinc-50 dark:bg-black rounded-2xl border border-dashed border-zinc-200 dark:border-white/10 italic">
-                  Cargando áreas...
+                <p className="text-center text-sm text-zinc-400 py-6 bg-zinc-50 dark:bg-black rounded-2xl border border-dashed border-zinc-200 dark:border-white/10 italic">
+                  Cargando áreas de inspección...
                 </p>
               )}
             </div>
-            {areas.length > 3 && (
-               <div className="text-center mt-3">
-                 <button 
-                   onClick={() => setSearchingArea(true)}
-                   className="text-center text-sky-600 dark:text-sky-400 text-xs font-bold py-2 hover:underline tracking-wider uppercase transition-colors cursor-pointer"
-                 >
-                   Ver todas las áreas ({areas.length})
-                 </button>
-               </div>
-            )}
           </div>
         </div>
       )}
@@ -1723,20 +1910,78 @@ const OperatorDashboard = ({
         )}
       </AnimatePresence>
 
-      {scanning && (
-        <div className="relative">
-          <div id="reader" className="overflow-hidden rounded-3xl border-2 border-zinc-900"></div>
-          <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-            <FlashlightWidget variant="compact" />
-            <button 
+      <AnimatePresence>
+        {scanning && (
+          <motion.div 
+            key="qr-scanner-modal"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+          >
+            {/* Backdrop */}
+            <motion.div 
+              key="qr-scanner-overlay"
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
               onClick={stopScanner}
-              className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur p-2 rounded-full shadow-lg dark:shadow-none text-zinc-900 dark:text-white"
+              className="absolute inset-0 bg-zinc-950/80 backdrop-blur-md"
+            />
+
+            {/* Modal Box */}
+            <motion.div 
+              key="qr-scanner-content"
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-md bg-zinc-900 border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden z-10 flex flex-col"
             >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-        </div>
-      )}
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-zinc-950/60">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400">
+                    <QrCode className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm sm:text-base uppercase tracking-tight">Escanear Código QR</h3>
+                    <p className="text-[10px] font-bold text-zinc-400">Apunta la cámara al código QR del área</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <FlashlightWidget variant="compact" />
+                  <button 
+                    onClick={stopScanner}
+                    className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                    title="Cerrar escáner"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Reader Camera Frame */}
+              <div className="p-4 flex flex-col items-center justify-center bg-black relative min-h-[300px]">
+                <div id="reader" className="w-full max-w-[320px] overflow-hidden rounded-2xl border-2 border-sky-500/40 shadow-inner"></div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-zinc-950/80 border-t border-white/10 flex items-center justify-between">
+                <p className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Buscando código QR...
+                </p>
+                <button
+                  onClick={stopScanner}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {selectedArea && !showFindingForm && (
         <motion.div 
@@ -7677,7 +7922,7 @@ const AppLayout = ({
                   <div className="hidden md:flex flex-col min-w-0 flex-1 pr-2">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <h1 className="text-zinc-900 dark:text-white font-black text-base lg:text-lg leading-tight transition-colors truncate tracking-tight">
-                        {activeTab === 'Home' ? 'Inspección Primaria' : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial de Inspecciones' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda / Instructivo'}
+                        {activeTab === 'Home' ? `¡Bienvenido ${user.name?.split(' ')[0] || user.name || 'Usuario'}!` : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial de Inspecciones' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda / Instructivo'}
                       </h1>
                       {isOffline && (
                         <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-extrabold uppercase rounded-full animate-pulse shrink-0">
@@ -7763,7 +8008,7 @@ const AppLayout = ({
                   <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
                     <h1 className="text-zinc-900 dark:text-white font-extrabold text-xs tracking-tight truncate">
-                      {activeTab === 'Home' ? 'Inspección Primaria' : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda'}
+                      {activeTab === 'Home' ? `¡Bienvenido ${user.name?.split(' ')[0] || user.name || 'Usuario'}!` : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda'}
                     </h1>
                     {isOffline && (
                       <span className="px-1.5 py-0.2 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-black uppercase rounded-full shrink-0">
