@@ -73,6 +73,7 @@ export interface Finding {
   operatorId: string;
   description: string;
   photoUrl?: string;
+  photoUrls?: string[];
   status: 'Open' | 'Closed' | 'InReview';
   solution?: string;
   closedBy?: string;

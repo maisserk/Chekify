@@ -52,6 +52,8 @@ import {
   Check,
   ChevronUp,
   ChevronDown,
+  PowerOff,
+  Zap,
   Layout,
   Box,
   Bell,
@@ -60,6 +62,11 @@ import {
   Send,
   Upload,
   Clock,
+  Pause,
+  PauseCircle,
+  Play,
+  PlayCircle,
+  Timer,
   Trash2,
   Edit3,
   Shield,
@@ -119,6 +126,7 @@ import { useHSECAnalytics } from './hooks/useHSECAnalytics';
 import { OrdenYLimpiezaDashboard, isOrdenYLimpiezaFinding, isVOSOFinding } from './components/OrdenYLimpiezaDashboard';
 import { PushNotificationWidget } from './components/PushNotificationWidget';
 import { FlashlightWidget } from './components/FlashlightWidget';
+import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './components/FindingPhotoGallery';
 
 const generateSafeId = (name: string): string => {
   return name
@@ -847,36 +855,83 @@ const OperatorDashboard = ({
   
   const [checkItemStates, setCheckItemStates] = useState<Record<string, 'Bueno' | 'Regular' | 'Malo'>>({});
   const [vosoResponses, setVosoResponses] = useState<Record<string, VOSOResponse>>({});
-  const [inspectionResults, setInspectionResults] = useState<Record<string, { trad: any, voso: any }>>({});
+  const [equipmentOperatingStatus, setEquipmentOperatingStatus] = useState<Record<string, 'En Funcionamiento' | 'Detenido'>>({});
+  const [inspectionResults, setInspectionResults] = useState<Record<string, { trad: any, voso: any, operatingStatus?: 'En Funcionamiento' | 'Detenido' }>>({});
   const [showEquipmentSummary, setShowEquipmentSummary] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'next' | 'prev'>('next');
   
-  // Tracking inspection times
+  // Tracking inspection times & pause state
   const [inspectionStartTime, setInspectionStartTime] = useState<Date | null>(null);
   const [equipmentStartTime, setEquipmentStartTime] = useState<Date | null>(null);
+  const [inspectionTimerSeconds, setInspectionTimerSeconds] = useState<number>(0);
+  const [equipmentTimerSeconds, setEquipmentTimerSeconds] = useState<number>(0);
+  const [isInspectionPaused, setIsInspectionPaused] = useState<boolean>(false);
+  const [isPauseModalOpen, setIsPauseModalOpen] = useState<boolean>(false);
+  const [pauseReason, setPauseReason] = useState<string>('');
+
+  // Active timer ticker (freezes automatically when paused or in summary)
+  useEffect(() => {
+    if (!selectedArea || isInspectionPaused || showEquipmentSummary) return;
+
+    const interval = setInterval(() => {
+      setInspectionTimerSeconds(prev => prev + 1);
+      setEquipmentTimerSeconds(prev => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [selectedArea, isInspectionPaused, showEquipmentSummary]);
+
+  const formatTimer = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    const hours = Math.floor(mins / 60);
+    const displayMins = mins % 60;
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${displayMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${displayMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Scroll back to the top of the view when the equipment index, selected area, or summary state changes
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentEquipmentIndex, selectedArea?.id, showEquipmentSummary]);
 
-  // Removed problematic useEffect that caused data mismatch
-  
+  const startAreaInspection = (area: Area, initialEquipIndex = 0) => {
+    setSelectedArea(area);
+    setCurrentEquipmentIndex(initialEquipIndex);
+    setInspectionStartTime(new Date());
+    setEquipmentStartTime(new Date());
+    setInspectionTimerSeconds(0);
+    setEquipmentTimerSeconds(0);
+    setIsInspectionPaused(false);
+    setIsPauseModalOpen(false);
+    setPauseReason('');
+  };
+
   const resetInspectionState = () => {
     setSelectedArea(null);
     setInspectionStartTime(null);
+    setInspectionTimerSeconds(0);
+    setEquipmentTimerSeconds(0);
+    setIsInspectionPaused(false);
+    setIsPauseModalOpen(false);
+    setPauseReason('');
     setCurrentEquipmentIndex(0);
     setInspectionResults({});
     setCheckItemStates({});
     setVosoResponses({});
+    setEquipmentOperatingStatus({});
     setShowEquipmentSummary(false);
   };
   
   const saveCurrentToResults = () => {
     if (currentEquipment) {
+      const currentOpStatus = equipmentOperatingStatus[currentEquipment.id] || 'En Funcionamiento';
       const currentData = {
         trad: { ...checkItemStates },
-        voso: { ...vosoResponses }
+        voso: { ...vosoResponses },
+        operatingStatus: currentOpStatus
       };
       setInspectionResults(prev => ({
         ...prev,
@@ -894,6 +949,9 @@ const OperatorDashboard = ({
       const saved = results[targetEquip.id];
       setCheckItemStates(saved?.trad || {});
       setVosoResponses(saved?.voso || {});
+      if (saved?.operatingStatus) {
+        setEquipmentOperatingStatus(prev => ({ ...prev, [targetEquip.id]: saved.operatingStatus }));
+      }
     } else {
       setCheckItemStates({});
       setVosoResponses({});
@@ -1085,9 +1143,7 @@ const OperatorDashboard = ({
         const onScanSuccess = (decodedText: string) => {
           const area = areas.find(a => a.id === decodedText || a.qrCode === decodedText);
           if (area) {
-            setSelectedArea(area);
-            setInspectionStartTime(new Date());
-            setEquipmentStartTime(new Date());
+            startAreaInspection(area);
             scanner.stop().then(() => {
               scannerRef.current = null;
               setScanning(false);
@@ -1185,9 +1241,11 @@ const OperatorDashboard = ({
 
   const handleNextEquipment = async () => {
     const now = new Date();
+    const currentOpStatus = (currentEquipment && equipmentOperatingStatus[currentEquipment.id]) || 'En Funcionamiento';
     const currentData = {
       trad: { ...checkItemStates },
       voso: { ...vosoResponses },
+      operatingStatus: currentOpStatus,
       timing: {
         startedAt: equipmentStartTime,
         completedAt: now
@@ -1207,11 +1265,15 @@ const OperatorDashboard = ({
       // Load next equipment data (or empty if new)
       const nextIndex = currentEquipmentIndex + 1;
       const nextEquip = areaEquipment[nextIndex];
-      const nextSaved = updatedResults[nextEquip.id] as { trad: any, voso: any, timing: any } | undefined;
+      const nextSaved = updatedResults[nextEquip.id] as { trad: any, voso: any, operatingStatus?: 'En Funcionamiento' | 'Detenido', timing: any } | undefined;
       setCheckItemStates(nextSaved?.trad || {});
       setVosoResponses(nextSaved?.voso || {});
+      if (nextSaved?.operatingStatus) {
+        setEquipmentOperatingStatus(prev => ({ ...prev, [nextEquip.id]: nextSaved.operatingStatus! }));
+      }
       setCurrentEquipmentIndex(nextIndex);
       setEquipmentStartTime(new Date());
+      setEquipmentTimerSeconds(0);
     } else {
       // Finished all equipment
       setIsSaving(true);
@@ -1225,7 +1287,9 @@ const OperatorDashboard = ({
         });
 
         const inspectionCompletedTime = new Date();
-        const totalDurationSeconds = inspectionStartTime ? Math.round((inspectionCompletedTime.getTime() - inspectionStartTime.getTime()) / 1000) : 0;
+        const totalDurationSeconds = inspectionTimerSeconds > 0 
+          ? inspectionTimerSeconds 
+          : (inspectionStartTime ? Math.round((inspectionCompletedTime.getTime() - inspectionStartTime.getTime()) / 1000) : 0);
 
         const inspectionId = doc(collection(db, 'inspections')).id;
         const isOnline = offlineQueueService.getConnectivityStatus();
@@ -1269,7 +1333,7 @@ const OperatorDashboard = ({
 
         // Register findings in the 'findings' collection for each equipment that has issues
         for (const [equipId, resAny] of Object.entries(updatedResults)) {
-          const res = resAny as { trad: any, voso: any, timing?: { startedAt: any, completedAt: any } };
+          const res = resAny as { trad: any, voso: any, operatingStatus?: string, timing?: { startedAt: any, completedAt: any } };
           const equip = equipment.find(e => e.id === equipId);
           
           const equipStarted = res?.timing?.startedAt instanceof Date ? res.timing.startedAt : (res?.timing?.startedAt?.toDate ? res.timing.startedAt.toDate() : null);
@@ -1283,7 +1347,8 @@ const OperatorDashboard = ({
           const vosoIssues = (Object.entries(resVoso) as [string, VOSOResponse][]).filter(([_, v]) => v && (v.status === 'Observación' || v.status === 'Crítico'));
 
           if (tradIssues.length > 0 || vosoIssues.length > 0) {
-            let description = `Inspección VOSO en ${equip?.name || equipId}.\n\n`;
+            const opStatusLabel = res?.operatingStatus === 'Detenido' ? '🛑 Detenido' : '⚡ En Funcionamiento';
+            let description = `Inspección VOSO en ${equip?.name || equipId} [Condición: ${opStatusLabel}].\n\n`;
             
             if (vosoIssues.length > 0) {
               description += "🚨 HALLAZGOS VOSO:\n";
@@ -1317,7 +1382,10 @@ const OperatorDashboard = ({
             }
 
             const priority = vosoIssues.some(v => v[1]?.status === 'Crítico') ? 'Alta' : 'Media';
-            const firstPhoto = vosoIssues.find(v => v[1]?.photoUrl)?.[1]?.photoUrl || null;
+            const allPhotos = vosoIssues
+              .map(v => v[1]?.photoUrl)
+              .filter((p): p is string => Boolean(p && typeof p === 'string' && p.trim() !== ''));
+            const firstPhoto = allPhotos[0] || null;
 
             const resultObj = await FindingService.createFinding({
               areaId: selectedArea!.id,
@@ -1326,6 +1394,8 @@ const OperatorDashboard = ({
               equipmentId: equipId,
               equipmentName: equip?.name || null,
               description: description,
+              photoUrl: firstPhoto || undefined,
+              photoUrls: allPhotos,
               status: vosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
               priority,
               date: new Date(),
@@ -1738,11 +1808,7 @@ const OperatorDashboard = ({
 
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedArea(area);
-                            setInspectionStartTime(new Date());
-                            setEquipmentStartTime(new Date());
-                          }}
+                          onClick={() => startAreaInspection(area)}
                           className="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center gap-1 shrink-0 transition-all shadow-xs active:scale-95 cursor-pointer"
                         >
                           <span>Inspeccionar</span>
@@ -1766,11 +1832,8 @@ const OperatorDashboard = ({
                                   <div
                                     key={`equip-row-${equip.id}`}
                                     onClick={() => {
-                                      setSelectedArea(area);
                                       const equipIdx = areaEquip.findIndex(e => e.id === equip.id);
-                                      setCurrentEquipmentIndex(equipIdx >= 0 ? equipIdx : 0);
-                                      setInspectionStartTime(new Date());
-                                      setEquipmentStartTime(new Date());
+                                      startAreaInspection(area, equipIdx >= 0 ? equipIdx : 0);
                                     }}
                                     className={`p-3 rounded-xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
                                       isInspected 
@@ -1792,9 +1855,19 @@ const OperatorDashboard = ({
                                         <p className="font-extrabold text-xs sm:text-sm text-zinc-900 dark:text-white truncate">
                                           {equip.name}
                                         </p>
-                                        <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
-                                          {equip.code || `ID: ${equip.id.substring(0, 8)}`}
-                                        </p>
+                                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-bold text-zinc-400 dark:text-zinc-500">
+                                          <span className="font-mono bg-zinc-100 dark:bg-zinc-800/80 px-1.5 py-0.2 rounded text-zinc-600 dark:text-zinc-300 font-bold uppercase tracking-wider">
+                                            {equip.code || `EQ-${equip.id.substring(0, 6).toUpperCase()}`}
+                                          </span>
+                                          {equip.description && (
+                                            <>
+                                              <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                                              <span className="truncate max-w-[180px] sm:max-w-[280px] text-zinc-500 dark:text-zinc-400 font-medium">
+                                                {equip.description}
+                                              </span>
+                                            </>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
 
@@ -1888,9 +1961,7 @@ const OperatorDashboard = ({
                       <button 
                         key={`search-area-${area.id}-${idx}`}
                         onClick={() => {
-                          setSelectedArea(area);
-                          setInspectionStartTime(new Date());
-                          setEquipmentStartTime(new Date());
+                          startAreaInspection(area);
                           setSearchingArea(false);
                           setAreaSearchQuery('');
                         }}
@@ -1989,7 +2060,7 @@ const OperatorDashboard = ({
           animate={{ opacity: 1, y: 0 }}
           className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6"
         >
-          <div className="flex items-center justify-between border-b border-zinc-50 dark:border-white/5 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-50 dark:border-white/5 pb-4 gap-3">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-gradient-to-br from-brand-blue to-brand-green rounded-2xl flex items-center justify-center shadow-md dark:shadow-none flex-shrink-0">
                 <MapPin className="text-white w-6 h-6" />
@@ -1999,9 +2070,60 @@ const OperatorDashboard = ({
                 <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{selectedArea.name}</h3>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              {/* Inspection Live Timer Badge */}
+              <div className={`px-3 py-1.5 rounded-2xl border flex items-center gap-2 transition-all ${
+                isInspectionPaused
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+              }`}>
+                <Timer className={`w-4 h-4 ${isInspectionPaused ? 'text-amber-500' : 'text-emerald-500 animate-pulse'}`} />
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 leading-none">
+                    {isInspectionPaused ? 'Pausado' : 'Tiempo Área'}
+                  </span>
+                  <span className="text-xs font-mono font-black leading-tight">
+                    {formatTimer(inspectionTimerSeconds)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pause / Resume Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  saveCurrentToResults();
+                  if (!isInspectionPaused) {
+                    setIsInspectionPaused(true);
+                    setIsPauseModalOpen(true);
+                  } else {
+                    setIsInspectionPaused(false);
+                    setIsPauseModalOpen(false);
+                  }
+                }}
+                className={`px-3.5 py-2 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer ${
+                  isInspectionPaused
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                    : 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-700 dark:text-amber-300'
+                }`}
+              >
+                {isInspectionPaused ? (
+                  <>
+                    <Play className="w-4 h-4 fill-current text-white" />
+                    <span>Reanudar</span>
+                  </>
+                ) : (
+                  <>
+                    <Pause className="w-4 h-4 fill-current" />
+                    <span>Pausar</span>
+                  </>
+                )}
+              </button>
+
               <FlashlightWidget variant="compact" />
-              <button onClick={() => setSelectedArea(null)} className="p-2 bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
+
+              <button onClick={() => setSelectedArea(null)} className="p-2 bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer" title="Cerrar Área">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2066,6 +2188,12 @@ const OperatorDashboard = ({
                        {areaEquipment.length > 0 ? 'Estado: Activo' : 'Inspección General'}
                      </span>
                    </div>
+                   <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md">
+                     <Clock className="w-4 h-4 text-amber-400" />
+                     <span className="text-xs font-mono font-black uppercase tracking-widest text-zinc-300">
+                       Equipo: {formatTimer(equipmentTimerSeconds)}
+                     </span>
+                   </div>
                  </div>
                </div>
             </div>
@@ -2094,19 +2222,113 @@ const OperatorDashboard = ({
               </div>
             )}
 
-            {areaEquipment.length > 0 && currentEquipment?.inspeccionVOSO && (
-              <div className="space-y-10 py-4">
-                <div className="flex flex-col gap-4 px-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tighter uppercase">Inspección Primaria</h4>
-                    <div className="flex gap-2">
-                      {[Eye, Ear, Hand, Wind, Sparkles].map((Ico, i) => (
-                        <div key={`mini-voso-${i}`} className="w-8 h-8 rounded-full bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 flex items-center justify-center shadow-sm dark:shadow-none">
-                          <Ico className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+             {/* Item de Estado Operativo del Equipo (En Funcionamiento / Detenido) */}
+             {areaEquipment.length > 0 && currentEquipment && (
+               <div className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-white/10 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xs space-y-3 my-2">
+                 <div className="flex items-center justify-between gap-2">
+                   <div className="flex items-center gap-2.5 min-w-0">
+                     <div className="w-8 h-8 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center font-bold shrink-0">
+                       <Activity className="w-4 h-4" />
+                     </div>
+                     <div className="min-w-0">
+                       <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white truncate">
+                         Condición Operativa del Equipo
+                       </h4>
+                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium truncate">
+                         ¿El equipo fue inspeccionado en funcionamiento o detenido?
+                       </p>
+                     </div>
+                   </div>
+                   <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border shrink-0 ${
+                     (equipmentOperatingStatus[currentEquipment.id] || 'En Funcionamiento') === 'En Funcionamiento'
+                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                       : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                   }`}>
+                     {(equipmentOperatingStatus[currentEquipment.id] || 'En Funcionamiento') === 'En Funcionamiento' ? '⚡ Operando' : '🛑 Detenido'}
+                   </span>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-3 pt-1">
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setEquipmentOperatingStatus(prev => ({
+                         ...prev,
+                         [currentEquipment.id]: 'En Funcionamiento'
+                       }));
+                     }}
+                     className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all cursor-pointer ${
+                       (equipmentOperatingStatus[currentEquipment.id] || 'En Funcionamiento') === 'En Funcionamiento'
+                         ? 'bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/30 shadow-xs'
+                         : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                     }`}
+                   >
+                     <div className="flex items-center gap-2.5 min-w-0">
+                       <div className={`p-2 rounded-xl shrink-0 ${
+                         (equipmentOperatingStatus[currentEquipment.id] || 'En Funcionamiento') === 'En Funcionamiento'
+                           ? 'bg-emerald-500 text-white'
+                           : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400'
+                       }`}>
+                         <Zap className="w-4 h-4 fill-current" />
+                       </div>
+                       <div className="text-left min-w-0">
+                         <span className="text-xs font-extrabold block truncate">En Funcionamiento</span>
+                         <span className="text-[10px] opacity-75 font-medium block truncate">Equipo operando</span>
+                       </div>
+                     </div>
+                     {(equipmentOperatingStatus[currentEquipment.id] || 'En Funcionamiento') === 'En Funcionamiento' && (
+                       <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 ml-1" />
+                     )}
+                   </button>
+
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setEquipmentOperatingStatus(prev => ({
+                         ...prev,
+                         [currentEquipment.id]: 'Detenido'
+                       }));
+                     }}
+                     className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all cursor-pointer ${
+                       equipmentOperatingStatus[currentEquipment.id] === 'Detenido'
+                         ? 'bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300 ring-2 ring-amber-500/30 shadow-xs'
+                         : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                     }`}
+                   >
+                     <div className="flex items-center gap-2.5 min-w-0">
+                       <div className={`p-2 rounded-xl shrink-0 ${
+                         equipmentOperatingStatus[currentEquipment.id] === 'Detenido'
+                           ? 'bg-amber-500 text-white'
+                           : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400'
+                       }`}>
+                         <PowerOff className="w-4 h-4" />
+                       </div>
+                       <div className="text-left min-w-0">
+                         <span className="text-xs font-extrabold block truncate">Detenido</span>
+                         <span className="text-[10px] opacity-75 font-medium block truncate">Equipo en parada</span>
+                       </div>
+                     </div>
+                     {equipmentOperatingStatus[currentEquipment.id] === 'Detenido' && (
+                       <CheckCircle2 className="w-5 h-5 text-amber-500 shrink-0 ml-1" />
+                     )}
+                   </button>
+                 </div>
+               </div>
+             )}
+
+             {areaEquipment.length > 0 && currentEquipment?.inspeccionVOSO && (
+               <div className="space-y-10 py-4">
+                 <div className="flex flex-col gap-4 px-2">
+                   <div className="flex items-center justify-between">
+                     <h4 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tighter uppercase">Inspección Primaria</h4>
+                     <div className="flex gap-2">
+                       {[Eye, Ear, Hand, Wind, Sparkles].map((Ico, i) => (
+                         <div key={`mini-voso-${i}`} className="w-8 h-8 rounded-full bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 flex items-center justify-center shadow-sm dark:shadow-none">
+                           <Ico className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+                         </div>
+                       ))}
+                     </div>
+                   </div>
                   <div className="h-1 w-20 bg-zinc-900 dark:bg-white rounded-full" />
                   <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium leading-relaxed max-w-sm">
                     Utiliza tus sentidos para detectar anomalías tempranas. La metodología <span className="font-black text-zinc-900 dark:text-white">VOSO</span> es el estándar para el mantenimiento proactivo.
@@ -2491,7 +2713,16 @@ const OperatorDashboard = ({
               <div className="p-8 border-b border-zinc-50 dark:border-white/10 flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Resumen de Inspección</h3>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">{currentEquipment.name}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">{currentEquipment.name}</p>
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                      (equipmentOperatingStatus[currentEquipment.id] || 'En Funcionamiento') === 'En Funcionamiento'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                    }`}>
+                      {(equipmentOperatingStatus[currentEquipment.id] || 'En Funcionamiento') === 'En Funcionamiento' ? '⚡ Operando' : '🛑 Detenido'}
+                    </span>
+                  </div>
                 </div>
                 <button onClick={() => setShowEquipmentSummary(false)} className="p-2 bg-zinc-50 dark:bg-zinc-900 rounded-full">
                   <X className="w-5 h-5 text-zinc-400 dark:text-zinc-500" />
@@ -2528,7 +2759,26 @@ const OperatorDashboard = ({
                   </div>
 
                   <div className="space-y-4">
-                     <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Detalle de Hallazgos</h4>
+                    {(() => {
+                      const equipPhotos = (Object.values(vosoResponses) as VOSOResponse[])
+                        .map(r => r.photoUrl)
+                        .filter((p): p is string => Boolean(p && typeof p === 'string' && p.trim() !== ''));
+                      if (equipPhotos.length > 0) {
+                        return (
+                          <div className="space-y-2 mb-4">
+                            <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">
+                              Galería de Fotos del Equipo ({equipPhotos.length})
+                            </h4>
+                            <div className="rounded-2xl overflow-hidden border border-zinc-200 dark:border-white/10 h-60 shadow-sm">
+                              <FindingPhotoGallery photos={equipPhotos} altPrefix={currentEquipment?.name || 'Equipo'} />
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Detalle de Hallazgos</h4>
                      
                      {(Object.entries(vosoResponses) as [string, VOSOResponse][])
                        .filter(([_, r]) => r.status === 'Observación' || r.status === 'Crítico')
@@ -2613,6 +2863,146 @@ const OperatorDashboard = ({
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Inspección Pausada */}
+      <AnimatePresence>
+        {isPauseModalOpen && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 sm:p-6">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setIsPauseModalOpen(false)} 
+              className="absolute inset-0 bg-zinc-950/80 backdrop-blur-md" 
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+              className="relative w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-10 p-6 sm:p-8 text-center space-y-6"
+            >
+              <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-500 mx-auto flex items-center justify-center shadow-inner">
+                <PauseCircle className="w-9 h-9" />
+              </div>
+
+              <div>
+                <span className="px-3.5 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-widest rounded-full border border-amber-500/20">
+                  Inspección Pausada
+                </span>
+                <h3 className="text-xl font-extrabold text-zinc-900 dark:text-white mt-2">
+                  {selectedArea?.name || 'Área en Inspección'}
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  Los cronómetros de área y de equipo se encuentran pausados.
+                </p>
+              </div>
+
+              {/* Live Timer Badges */}
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/60 dark:border-white/5 flex items-center justify-around">
+                <div className="text-center">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Tiempo Área</p>
+                  <p className="text-2xl font-mono font-black text-amber-500">{formatTimer(inspectionTimerSeconds)}</p>
+                </div>
+                <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800" />
+                <div className="text-center">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Tiempo Equipo</p>
+                  <p className="text-2xl font-mono font-black text-sky-500">{formatTimer(equipmentTimerSeconds)}</p>
+                </div>
+              </div>
+
+              {/* Pause Motive Selector */}
+              <div className="space-y-2 text-left">
+                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block">
+                  Motivo de la Pausa (Opcional)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    '🚨 Atención de Urgencia',
+                    '☕ Pausa / Descanso',
+                    '📞 Coordinación Operativa',
+                    '🔧 Acción en Sitio'
+                  ].map((motive) => (
+                    <button
+                      key={motive}
+                      type="button"
+                      onClick={() => setPauseReason(motive)}
+                      className={`p-2.5 rounded-xl text-left text-[11px] font-bold transition-all border cursor-pointer ${
+                        pauseReason === motive
+                          ? 'bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300 shadow-xs'
+                          : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100'
+                      }`}
+                    >
+                      {motive}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsInspectionPaused(false);
+                    setIsPauseModalOpen(false);
+                  }}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/20 active:scale-95 cursor-pointer"
+                >
+                  <Play className="w-5 h-5 fill-current text-white" />
+                  <span>Reanudar Inspección</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPauseModalOpen(false)}
+                  className="w-full py-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-2xl transition-all cursor-pointer"
+                >
+                  Atender Urgencia / Ir al Menú
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bar Fija Flotante cuando la inspección está en pausa y el operador navega */}
+      <AnimatePresence>
+        {selectedArea && isInspectionPaused && !isPauseModalOpen && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-50 bg-zinc-950 border border-amber-500/50 text-white p-4 rounded-3xl shadow-2xl backdrop-blur-md flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 bg-amber-500/20 border border-amber-500/30 text-amber-400 rounded-2xl shrink-0 animate-pulse">
+                <Pause className="w-5 h-5 fill-current" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">En Pausa</span>
+                  <span className="text-[10px] font-mono font-bold text-zinc-400">{formatTimer(inspectionTimerSeconds)}</span>
+                </div>
+                <p className="font-extrabold text-xs text-white truncate">
+                  {selectedArea.name}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsInspectionPaused(false);
+                setIsPauseModalOpen(false);
+              }}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-2xl flex items-center gap-1.5 shrink-0 transition-all shadow-md shadow-emerald-600/30 active:scale-95 cursor-pointer"
+            >
+              <Play className="w-4 h-4 fill-current text-white" />
+              <span>Continuar</span>
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -3292,11 +3682,11 @@ const SupervisorDashboard = ({
               <p className="text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2 font-medium">{finding.description}</p>
               <div className="mt-4 pt-3 border-t border-zinc-50 dark:border-white/5 flex items-center justify-between gap-4">
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-600 truncate flex-1">Por: {finding.operatorName}</span>
-                {finding.photoUrl && (
-                  <div className="w-12 h-12 rounded-xl bg-zinc-900 dark:bg-zinc-800 overflow-hidden shrink-0 shadow-sm dark:shadow-none border border-zinc-100 dark:border-white/10">
-                    <OfflineImage src={finding.photoUrl} className="w-full h-full object-contain" alt="" />
-                  </div>
-                )}
+                <FindingPhotoThumbnails
+                  photos={extractFindingPhotos(finding)}
+                  onSelectPhoto={() => setSelectedFinding(finding)}
+                  size="sm"
+                />
               </div>
             </motion.div>
           ))}
@@ -3326,19 +3716,13 @@ const SupervisorDashboard = ({
               exit={{ y: '100%' }}
               className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
             >
-              <div className="min-h-[200px] max-h-[400px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 dark:bg-black flex items-center justify-center">
-                <OfflineImage 
-                  src={selectedFinding.photoUrl} 
-                  className="w-full h-full object-contain" 
-                  alt="Finding" 
-                  referrerPolicy="no-referrer" 
+              <div className="min-h-[260px] sm:min-h-[380px] max-h-[450px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-950 flex flex-col">
+                <FindingPhotoGallery 
+                  photos={extractFindingPhotos(selectedFinding)} 
+                  altPrefix={selectedFinding.equipmentName || selectedFinding.areaName || 'Hallazgo'}
+                  showCloseButton
+                  onClose={() => setSelectedFinding(null)}
                 />
-                <button 
-                  onClick={() => setSelectedFinding(null)}
-                  className="absolute top-4 right-4 bg-white/80 dark:bg-black/60 backdrop-blur p-2 rounded-full hover:bg-white dark:hover:bg-black transition-colors shadow-md dark:shadow-none z-10 border border-transparent dark:border-white/10"
-                >
-                  <X className="w-5 h-5 dark:text-white" />
-                </button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-6 custom-scrollbar dark:bg-zinc-950/20">
                 <div>
@@ -4247,17 +4631,12 @@ const ReportsView = ({
                             </p>
                           </div>
 
-                          {/* Photo Thumbnail */}
-                          {f.photoUrl && (
-                            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-zinc-200/50 dark:border-white/10 shrink-0 shadow-sm bg-zinc-100 dark:bg-zinc-850">
-                              <OfflineImage 
-                                src={f.photoUrl} 
-                                className="w-full h-full object-cover group-hover:scale-105 duration-300 transition-transform" 
-                                alt="Finding" 
-                                referrerPolicy="no-referrer" 
-                              />
-                            </div>
-                          )}
+                          {/* Photo Thumbnail / Gallery */}
+                          <FindingPhotoThumbnails
+                            photos={extractFindingPhotos(f)}
+                            onSelectPhoto={() => setSelectedFinding(f)}
+                            size="md"
+                          />
                         </div>
 
                         {/* Resolution Time Badge */}
@@ -4332,19 +4711,13 @@ const ReportsView = ({
                 exit={{ y: '100%' }}
                 className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
               >
-                <div className="min-h-[200px] max-h-[400px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 flex items-center justify-center">
-                <OfflineImage 
-                  src={selectedFinding.photoUrl} 
-                  className="w-full h-full object-contain" 
-                  alt="Finding" 
-                  referrerPolicy="no-referrer" 
-                />
-                  <button 
-                    onClick={() => setSelectedFinding(null)}
-                    className="absolute top-4 right-4 bg-white/80 dark:bg-black/60 backdrop-blur p-2 rounded-full hover:bg-white dark:hover:bg-black transition-colors shadow-md dark:shadow-none z-10 border border-transparent dark:border-white/10"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+                <div className="min-h-[260px] sm:min-h-[380px] max-h-[450px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-950 flex flex-col">
+                  <FindingPhotoGallery 
+                    photos={extractFindingPhotos(selectedFinding)} 
+                    altPrefix={selectedFinding.equipmentName || selectedFinding.areaName || 'Hallazgo'}
+                    showCloseButton
+                    onClose={() => setSelectedFinding(null)}
+                  />
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-6 custom-scrollbar">
                   <div>
@@ -7965,7 +8338,7 @@ const AppLayout = ({
                           <div className="flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-xs">
                             <span className="font-extrabold text-zinc-900 dark:text-white">{weather.temperature}</span>
                             <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline">•</span>
-                            <span className="text-zinc-600 dark:text-zinc-300 hidden sm:inline">💧 {weather.humidity}</span>
+                            <span className="text-zinc-600 dark:text-zinc-300 hidden sm:inline">Hum: {weather.humidity}</span>
                           </div>
                           <ChevronDown className={`w-3 h-3 text-sky-500 transition-transform duration-200 ${isWeatherExpanded ? 'rotate-180' : ''}`} />
                         </>

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './FindingPhotoGallery';
 import { 
   Sparkles, 
   Search, 
@@ -783,11 +784,11 @@ export const OrdenYLimpiezaDashboard = ({
                 <span className="font-black uppercase tracking-widest text-zinc-400 truncate">
                   Por: {finding.operatorName}
                 </span>
-                {finding.photoUrl && (
-                  <div className="w-12 h-12 rounded-xl bg-zinc-900 overflow-hidden shrink-0 border border-zinc-100 dark:border-white/10">
-                    <OfflineImage src={finding.photoUrl} className="w-full h-full object-contain" alt="" />
-                  </div>
-                )}
+                <FindingPhotoThumbnails
+                  photos={extractFindingPhotos(finding)}
+                  onSelectPhoto={() => setSelectedFinding(finding)}
+                  size="sm"
+                />
               </div>
             </motion.div>
           ))}
@@ -814,19 +815,13 @@ export const OrdenYLimpiezaDashboard = ({
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               className="relative w-full max-w-lg sm:max-w-4xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
             >
-              <div className="min-h-[220px] max-h-[380px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-900 flex items-center justify-center">
-                <OfflineImage 
-                  src={selectedFinding.photoUrl} 
-                  className="w-full h-full object-contain" 
-                  alt="Finding" 
-                  referrerPolicy="no-referrer" 
+              <div className="min-h-[260px] sm:min-h-[380px] max-h-[450px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-950 flex flex-col">
+                <FindingPhotoGallery 
+                  photos={extractFindingPhotos(selectedFinding)} 
+                  altPrefix={selectedFinding.equipmentName || selectedFinding.areaName || 'Hallazgo'}
+                  showCloseButton
+                  onClose={() => setSelectedFinding(null)}
                 />
-                <button 
-                  onClick={() => setSelectedFinding(null)}
-                  className="absolute top-4 right-4 bg-black/60 backdrop-blur p-2 rounded-full hover:bg-black text-white transition-colors z-10"
-                >
-                  <X className="w-5 h-5" />
-                </button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 custom-scrollbar dark:bg-zinc-950/20">

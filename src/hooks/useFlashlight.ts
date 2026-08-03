@@ -7,6 +7,20 @@ export function useFlashlight() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
   const turnOff = useCallback(() => {
+    // Turn off torch on any active video elements (e.g. QR scanner)
+    try {
+      const activeVideoEls = document.querySelectorAll('video');
+      activeVideoEls.forEach(videoEl => {
+        if (videoEl.srcObject instanceof MediaStream) {
+          videoEl.srcObject.getVideoTracks().forEach(track => {
+            try {
+              track.applyConstraints({ advanced: [{ torch: false }] } as any);
+            } catch (e) {}
+          });
+        }
+      });
+    } catch (e) {}
+
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => {
         try {
@@ -27,7 +41,29 @@ export function useFlashlight() {
         return;
       }
 
-      // Check if MediaDevices API is available
+      // 1. First check if there is an active video element currently running (e.g. QR scanner)
+      const activeVideoEls = document.querySelectorAll('video');
+      for (let i = 0; i < activeVideoEls.length; i++) {
+        const videoEl = activeVideoEls[i];
+        if (videoEl.srcObject instanceof MediaStream) {
+          const stream = videoEl.srcObject;
+          const track = stream.getVideoTracks()[0];
+          if (track && track.readyState === 'live') {
+            try {
+              await track.applyConstraints({
+                advanced: [{ torch: true }]
+              } as any);
+              setIsTorchOn(true);
+              setIsSupported(true);
+              return;
+            } catch (activeTrackErr) {
+              console.warn('[useFlashlight] Failed to set torch on active video element:', activeTrackErr);
+            }
+          }
+        }
+      }
+
+      // 2. Check if MediaDevices API is available for standalone flashlight
       if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setIsScreenFlashOn(true);
         setIsTorchOn(true);
