@@ -16,6 +16,7 @@ export interface WeatherData {
   windSpeed: number | string;
   windDirection?: string | number;
   precipitation: number | string;
+  uvIndex?: number | string;
   symbol?: string;
   forecastDate: string;
 }
@@ -27,6 +28,7 @@ export interface DailyWeatherData {
   rainAccumulated: string;
   rainProbabilityMax: string;
   windSpeedMax: string;
+  uvIndexMax?: number | string;
   predominantSymbol: string;
   date: string;
 }
@@ -44,8 +46,33 @@ export interface HourlyForecastItem {
   windDirection: string;  // e.g. "NW"
   precipitation: number;  // e.g. 0.2
   precipFormatted: string; // e.g. "0.2 mm"
+  uvIndex?: number;
+  uvIndexFormatted?: string;
   symbol: string;         // e.g. "Chubascos", "Despejado"
   isNight?: boolean;
+}
+
+/**
+ * Helper to determine UV index category and styling color.
+ */
+export function getUVLevelInfo(uv?: number | string | null): { text: string; category: string; color: string; badgeBg: string } {
+  if (uv === undefined || uv === null || uv === 'N/A' || uv === '') {
+    return { text: 'N/A', category: 'N/A', color: 'text-zinc-400', badgeBg: 'bg-zinc-100 dark:bg-zinc-800' };
+  }
+  const val = typeof uv === 'number' ? uv : parseFloat(String(uv));
+  if (isNaN(val)) return { text: String(uv), category: 'N/A', color: 'text-zinc-400', badgeBg: 'bg-zinc-100 dark:bg-zinc-800' };
+
+  if (val <= 2) {
+    return { text: `${val}`, category: 'Bajo', color: 'text-emerald-600 dark:text-emerald-400', badgeBg: 'bg-emerald-500/10 border-emerald-500/20' };
+  } else if (val <= 5) {
+    return { text: `${val}`, category: 'Moderado', color: 'text-yellow-600 dark:text-yellow-400', badgeBg: 'bg-yellow-500/10 border-yellow-500/20' };
+  } else if (val <= 7) {
+    return { text: `${val}`, category: 'Alto', color: 'text-amber-600 dark:text-amber-400', badgeBg: 'bg-amber-500/10 border-amber-500/20' };
+  } else if (val <= 10) {
+    return { text: `${val}`, category: 'Muy Alto', color: 'text-rose-600 dark:text-rose-400', badgeBg: 'bg-rose-500/10 border-rose-500/20' };
+  } else {
+    return { text: `${val}`, category: 'Extremo', color: 'text-purple-600 dark:text-purple-400', badgeBg: 'bg-purple-500/10 border-purple-500/20' };
+  }
 }
 
 // Full weather data structure containing Ahora, Hoy, and Por Hora
@@ -231,6 +258,7 @@ export class MeteoredService {
               const windVal = typeof h.wind_speed === 'number' ? h.wind_speed : 10;
               const windDirVal = String(h.wind_direction || h.wind_dir || 'S');
               const precipVal = typeof h.rain === 'number' ? h.rain : (typeof h.precipitation === 'number' ? h.precipitation : 0);
+              const uvVal = typeof h.uv === 'number' ? h.uv : (typeof h.uv_index === 'number' ? h.uv_index : (typeof h.ultravioleta === 'number' ? h.ultravioleta : undefined));
               const symText = this.formatSymbol(h.symbol ?? h.symbol_description);
 
               return {
@@ -245,6 +273,8 @@ export class MeteoredService {
                 windDirection: windDirVal,
                 precipitation: Math.round(precipVal * 10) / 10,
                 precipFormatted: `${Math.round(precipVal * 10) / 10} mm`,
+                uvIndex: uvVal !== undefined ? Math.round(uvVal * 10) / 10 : undefined,
+                uvIndexFormatted: uvVal !== undefined ? `${Math.round(uvVal * 10) / 10}` : undefined,
                 symbol: symText,
                 isNight: Boolean(h.night),
               };
@@ -257,6 +287,7 @@ export class MeteoredService {
             const windRaw = currentRec.wind_speed ?? 12;
             const windDirRaw = currentRec.wind_direction ?? 'S';
             const precipRaw = currentRec.rain ?? currentRec.precipitation ?? 0;
+            const uvRaw = currentRec.uv ?? currentRec.uv_index ?? currentRec.ultravioleta;
             const symbolRaw = currentRec.symbol ?? currentRec.symbol_description;
             const forecastDateRaw = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
@@ -266,6 +297,7 @@ export class MeteoredService {
               windSpeed: `${Math.round(windRaw)} km/h`,
               windDirection: String(windDirRaw),
               precipitation: `${precipRaw} mm`,
+              uvIndex: uvRaw !== undefined ? Math.round(uvRaw * 10) / 10 : undefined,
               symbol: this.formatSymbol(symbolRaw),
               forecastDate: forecastDateRaw,
             };
@@ -297,6 +329,7 @@ export class MeteoredService {
             const rainAcc = today.rain ?? today.precipitation ?? 0;
             const rainProb = today.rain_probability ?? today.pop ?? 0;
             const windMax = today.wind_gust ?? today.wind_speed ?? 15;
+            const uvMax = today.uv_max ?? today.uv_index_max ?? today.uv ?? today.uv_index;
             const symbolText = this.formatSymbol(today.symbol);
             const dateStr = today.start ? new Date(today.start).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' }) : 'Hoy';
 
@@ -306,6 +339,7 @@ export class MeteoredService {
               rainAccumulated: `${rainAcc} mm`,
               rainProbabilityMax: `${Math.round(rainProb)}%`,
               windSpeedMax: `${Math.round(windMax)} km/h`,
+              uvIndexMax: uvMax !== undefined ? Math.round(uvMax * 10) / 10 : undefined,
               predominantSymbol: symbolText,
               date: dateStr,
             };
@@ -363,7 +397,7 @@ export class MeteoredService {
     const dateStr = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
 
     try {
-      const url = 'https://api.open-meteo.com/v1/forecast?latitude=-33.45&longitude=-70.66&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,weather_code&timezone=auto';
+      const url = 'https://api.open-meteo.com/v1/forecast?latitude=-33.45&longitude=-70.66&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,uv_index&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,uv_index&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,weather_code,uv_index_max&timezone=auto';
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
@@ -374,6 +408,7 @@ export class MeteoredService {
         const curHum = Math.round(cur.relative_humidity_2m ?? 55);
         const curWind = Math.round(cur.wind_speed_10m ?? 14);
         const curPrecip = cur.precipitation ?? 0;
+        const curUv = cur.uv_index !== undefined ? Math.round(cur.uv_index * 10) / 10 : 0;
         const curCond = this.wmoToCondition(cur.weather_code ?? 0);
 
         const current: WeatherData = {
@@ -382,6 +417,7 @@ export class MeteoredService {
           windSpeed: `${curWind} km/h`,
           windDirection: 'S',
           precipitation: `${curPrecip} mm`,
+          uvIndex: curUv,
           symbol: curCond,
           forecastDate: nowTime,
         };
@@ -393,6 +429,7 @@ export class MeteoredService {
         const rSum = (d.precipitation_sum && d.precipitation_sum[0]) ?? 0;
         const rProb = Math.round((d.precipitation_probability_max && d.precipitation_probability_max[0]) ?? 20);
         const wMax = Math.round((d.wind_speed_10m_max && d.wind_speed_10m_max[0]) ?? 18);
+        const uvMax = (d.uv_index_max && d.uv_index_max[0] !== undefined) ? Math.round(d.uv_index_max[0] * 10) / 10 : 0;
         const dCond = this.wmoToCondition((d.weather_code && d.weather_code[0]) ?? 0);
 
         const today: DailyWeatherData = {
@@ -401,6 +438,7 @@ export class MeteoredService {
           rainAccumulated: `${rSum} mm`,
           rainProbabilityMax: `${rProb}%`,
           windSpeedMax: `${wMax} km/h`,
+          uvIndexMax: uvMax,
           predominantSymbol: dCond,
           date: dateStr,
         };
@@ -414,6 +452,7 @@ export class MeteoredService {
           const hVal = h.relative_humidity_2m?.[idx] ?? 50;
           const wVal = h.wind_speed_10m?.[idx] ?? 12;
           const pVal = h.precipitation?.[idx] ?? 0;
+          const uvVal = h.uv_index?.[idx] ?? 0;
           const code = h.weather_code?.[idx] ?? 0;
 
           return {
@@ -428,6 +467,8 @@ export class MeteoredService {
             windDirection: 'S',
             precipitation: Math.round(pVal * 10) / 10,
             precipFormatted: `${Math.round(pVal * 10) / 10} mm`,
+            uvIndex: Math.round(uvVal * 10) / 10,
+            uvIndexFormatted: `${Math.round(uvVal * 10) / 10}`,
             symbol: this.wmoToCondition(code),
             isNight: dt.getHours() < 7 || dt.getHours() > 20,
           };

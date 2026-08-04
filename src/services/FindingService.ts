@@ -10,6 +10,7 @@
  */
 
 import { db, storage, handleFirestoreError } from '../firebase';
+import { removeEmojisBracketsAndParens } from '../utils/textSanitizer';
 import { 
   collection, 
   doc, 
@@ -146,8 +147,11 @@ export class FindingService {
     }
 
     // Prepare robust transaction schema and sanitize to avoid undefined fields
+    const cleanDescription = findingData.description ? removeEmojisBracketsAndParens(findingData.description) : '';
+
     const rawPayload: Partial<Finding> = {
       ...findingData,
+      description: cleanDescription || findingData.description || '',
       id: findingId,
       photoUrl: imageUrl || (hasLocalPhoto ? `offline-cached://media_fnd_${findingId}` : ''),
       createdAt: isOnline ? serverTimestamp() : new Date(),

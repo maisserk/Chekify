@@ -207,25 +207,34 @@ export const exportFindingsToPDF = async (findingsList: Finding[], title: string
 
     const tableData = findingsList.map(f => {
       const fDate = getFindingDate(f);
-      const dateStr = fDate ? format(fDate, 'dd/MM/yy') : '-';
+      const dateStr = fDate ? format(fDate, 'dd/MM/yy HH:mm') : '-';
       return [
         dateStr,
-        sanitizeForPDF(f.areaName, 25),
-        sanitizeForPDF(getOrdenSubcategory(f.description), 20),
-        sanitizeForPDF(f.operatorName, 25),
-        sanitizeForPDF(f.description, 130),
+        sanitizeForPDF(f.areaName),
+        sanitizeForPDF(getOrdenSubcategory(f.description)),
+        sanitizeForPDF(f.operatorName),
+        sanitizeForPDF(f.description, 0),
         f.status === 'Open' ? 'Pendiente' : f.status === 'InReview' ? 'En Revisión' : 'Cerrado',
-        f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy') : '-'
+        f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy HH:mm') : '-'
       ];
     });
 
     autoTable(docPDF, {
       startY: 45,
-      head: [['Fecha', 'Área', 'Subcategoría', 'Operador', 'Descripción', 'Estado', 'Cierre']],
+      head: [['Fecha', 'Área', 'Subcategoría', 'Operador', 'Descripción y Detalle', 'Estado', 'Cierre']],
       body: tableData,
       theme: 'striped',
       headStyles: { fillColor: [147, 51, 234], textColor: [255, 255, 255], fontStyle: 'bold' },
-      styles: { fontSize: 8, cellPadding: 3 },
+      styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 22 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 'auto' },
+        5: { cellWidth: 18 },
+        6: { cellWidth: 22 }
+      },
       margin: { top: 45 }
     });
 

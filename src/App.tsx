@@ -124,6 +124,7 @@ import { OfflineImage } from './components/OfflineImage';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
 import { useHSECAnalytics } from './hooks/useHSECAnalytics';
 import { OrdenYLimpiezaDashboard, isOrdenYLimpiezaFinding, isVOSOFinding } from './components/OrdenYLimpiezaDashboard';
+import { VOSOHeatmapChart } from './components/VOSOHeatmapChart';
 import { PushNotificationWidget } from './components/PushNotificationWidget';
 import { FlashlightWidget } from './components/FlashlightWidget';
 import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './components/FindingPhotoGallery';
@@ -1300,6 +1301,7 @@ const OperatorDashboard = ({
           windSpeed: weather.windSpeed,
           windDirection: weather.windDirection ?? 'N/A',
           precipitation: weather.precipitation,
+          uvIndex: weather.uvIndex ?? 'N/A',
           symbol: weather.symbol ?? 'N/A',
           forecastDate: weather.forecastDate
         } : null;
@@ -1347,11 +1349,11 @@ const OperatorDashboard = ({
           const vosoIssues = (Object.entries(resVoso) as [string, VOSOResponse][]).filter(([_, v]) => v && (v.status === 'Observación' || v.status === 'Crítico'));
 
           if (tradIssues.length > 0 || vosoIssues.length > 0) {
-            const opStatusLabel = res?.operatingStatus === 'Detenido' ? '🛑 Detenido' : '⚡ En Funcionamiento';
-            let description = `Inspección VOSO en ${equip?.name || equipId} [Condición: ${opStatusLabel}].\n\n`;
+            const opStatusLabel = res?.operatingStatus === 'Detenido' ? 'Detenido' : 'En Funcionamiento';
+            let description = `Inspección en ${equip?.name || equipId}. Condición operativa: ${opStatusLabel}.\n\n`;
             
             if (vosoIssues.length > 0) {
-              description += "🚨 HALLAZGOS VOSO:\n";
+              description += "HALLAZGOS VOSO:\n";
               vosoIssues.forEach(([id, v]) => {
                 const ver = equip?.inspeccionVOSO?.ver || [];
                 const oir = equip?.inspeccionVOSO?.oir || [];
@@ -1359,22 +1361,24 @@ const OperatorDashboard = ({
                 const oler = equip?.inspeccionVOSO?.oler || [];
                 const orden = equip?.inspeccionVOSO?.orden || [];
 
-                let icon = "🔍";
                 let categoryName = "GENERAL";
-                if (ver.some(i => i.id === id)) { icon = "👁️"; categoryName = "VER"; }
-                else if (oir.some(i => i.id === id)) { icon = "👂"; categoryName = "OÍR"; }
-                else if (sentir.some(i => i.id === id)) { icon = "🖐️"; categoryName = "SENTIR"; }
-                else if (oler.some(i => i.id === id)) { icon = "👃"; categoryName = "OLER"; }
-                else if (orden.some(i => i.id === id)) { icon = "✨"; categoryName = "ORDEN"; }
+                if (ver.some(i => i.id === id)) { categoryName = "VER"; }
+                else if (oir.some(i => i.id === id)) { categoryName = "OÍR"; }
+                else if (sentir.some(i => i.id === id)) { categoryName = "SENTIR"; }
+                else if (oler.some(i => i.id === id)) { categoryName = "OLER"; }
+                else if (orden.some(i => i.id === id)) { categoryName = "ORDEN"; }
 
                 const allVOSO = [...ver, ...oir, ...sentir, ...oler, ...orden];
                 const item = allVOSO.find(i => i.id === id);
-                description += `${icon} [${categoryName}] ${item?.name || id}: ${v.status}${v.comment ? ` - ${v.comment}` : ''}${v.solvedByOperator ? ' [SOLUCIONADO]' : ''}\n`;
+                const itemName = item?.name || id;
+                const commentText = v.comment ? ` - ${v.comment}` : '';
+                const solvedText = v.solvedByOperator ? ' - Solucionado por operador' : '';
+                description += `• ${categoryName} - ${itemName}: ${v.status}${commentText}${solvedText}\n`;
               });
             }
 
             if (tradIssues.length > 0) {
-              description += "\n📋 OTROS PUNTOS:\n";
+              description += "\nOTROS PUNTOS DE INSPECCIÓN:\n";
               tradIssues.forEach(([id, s]) => {
                 const item = equip?.checkItems?.find(i => id === id);
                 description += `• ${item?.name || id}: ${s}\n`;
@@ -1506,6 +1510,7 @@ const OperatorDashboard = ({
       windSpeed: weather.windSpeed,
       windDirection: weather.windDirection ?? 'N/A',
       precipitation: weather.precipitation,
+      uvIndex: weather.uvIndex ?? 'N/A',
       symbol: weather.symbol ?? 'N/A',
       forecastDate: weather.forecastDate
     } : null;
@@ -3340,6 +3345,9 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
           </div>
         </div>
       </div>
+
+      {/* Heatmap of VOSO Findings by Area */}
+      <VOSOHeatmapChart findings={filteredByDate} />
     </div>
   );
 };
@@ -4175,21 +4183,31 @@ const ReportsView = ({
       }
 
       const tableData = moduleFindings.map(f => [
-        getFindingDate(f) ? format(getFindingDate(f)!, 'dd/MM/yy') : '-',
-        sanitizeForPDF(f.areaName, 25),
-        sanitizeForPDF(f.operatorName, 25),
-        sanitizeForPDF(f.description, 130),
+        getFindingDate(f) ? format(getFindingDate(f)!, 'dd/MM/yy HH:mm') : '-',
+        sanitizeForPDF(`${f.areaName || 'General'}${f.equipmentName ? ' - ' + f.equipmentName : ''}`),
+        sanitizeForPDF(f.operatorName || f.inspector || 'Operador'),
+        sanitizeForPDF(f.priority || 'Media'),
+        sanitizeForPDF(f.description, 0),
         f.status === 'Open' ? 'Pendiente' : f.status === 'InReview' ? 'En Revisión' : 'Cerrado',
-        f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy') : '-'
+        f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy HH:mm') : '-'
       ]);
 
       autoTable(docPDF, {
         startY: 45,
-        head: [['Fecha', 'Área', 'Operador', 'Descripción', 'Estado', 'Cierre']],
+        head: [['Fecha', 'Área / Equipo', 'Operador', 'Prioridad', 'Descripción y Detalle', 'Estado', 'Cierre']],
         body: tableData,
         theme: 'striped',
         headStyles: { fillColor: moduleTab === 'VOSO' ? [24, 24, 27] : [147, 51, 234], textColor: [255, 255, 255], fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 3 },
+        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+        columnStyles: {
+          0: { cellWidth: 22 },
+          1: { cellWidth: 28 },
+          2: { cellWidth: 22 },
+          3: { cellWidth: 16 },
+          4: { cellWidth: 'auto' },
+          5: { cellWidth: 18 },
+          6: { cellWidth: 22 }
+        },
         margin: { top: 45 }
       });
 
@@ -8339,6 +8357,12 @@ const AppLayout = ({
                             <span className="font-extrabold text-zinc-900 dark:text-white">{weather.temperature}</span>
                             <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline">•</span>
                             <span className="text-zinc-600 dark:text-zinc-300 hidden sm:inline">Hum: {weather.humidity}</span>
+                            {weather.uvIndex !== undefined && (
+                              <>
+                                <span className="text-zinc-300 dark:text-zinc-700 hidden md:inline">•</span>
+                                <span className="text-amber-600 dark:text-amber-400 font-bold hidden md:inline">UV: {weather.uvIndex}</span>
+                              </>
+                            )}
                           </div>
                           <ChevronDown className={`w-3 h-3 text-sky-500 transition-transform duration-200 ${isWeatherExpanded ? 'rotate-180' : ''}`} />
                         </>

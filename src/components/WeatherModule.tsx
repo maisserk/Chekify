@@ -17,7 +17,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { meteoredService, FullWeatherData, WeatherData, DailyWeatherData, HourlyForecastItem } from '../services/meteoredService';
+import { meteoredService, FullWeatherData, WeatherData, DailyWeatherData, HourlyForecastItem, getUVLevelInfo } from '../services/meteoredService';
 
 interface WeatherModuleProps {
   onClose?: () => void;
@@ -416,6 +416,21 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
 
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
+                    <Sun className="w-4 h-4 text-amber-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Radiación UV</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className={`text-lg font-black ${getUVLevelInfo(current?.uvIndex).color}`}>
+                      {current?.uvIndex !== undefined ? current.uvIndex : 'N/A'}
+                    </p>
+                    <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                      ({getUVLevelInfo(current?.uvIndex).category})
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
+                  <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
                     <CloudSun className="w-4 h-4 text-amber-500" />
                     <span className="text-[10px] font-bold uppercase tracking-wider">Estado</span>
                   </div>
@@ -505,6 +520,21 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                     <span className="text-[10px] font-bold uppercase tracking-wider">Viento Máximo</span>
                   </div>
                   <p className="text-xl font-black text-teal-600 dark:text-teal-400">{today?.windSpeedMax || 'N/A'}</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
+                  <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
+                    <Sun className="w-4 h-4 text-amber-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Radiación UV Máx.</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className={`text-xl font-black ${getUVLevelInfo(today?.uvIndexMax).color}`}>
+                      {today?.uvIndexMax !== undefined ? today.uvIndexMax : 'N/A'}
+                    </p>
+                    <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                      ({getUVLevelInfo(today?.uvIndexMax).category})
+                    </span>
+                  </div>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
@@ -631,6 +661,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                         <th className="py-3 px-4">Humedad</th>
                         <th className="py-3 px-4">Viento</th>
                         <th className="py-3 px-4">Precipitación</th>
+                        <th className="py-3 px-4">Radiación UV</th>
                         <th className="py-3 px-4 text-center">Estado</th>
                       </tr>
                     </thead>
@@ -652,6 +683,11 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                           <td className="py-3 px-4 whitespace-nowrap">
                             <span className={item.precipitation > 0 ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-zinc-400'}>
                               {item.precipFormatted}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className={`font-bold ${getUVLevelInfo(item.uvIndex).color}`}>
+                              {item.uvIndex !== undefined ? item.uvIndex : 'N/A'}
                             </span>
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-center">
