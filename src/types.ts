@@ -71,6 +71,7 @@ export interface Finding {
   inspectionId: string;
   areaId: string;
   operatorId: string;
+  operatorPhotoUrl?: string;
   description: string;
   photoUrl?: string;
   photoUrls?: string[];

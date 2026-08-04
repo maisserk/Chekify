@@ -25,6 +25,24 @@ export const extractFindingPhotos = (finding: Finding | null | undefined): strin
       if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim()) {
         rawList.push(resp.photoUrl.trim());
       }
+      if (Array.isArray(resp?.photoUrls)) {
+        resp.photoUrls.forEach((p: string) => {
+          if (p && typeof p === 'string' && p.trim()) rawList.push(p.trim());
+        });
+      }
+    });
+  }
+
+  if ((finding as any).voso && typeof (finding as any).voso === 'object') {
+    Object.values((finding as any).voso).forEach((resp: any) => {
+      if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim()) {
+        rawList.push(resp.photoUrl.trim());
+      }
+      if (Array.isArray(resp?.photoUrls)) {
+        resp.photoUrls.forEach((p: string) => {
+          if (p && typeof p === 'string' && p.trim()) rawList.push(p.trim());
+        });
+      }
     });
   }
 

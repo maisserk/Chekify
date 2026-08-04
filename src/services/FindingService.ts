@@ -149,11 +149,22 @@ export class FindingService {
     // Prepare robust transaction schema and sanitize to avoid undefined fields
     const cleanDescription = findingData.description ? removeEmojisBracketsAndParens(findingData.description) : '';
 
+    const mainPhotoUrl = imageUrl || (hasLocalPhoto ? `offline-cached://media_fnd_${findingId}` : '');
+    let finalPhotoUrls = Array.isArray(findingData.photoUrls) ? [...findingData.photoUrls] : [];
+    if (mainPhotoUrl) {
+      if (finalPhotoUrls.length > 0) {
+        finalPhotoUrls[0] = mainPhotoUrl;
+      } else {
+        finalPhotoUrls = [mainPhotoUrl];
+      }
+    }
+
     const rawPayload: Partial<Finding> = {
       ...findingData,
       description: cleanDescription || findingData.description || '',
       id: findingId,
-      photoUrl: imageUrl || (hasLocalPhoto ? `offline-cached://media_fnd_${findingId}` : ''),
+      photoUrl: mainPhotoUrl,
+      photoUrls: finalPhotoUrls,
       createdAt: isOnline ? serverTimestamp() : new Date(),
     };
 

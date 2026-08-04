@@ -105,6 +105,7 @@ import {
   BookOpen,
   Smartphone,
   Share,
+  Share2,
   CloudSun,
   Thermometer,
   Droplets,
@@ -129,6 +130,8 @@ import { PushNotificationWidget } from './components/PushNotificationWidget';
 import { FlashlightWidget } from './components/FlashlightWidget';
 import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './components/FindingPhotoGallery';
 import { FindingDescriptionRenderer } from './components/FindingDescriptionRenderer';
+import { downloadOperatorInspectionPDF, shareOperatorInspectionPDF, downloadOrShareOperatorInspectionPDF } from './utils/generateOperatorInspectionPDF';
+import { useAppUsers } from './hooks/useAppUsers';
 
 const generateSafeId = (name: string): string => {
   return name
@@ -591,7 +594,7 @@ const VOSOExecutionCategory = ({
   icon: any, 
   items: VOSOItem[], 
   responses: Record<string, VOSOResponse>,
-  onUpdate: (id: string, status: any, comment?: string, photo?: string, solved?: boolean) => void,
+  onUpdate: (id: string, status: any, comment?: string, photo?: string | string[], solved?: boolean) => void,
   colorClass: string
 }) => {
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
@@ -721,45 +724,78 @@ const VOSOExecutionCategory = ({
                       className="w-full p-3 bg-white/80 dark:bg-black/40 border border-zinc-200 dark:border-white/10 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[80px] font-medium text-zinc-700 dark:text-zinc-300 shadow-sm dark:shadow-none"
                     />
                     
-                    <div className="flex items-center gap-3">
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        capture="environment" 
-                        className="hidden" 
-                        id={`photo-${item.id}`}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = async () => {
-                              const base64 = reader.result as string;
-                              try {
-                                const compressed = await validateAndCompressImage(base64, 300, 300);
-                                onUpdate(item.id, res.status, res.comment, compressed);
-                              } catch (err: any) {
-                                console.error("Checklist image validation error:", err);
-                                alert(err.message || "Error al validar la imagen.");
-                                e.target.value = ''; // Reset file input
+                    {(() => {
+                      const itemPhotos: string[] = res?.photoUrls && res.photoUrls.length > 0
+                        ? res.photoUrls
+                        : (res?.photoUrl ? [res.photoUrl] : []);
+                      
+                      return (
+                        <div className="space-y-3 pt-1">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment" 
+                            className="hidden" 
+                            id={`photo-${item.id}`}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (itemPhotos.length >= 3) {
+                                  alert("Límite alcanzado: máximo 3 fotos por hallazgo.");
+                                  e.target.value = '';
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onloadend = async () => {
+                                  const base64 = reader.result as string;
+                                  try {
+                                    const compressed = await validateAndCompressImage(base64, 300, 300);
+                                    const updated = [...itemPhotos, compressed].slice(0, 3);
+                                    onUpdate(item.id, res.status, res.comment, updated, res.solvedByOperator);
+                                    e.target.value = '';
+                                  } catch (err: any) {
+                                    console.error("Checklist image validation error:", err);
+                                    alert(err.message || "Error al validar la imagen.");
+                                    e.target.value = '';
+                                  }
+                                };
+                                reader.readAsDataURL(file);
                               }
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                      />
-                      <button 
-                        onClick={() => document.getElementById(`photo-${item.id}`)?.click()}
-                        className="flex-1 py-3 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-zinc-200 dark:shadow-none"
-                      >
-                        <Camera className="w-4 h-4" />
-                        CAPTURAR EVIDENCIA
-                      </button>
-                      {res?.photoUrl && (
-                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-2 border-white dark:border-white/20 shadow-sm dark:shadow-none flex-shrink-0 flex items-center justify-center">
-                          <OfflineImage src={res.photoUrl} className="w-full h-full object-cover" />
+                            }}
+                          />
+
+                          <div className="flex flex-wrap items-center gap-3">
+                            {itemPhotos.length < 3 && (
+                              <button 
+                                type="button"
+                                onClick={() => document.getElementById(`photo-${item.id}`)?.click()}
+                                className="flex-1 min-w-[160px] py-3 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-zinc-200 dark:shadow-none cursor-pointer"
+                              >
+                                <Camera className="w-4 h-4" />
+                                {itemPhotos.length === 0 ? 'CAPTURAR EVIDENCIA (MÁX 3)' : `AÑADIR OTRA FOTO (${itemPhotos.length}/3)`}
+                              </button>
+                            )}
+
+                            {itemPhotos.map((pUrl, pIdx) => (
+                              <div key={`item-${item.id}-p-${pIdx}`} className="relative group w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-2 border-white dark:border-white/20 shadow-sm flex-shrink-0">
+                                <OfflineImage src={pUrl} className="w-full h-full object-cover" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = itemPhotos.filter((_, idx) => idx !== pIdx);
+                                    onUpdate(item.id, res.status, res.comment, updated, res.solvedByOperator);
+                                  }}
+                                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-md opacity-90 hover:opacity-100 transition-opacity cursor-pointer z-10"
+                                  title="Eliminar foto"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -797,12 +833,15 @@ const OperatorDashboard = ({
   const [findingDescription, setFindingDescription] = useState('');
   const [findingCategory, setFindingCategory] = useState<'VOSO' | 'OrdenYLimpieza'>('VOSO');
   const [findingSubcat, setFindingSubcat] = useState<'Residuos' | 'Herramientas' | 'Derrames' | 'Obstrucciones' | 'Limpieza' | 'General'>('Residuos');
-  const [findingPhoto, setFindingPhoto] = useState<string | null>(null);
+  const [findingPhotos, setFindingPhotos] = useState<string[]>([]);
+  const findingPhoto = findingPhotos[0] || null;
   const [immediateSolution, setImmediateSolution] = useState('');
   const [isClosingImmediately, setIsClosingImmediately] = useState(false);
   const [formValidationError, setFormValidationError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalConfig, setSuccessModalConfig] = useState<{ title: string; message: string } | null>(null);
+  const [lastSavedFindingForPdf, setLastSavedFindingForPdf] = useState<Finding | null>(null);
+  const { getOperatorProfile } = useAppUsers();
 
   useEffect(() => {
     if (!showFindingForm) {
@@ -964,16 +1003,35 @@ const OperatorDashboard = ({
     setCheckItemStates(prev => ({ ...prev, [itemId]: state }));
   };
 
-   const handleSetVOSOResponse = (itemId: string, status: any, comment?: string, photo?: string, solved?: boolean) => {
+   const handleSetVOSOResponse = (itemId: string, status: any, comment?: string, photo?: string | string[], solved?: boolean) => {
     setVosoResponses(prev => {
       const current = prev[itemId] || { status: 'OK' };
+      let photoUrl = current.photoUrl;
+      let photoUrls = current.photoUrls || (current.photoUrl ? [current.photoUrl] : []);
+
+      if (Array.isArray(photo)) {
+        photoUrls = photo;
+        photoUrl = photo[0] || null;
+      } else if (photo !== undefined) {
+        if (photo) {
+          if (!photoUrls.includes(photo)) {
+            photoUrls = [...photoUrls, photo].slice(0, 3);
+          }
+          photoUrl = photoUrls[0] || null;
+        } else {
+          photoUrl = null;
+          photoUrls = [];
+        }
+      }
+
       return {
         ...prev,
         [itemId]: {
           ...current,
           status,
           comment: comment !== undefined ? comment : (current.comment ?? null),
-          photoUrl: photo !== undefined ? photo : (current.photoUrl ?? null),
+          photoUrl: photoUrl ?? null,
+          photoUrls,
           solvedByOperator: solved !== undefined ? solved : (current.solvedByOperator ?? false)
         }
       };
@@ -1387,9 +1445,19 @@ const OperatorDashboard = ({
             }
 
             const priority = vosoIssues.some(v => v[1]?.status === 'Crítico') ? 'Alta' : 'Media';
-            const allPhotos = vosoIssues
-              .map(v => v[1]?.photoUrl)
-              .filter((p): p is string => Boolean(p && typeof p === 'string' && p.trim() !== ''));
+            const allPhotos: string[] = [];
+            vosoIssues.forEach(v => {
+              const resp = v[1];
+              if (Array.isArray(resp?.photoUrls) && resp.photoUrls.length > 0) {
+                resp.photoUrls.forEach((p: string) => {
+                  if (p && typeof p === 'string' && p.trim() && !allPhotos.includes(p.trim())) {
+                    allPhotos.push(p.trim());
+                  }
+                });
+              } else if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim() && !allPhotos.includes(resp.photoUrl.trim())) {
+                allPhotos.push(resp.photoUrl.trim());
+              }
+            });
             const firstPhoto = allPhotos[0] || null;
 
             const resultObj = await FindingService.createFinding({
@@ -1412,6 +1480,7 @@ const OperatorDashboard = ({
               equipmentDurationSeconds: equipDuration,
               operatorId: user.uid,
               operatorName: user.name || user.email,
+              operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
               source: 'Inspection',
               clima: climaPayload,
               history: [
@@ -1425,6 +1494,8 @@ const OperatorDashboard = ({
                 } as any
               ]
             }, firstPhoto);
+
+            setLastSavedFindingForPdf(resultObj as unknown as Finding);
 
             const findingRef = { id: resultObj.id };
 
@@ -1516,6 +1587,7 @@ const OperatorDashboard = ({
       forecastDate: weather.forecastDate
     } : null;
 
+    const primaryPhoto = findingPhotos[0] || null;
     const findingData = {
       areaId: selectedArea.id,
       areaName: selectedArea.name,
@@ -1524,7 +1596,10 @@ const OperatorDashboard = ({
       plantId: selectedArea.plantId || user.plantId || 'default-plant',
       operatorId: user.uid,
       operatorName: user.name || user.email || 'Operador',
+      operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
       description: finalDescription,
+      photoUrl: primaryPhoto || undefined,
+      photoUrls: findingPhotos,
       source: isOrden ? 'OrdenYLimpieza' : 'VOSO',
       category: isOrden ? 'OrdenYLimpieza' : 'VOSO',
       status: isClosingImmediately ? 'Closed' : 'Open' as any,
@@ -1548,7 +1623,8 @@ const OperatorDashboard = ({
     };
 
     try {
-      const resultObj = await FindingService.createFinding(findingData, findingPhoto);
+      const resultObj = await FindingService.createFinding(findingData, primaryPhoto);
+      setLastSavedFindingForPdf(resultObj as unknown as Finding);
       const findingRef = { id: resultObj.id };
       
       // Auto-generate notification for supervisors and admins supporting offline queueing
@@ -1580,7 +1656,7 @@ const OperatorDashboard = ({
 
       setShowFindingForm(false);
       setFindingDescription('');
-      setFindingPhoto(null);
+      setFindingPhotos([]);
       setImmediateSolution('');
       setIsClosingImmediately(false);
       setMessage({ text: "Hallazgo registrado exitosamente", type: 'success' });
@@ -2548,11 +2624,13 @@ const OperatorDashboard = ({
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Foto del Hallazgo</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Fotos del Hallazgo <span className="text-xs text-zinc-400 font-normal">(máx 3)</span>
+                </label>
                 <FlashlightWidget variant="compact" />
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3">
                 <input 
                   type="file" 
                   accept="image/*" 
@@ -2562,13 +2640,19 @@ const OperatorDashboard = ({
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
+                      if (findingPhotos.length >= 3) {
+                        setFormValidationError("Límite alcanzado: máximo 3 fotos por hallazgo.");
+                        e.target.value = '';
+                        return;
+                      }
                       setFormValidationError(null);
                       const reader = new FileReader();
                       reader.onloadend = async () => {
                         const base64 = reader.result as string;
                         try {
                           const compressed = await validateAndCompressImage(base64, 300, 300);
-                          setFindingPhoto(compressed);
+                          setFindingPhotos(prev => [...prev, compressed].slice(0, 3));
+                          e.target.value = '';
                         } catch (err: any) {
                           console.error("Manual finding validation/compression error:", err);
                           setFormValidationError(err.message || "Error al validar la foto del hallazgo");
@@ -2580,23 +2664,30 @@ const OperatorDashboard = ({
                     }
                   }}
                 />
-                <label 
-                  htmlFor="findingPhotoInput"
-                  className="w-20 h-20 bg-zinc-50 border border-zinc-200 rounded-2xl flex items-center justify-center text-zinc-400 hover:text-brand-blue hover:border-brand-blue cursor-pointer transition-all active:scale-95"
-                >
-                  <Camera className="w-8 h-8" />
-                </label>
-                {findingPhoto && (
-                  <div className="relative group">
-                    <img src={findingPhoto} className="w-20 h-20 object-cover rounded-2xl border border-zinc-200" alt="Preview" />
+                
+                {findingPhotos.length < 3 && (
+                  <label 
+                    htmlFor="findingPhotoInput"
+                    className="w-20 h-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-2xl flex flex-col items-center justify-center text-zinc-400 hover:text-brand-blue hover:border-brand-blue cursor-pointer transition-all active:scale-95 text-[10px] font-bold gap-1"
+                  >
+                    <Camera className="w-6 h-6" />
+                    <span>{findingPhotos.length === 0 ? '+ Foto' : `${findingPhotos.length}/3`}</span>
+                  </label>
+                )}
+
+                {findingPhotos.map((photo, pIdx) => (
+                  <div key={`finding-preview-${pIdx}`} className="relative group w-20 h-20">
+                    <img src={photo} className="w-20 h-20 object-cover rounded-2xl border border-zinc-200 dark:border-white/10" alt={`Preview ${pIdx + 1}`} />
                     <button 
-                      onClick={() => setFindingPhoto('')}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg dark:shadow-none opacity-0 group-hover:opacity-100 transition-opacity"
+                      type="button"
+                      onClick={() => setFindingPhotos(prev => prev.filter((_, i) => i !== pIdx))}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors cursor-pointer z-10"
+                      title="Eliminar foto"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                )}
+                ))}
               </div>
             </div>
 
@@ -3043,32 +3134,70 @@ const OperatorDashboard = ({
                 </p>
               </div>
               
-              <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSuccessModal(false);
-                    resetInspectionState();
-                    if (setActiveTab) {
-                      setActiveTab('History');
-                    }
-                  }}
-                  className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-2xl font-bold text-[10px] uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5"
-                >
-                  <Eye className="w-4 h-4" />
-                  Ver Historial
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSuccessModal(false);
-                    resetInspectionState();
-                  }}
-                  className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-black rounded-2xl font-bold text-[10px] uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  Nueva Inspección
-                </button>
+              <div className="flex flex-col gap-2 pt-2">
+                {lastSavedFindingForPdf && (
+                  <div className="grid grid-cols-2 gap-2 mb-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const opProf = getOperatorProfile(lastSavedFindingForPdf.operatorId, lastSavedFindingForPdf.operatorName, lastSavedFindingForPdf.operatorPhotoUrl);
+                        downloadOperatorInspectionPDF(lastSavedFindingForPdf, {
+                          name: lastSavedFindingForPdf.operatorName || opProf.name,
+                          photoUrl: opProf.photoUrl || lastSavedFindingForPdf.operatorPhotoUrl,
+                          rut: opProf.rut,
+                          cargo: opProf.cargo
+                        });
+                      }}
+                      className="py-3 px-3 bg-sky-600 hover:bg-sky-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Descargar PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const opProf = getOperatorProfile(lastSavedFindingForPdf.operatorId, lastSavedFindingForPdf.operatorName, lastSavedFindingForPdf.operatorPhotoUrl);
+                        shareOperatorInspectionPDF(lastSavedFindingForPdf, {
+                          name: lastSavedFindingForPdf.operatorName || opProf.name,
+                          photoUrl: opProf.photoUrl || lastSavedFindingForPdf.operatorPhotoUrl,
+                          rut: opProf.rut,
+                          cargo: opProf.cargo
+                        });
+                      }}
+                      className="py-3 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span>Compartir PDF</span>
+                    </button>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSuccessModal(false);
+                      resetInspectionState();
+                      if (setActiveTab) {
+                        setActiveTab('History');
+                      }
+                    }}
+                    className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-2xl font-bold text-[10px] uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                  >
+                    <Eye className="w-4 h-4" />
+                    Ver Historial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSuccessModal(false);
+                      resetInspectionState();
+                    }}
+                    className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-black rounded-2xl font-bold text-[10px] uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Nueva Inspección
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
@@ -3379,6 +3508,7 @@ const SupervisorDashboard = ({
   const [operatorFilter, setOperatorFilter] = useState('All');
 
   const [searchTerm, setSearchTerm] = useState('');
+  const { getOperatorProfile } = useAppUsers();
 
   useEffect(() => {
     // Elegant plant-scoped real-time listener using Enterprise FindingService
@@ -3801,6 +3931,42 @@ const SupervisorDashboard = ({
                   </div>
                 )}
 
+                <div className="pt-3 border-t border-zinc-100 dark:border-white/10 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const opProf = getOperatorProfile(selectedFinding.operatorId, selectedFinding.operatorName, selectedFinding.operatorPhotoUrl);
+                      downloadOperatorInspectionPDF(selectedFinding, {
+                        name: selectedFinding.operatorName || opProf.name,
+                        photoUrl: opProf.photoUrl || selectedFinding.operatorPhotoUrl,
+                        rut: opProf.rut,
+                        cargo: opProf.cargo
+                      });
+                    }}
+                    className="w-full py-3.5 px-3 bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-500 hover:to-sky-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Descargar PDF</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const opProf = getOperatorProfile(selectedFinding.operatorId, selectedFinding.operatorName, selectedFinding.operatorPhotoUrl);
+                      shareOperatorInspectionPDF(selectedFinding, {
+                        name: selectedFinding.operatorName || opProf.name,
+                        photoUrl: opProf.photoUrl || selectedFinding.operatorPhotoUrl,
+                        rut: opProf.rut,
+                        cargo: opProf.cargo
+                      });
+                    }}
+                    className="w-full py-3.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span>Compartir PDF</span>
+                  </button>
+                </div>
+
                 {user.role === 'Administrador' && (
                   <div className="pt-4 border-t border-zinc-100">
                     {isConfirmingDelete ? (
@@ -3878,11 +4044,73 @@ const ReportsView = ({
     key: 'createdAt',
     direction: 'desc'
   });
-  const [subTab, setSubTab] = useState<'active' | 'closed'>('active');
+  const [subTab, setSubTab] = useState<'active' | 'closed' | 'user_rounds'>('active');
+  const [selectedUserFilter, setSelectedUserFilter] = useState<string>('ALL');
+  const [userSearchQuery, setUserSearchQuery] = useState<string>('');
+  const { getOperatorProfile } = useAppUsers();
 
   const moduleFindings = React.useMemo(() => {
     return findings.filter(f => moduleTab === 'VOSO' ? isVOSOFinding(f) : isOrdenYLimpiezaFinding(f));
   }, [findings, moduleTab]);
+
+  const userStatsList = React.useMemo(() => {
+    const statsMap: Record<string, {
+      operatorName: string;
+      operatorPhotoUrl?: string;
+      operatorId?: string;
+      rut?: string;
+      cargo?: string;
+      totalRounds: number;
+      vosoRounds: number;
+      ordenRounds: number;
+      activeRounds: number;
+      closedRounds: number;
+      lastRoundDate: Date | null;
+      findingsList: Finding[];
+    }> = {};
+
+    findings.forEach((f) => {
+      const opName = (f.operatorName || 'Operador en Terreno').trim();
+      const prof = getOperatorProfile(f.operatorId, opName);
+
+      if (!statsMap[opName]) {
+        statsMap[opName] = {
+          operatorName: opName,
+          operatorPhotoUrl: prof.photoUrl,
+          operatorId: f.operatorId,
+          rut: prof.rut,
+          cargo: prof.cargo,
+          totalRounds: 0,
+          vosoRounds: 0,
+          ordenRounds: 0,
+          activeRounds: 0,
+          closedRounds: 0,
+          lastRoundDate: null,
+          findingsList: []
+        };
+      } else if (!statsMap[opName].operatorPhotoUrl && prof.photoUrl) {
+        statsMap[opName].operatorPhotoUrl = prof.photoUrl;
+      }
+
+      const record = statsMap[opName];
+      record.totalRounds += 1;
+      if (isVOSOFinding(f)) record.vosoRounds += 1;
+      if (isOrdenYLimpiezaFinding(f)) record.ordenRounds += 1;
+      if (f.status === 'Closed') record.closedRounds += 1;
+      else record.activeRounds += 1;
+
+      record.findingsList.push(f);
+
+      const fDate = getFindingDate(f);
+      if (fDate) {
+        if (!record.lastRoundDate || fDate.getTime() > record.lastRoundDate.getTime()) {
+          record.lastRoundDate = fDate;
+        }
+      }
+    });
+
+    return Object.values(statsMap).sort((a, b) => b.totalRounds - a.totalRounds);
+  }, [findings, getOperatorProfile]);
 
   const stats = React.useMemo(() => {
     return {
@@ -4227,6 +4455,24 @@ const ReportsView = ({
                   {stats.closed}
                 </span>
               </button>
+              <button
+                onClick={() => setSubTab('user_rounds')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  subTab === 'user_rounds' 
+                    ? 'bg-white dark:bg-zinc-800 text-sky-600 dark:text-sky-400 shadow-xs' 
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Inspecciones por Usuario</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${
+                  subTab === 'user_rounds' 
+                    ? 'bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300' 
+                    : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                }`}>
+                  {userStatsList.length}
+                </span>
+              </button>
             </div>
 
             <button 
@@ -4245,7 +4491,320 @@ const ReportsView = ({
           </div>
         </div>
 
-        {subTab === 'active' ? (
+        {subTab === 'user_rounds' ? (
+          <div className="p-4 sm:p-6 space-y-8 animate-fadeIn">
+            {/* Top KPI Cards for Users */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-sky-50/50 dark:bg-sky-500/10 p-4 rounded-2xl border border-sky-100 dark:border-sky-500/20 shadow-xs">
+                <p className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-widest mb-1">Total Inspecciones Realizadas</p>
+                <p className="text-2xl font-black text-sky-900 dark:text-sky-200">{findings.length}</p>
+                <p className="text-[10px] text-sky-600/70 dark:text-sky-400/70 mt-1 font-medium">Inspecciones registradas</p>
+              </div>
+
+              <div className="bg-indigo-50/50 dark:bg-indigo-500/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-500/20 shadow-xs">
+                <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Operadores Activos</p>
+                <p className="text-2xl font-black text-indigo-900 dark:text-indigo-200">{userStatsList.length}</p>
+                <p className="text-[10px] text-indigo-600/70 dark:text-indigo-400/70 mt-1 font-medium">Usuarios con registros</p>
+              </div>
+
+              <div className="bg-amber-50/50 dark:bg-amber-500/10 p-4 rounded-2xl border border-amber-100 dark:border-amber-500/20 shadow-xs col-span-2 sm:col-span-2">
+                <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">Operador Líder de Inspecciones</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-lg font-black text-amber-950 dark:text-amber-100 truncate">
+                      {userStatsList[0]?.operatorName || 'Sin datos'}
+                    </p>
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider">
+                      {userStatsList[0]?.totalRounds || 0} Inspecciones completadas
+                    </p>
+                  </div>
+                  <span className="text-2xl">🏆</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Operator Cards & Filters */}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                    <Users className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                    <span>Conteo de Inspecciones por Usuario</span>
+                  </h4>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">Selecciona un usuario para filtrar sus inspecciones o descargar sus informes</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Buscar operador..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 text-xs bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+
+                  {selectedUserFilter !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUserFilter('ALL')}
+                      className="px-2.5 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" /> Ver Todos
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Grid of Operators */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {userStatsList
+                  .filter(u => u.operatorName.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                  .map((stat, idx) => {
+                    const isSelected = selectedUserFilter === stat.operatorName;
+                    return (
+                      <div
+                        key={`user-stat-${idx}-${stat.operatorName}`}
+                        onClick={() => setSelectedUserFilter(isSelected ? 'ALL' : stat.operatorName)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between gap-3 ${
+                          isSelected
+                            ? 'bg-sky-50/80 dark:bg-sky-500/15 border-sky-400 dark:border-sky-500 ring-2 ring-sky-500/20 shadow-md'
+                            : 'bg-white dark:bg-zinc-900/60 border-zinc-100 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/20 shadow-xs'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sky-600 to-indigo-600 text-white font-black text-sm flex items-center justify-center uppercase shadow-sm overflow-hidden shrink-0 border border-sky-300 dark:border-sky-700">
+                              {stat.operatorPhotoUrl ? (
+                                <img src={stat.operatorPhotoUrl} alt={stat.operatorName} className="w-full h-full object-cover" />
+                              ) : (
+                                stat.operatorName.slice(0, 2)
+                              )}
+                            </div>
+                            <div>
+                              <h5 className="font-bold text-zinc-900 dark:text-white text-sm line-clamp-1">
+                                {stat.operatorName}
+                              </h5>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
+                                Última inspección: {stat.lastRoundDate ? format(stat.lastRoundDate, 'dd/MM/yyyy') : 'Sin fecha'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className="px-2.5 py-1 bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300 rounded-xl text-[11px] font-black uppercase tracking-wider shrink-0 border border-sky-200 dark:border-sky-500/30">
+                            {stat.totalRounds} Inspecciones de Área
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[10px] pt-2 border-t border-zinc-100 dark:border-white/5">
+                          <div className="bg-zinc-50 dark:bg-black/40 p-2 rounded-xl text-center">
+                            <span className="block text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">VOSO</span>
+                            <span className="font-black text-brand-blue dark:text-sky-400 text-xs">{stat.vosoRounds}</span>
+                          </div>
+                          <div className="bg-zinc-50 dark:bg-black/40 p-2 rounded-xl text-center">
+                            <span className="block text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">5S Orden</span>
+                            <span className="font-black text-purple-600 dark:text-purple-400 text-xs">{stat.ordenRounds}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-1 flex items-center justify-between text-[10px] font-bold text-sky-600 dark:text-sky-400">
+                          <span>{isSelected ? '✓ Filtrando inspecciones de este usuario' : 'Filtrar inspecciones de este operador'}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* List / Table of Completed Inspections for the selected / all user(s) */}
+            <div className="pt-4 border-t border-zinc-100 dark:border-white/10 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Registro General de Inspecciones de Área e Informes PDF</span>
+                  </h4>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                    {selectedUserFilter === 'ALL'
+                      ? 'Mostrando todas las inspecciones de área realizadas'
+                      : `Mostrando inspecciones realizadas por: ${selectedUserFilter}`}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase">Filtrar por Usuario:</label>
+                  <select
+                    value={selectedUserFilter}
+                    onChange={(e) => setSelectedUserFilter(e.target.value)}
+                    className="text-xs bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/10 rounded-xl px-3 py-1.5 text-zinc-900 dark:text-white font-bold focus:outline-none"
+                  >
+                    <option value="ALL">Todos los Usuarios ({findings.length} Inspecciones)</option>
+                    {userStatsList.map((stat, i) => (
+                      <option key={`opt-usr-${i}`} value={stat.operatorName}>
+                        {stat.operatorName} ({stat.totalRounds} inspecciones)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Table of rounds */}
+              {(() => {
+                const filteredRounds = findings.filter(f => {
+                  if (selectedUserFilter !== 'ALL' && (f.operatorName || 'Operador en Terreno').trim() !== selectedUserFilter) {
+                    return false;
+                  }
+                  return true;
+                });
+
+                if (filteredRounds.length === 0) {
+                  return (
+                    <div className="p-12 text-center text-zinc-400 dark:text-zinc-600 bg-zinc-50 dark:bg-zinc-900/30 rounded-3xl border border-zinc-100 dark:border-white/5">
+                      <FileText className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                      <p className="text-xs font-bold uppercase tracking-wider">No hay inspecciones registradas para este filtro</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs">
+                    <table className="w-full text-left text-sm min-w-[850px]">
+                      <thead>
+                        <tr className="bg-zinc-50 dark:bg-zinc-900/80 text-zinc-400 dark:text-zinc-500 border-b border-zinc-100 dark:border-white/5 text-[10px] uppercase font-bold tracking-widest">
+                          <th className="px-4 py-3.5">Fecha</th>
+                          <th className="px-4 py-3.5">Módulo</th>
+                          <th className="px-4 py-3.5">Operador / Usuario</th>
+                          <th className="px-4 py-3.5">Área de Inspección</th>
+                          <th className="px-4 py-3.5">Resumen de Inspección</th>
+                          <th className="px-4 py-3.5">Estado</th>
+                          <th className="px-4 py-3.5 text-right">Informe PDF</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-white/5 bg-white dark:bg-black">
+                        {filteredRounds.map((f, idx) => {
+                          const fDate = getFindingDate(f);
+                          const isVoso = isVOSOFinding(f);
+                          const opProfile = getOperatorProfile(f.operatorId, f.operatorName);
+
+                          return (
+                            <tr
+                              key={`round-row-${f.id}-${idx}`}
+                              onClick={() => setSelectedFinding(f)}
+                              className="hover:bg-zinc-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer group"
+                            >
+                              <td className="px-4 py-3.5 text-xs font-mono text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                                {fDate ? format(fDate, 'dd/MM/yyyy HH:mm') : '-'}
+                              </td>
+
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                                  isVoso
+                                    ? 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300'
+                                    : 'bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-300'
+                                }`}>
+                                  {isVoso ? '👁️ VOSO' : '✨ 5S Orden'}
+                                </span>
+                              </td>
+
+                              <td className="px-4 py-3.5 font-bold text-zinc-900 dark:text-white whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full overflow-hidden bg-sky-100 dark:bg-sky-900/40 border border-sky-300 dark:border-sky-700/50 flex items-center justify-center shrink-0">
+                                    {opProfile.photoUrl ? (
+                                      <img src={opProfile.photoUrl} alt={f.operatorName || 'Operador'} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-[10px] font-black text-sky-600 dark:text-sky-400 uppercase">
+                                        {(f.operatorName || 'OP').slice(0, 2)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span>{f.operatorName || 'Operador'}</span>
+                                </div>
+                              </td>
+
+                              <td className="px-4 py-3.5 text-xs text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap">
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-zinc-900 dark:text-white">{f.areaName || 'Área Principal'}</span>
+                                  <span className="text-[10px] text-sky-600 dark:text-sky-400 font-semibold uppercase tracking-wider">
+                                    {f.equipmentName ? `Área Completa (${f.equipmentName})` : 'Área Completa'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              <td className="px-4 py-3.5 max-w-[220px]">
+                                <FindingDescriptionRenderer
+                                  description={f.description}
+                                  isPreview
+                                  className="text-xs text-zinc-500 dark:text-zinc-400 truncate"
+                                />
+                              </td>
+
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                                  f.status === 'Closed'
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
+                                    : f.status === 'InReview'
+                                    ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400'
+                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+                                }`}>
+                                  {f.status === 'Closed' ? 'Cerrado' : f.status === 'InReview' ? 'En Revisión' : 'Abierto'}
+                                </span>
+                              </td>
+
+                              <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const opProf = getOperatorProfile(f.operatorId, f.operatorName, f.operatorPhotoUrl);
+                                      downloadOperatorInspectionPDF(f, {
+                                        name: f.operatorName || opProf.name,
+                                        photoUrl: opProf.photoUrl || f.operatorPhotoUrl,
+                                        rut: opProf.rut,
+                                        cargo: opProf.cargo
+                                      });
+                                    }}
+                                    className="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-xs transition-all active:scale-95 inline-flex items-center gap-1 cursor-pointer"
+                                    title="Descargar Informe PDF"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span className="hidden sm:inline">Descargar</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const opProf = getOperatorProfile(f.operatorId, f.operatorName, f.operatorPhotoUrl);
+                                      shareOperatorInspectionPDF(f, {
+                                        name: f.operatorName || opProf.name,
+                                        photoUrl: opProf.photoUrl || f.operatorPhotoUrl,
+                                        rut: opProf.rut,
+                                        cargo: opProf.cargo
+                                      });
+                                    }}
+                                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-xs transition-all active:scale-95 inline-flex items-center gap-1 cursor-pointer"
+                                    title="Compartir Informe PDF"
+                                  >
+                                    <Share2 className="w-3.5 h-3.5" />
+                                    <span className="hidden sm:inline">Compartir</span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        ) : subTab === 'active' ? (
           <div>
             {activeFindingsList.length === 0 ? (
               <div className="p-16 text-center space-y-3">
@@ -4305,7 +4864,7 @@ const ReportsView = ({
                           )}
                         </div>
                       </th>
-                      {user.role === 'Administrador' && <th className="px-4 py-4 font-bold uppercase tracking-widest text-right">Acciones</th>}
+                      <th className="px-4 py-4 font-bold uppercase tracking-widest text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-50 dark:divide-white/5">
@@ -4378,10 +4937,48 @@ const ReportsView = ({
                               {f.status === 'Open' ? 'Abierto' : 'En Revisión'}
                             </span>
                           </td>
-                          {user.role === 'Administrador' && (
-                            <td className="px-4 py-4 text-right">
-                              <div className="flex justify-end items-center gap-1">
-                                {confirmingDelete === f.id ? (
+                          <td className="px-4 py-4 text-right">
+                            <div className="flex justify-end items-center gap-1">
+                              <button 
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const opProf = getOperatorProfile(f.operatorId, f.operatorName, f.operatorPhotoUrl);
+                                  downloadOperatorInspectionPDF(f, {
+                                    name: f.operatorName || opProf.name,
+                                    photoUrl: opProf.photoUrl || f.operatorPhotoUrl,
+                                    rut: opProf.rut,
+                                    cargo: opProf.cargo
+                                  });
+                                }}
+                                className="p-1.5 text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                title="Descargar Informe PDF"
+                              >
+                                <Download className="w-4 h-4" />
+                                <span className="text-[10px] font-bold uppercase hidden sm:inline">Descargar</span>
+                              </button>
+
+                              <button 
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const opProf = getOperatorProfile(f.operatorId, f.operatorName, f.operatorPhotoUrl);
+                                  shareOperatorInspectionPDF(f, {
+                                    name: f.operatorName || opProf.name,
+                                    photoUrl: opProf.photoUrl || f.operatorPhotoUrl,
+                                    rut: opProf.rut,
+                                    cargo: opProf.cargo
+                                  });
+                                }}
+                                className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                title="Compartir Informe PDF"
+                              >
+                                <Share2 className="w-4 h-4" />
+                                <span className="text-[10px] font-bold uppercase hidden sm:inline">Compartir</span>
+                              </button>
+
+                              {user.role === 'Administrador' && (
+                                confirmingDelete === f.id ? (
                                   <div className="flex items-center gap-1 bg-red-50 p-1 rounded-xl border border-red-100">
                                     <span className="text-[10px] font-bold text-red-600 px-2">¿Seguro?</span>
                                     <button 
@@ -4408,10 +5005,10 @@ const ReportsView = ({
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
-                                )}
-                              </div>
-                            </td>
-                          )}
+                                )
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -4513,9 +5110,48 @@ const ReportsView = ({
 
                       {/* Action Footer */}
                       <div className="flex items-center justify-between pt-4 mt-4 border-t border-zinc-100 dark:border-white/5">
-                        <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest flex items-center gap-1">
-                          <Check className="w-3 h-3 text-emerald-500" /> RESUELTO
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                            <Check className="w-3 h-3 text-emerald-500" /> RESUELTO
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const opProf = getOperatorProfile(f.operatorId, f.operatorName, f.operatorPhotoUrl);
+                              downloadOperatorInspectionPDF(f, {
+                                name: f.operatorName || opProf.name,
+                                photoUrl: opProf.photoUrl || f.operatorPhotoUrl,
+                                rut: opProf.rut,
+                                cargo: opProf.cargo
+                              });
+                            }}
+                            className="px-2 py-1 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-sky-300 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 border border-sky-200 dark:border-sky-500/30 cursor-pointer"
+                            title="Descargar Informe PDF"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>Descargar</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const opProf = getOperatorProfile(f.operatorId, f.operatorName, f.operatorPhotoUrl);
+                              shareOperatorInspectionPDF(f, {
+                                name: f.operatorName || opProf.name,
+                                photoUrl: opProf.photoUrl || f.operatorPhotoUrl,
+                                rut: opProf.rut,
+                                cargo: opProf.cargo
+                              });
+                            }}
+                            className="px-2 py-1 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 border border-emerald-200 dark:border-emerald-500/30 cursor-pointer"
+                            title="Compartir Informe PDF"
+                          >
+                            <Share2 className="w-3 h-3" />
+                            <span>Compartir</span>
+                          </button>
+                        </div>
                         <span className="text-[10px] font-extrabold text-zinc-450 dark:text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white uppercase tracking-wider flex items-center gap-1 group-hover:underline">
                           Detalles <ChevronRight className="w-3 h-3" />
                         </span>
@@ -4693,6 +5329,42 @@ const ReportsView = ({
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-zinc-100 dark:border-white/10 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const opProf = getOperatorProfile(selectedFinding.operatorId, selectedFinding.operatorName, selectedFinding.operatorPhotoUrl);
+                          downloadOperatorInspectionPDF(selectedFinding, {
+                            name: selectedFinding.operatorName || opProf.name,
+                            photoUrl: opProf.photoUrl || selectedFinding.operatorPhotoUrl,
+                            rut: opProf.rut,
+                            cargo: opProf.cargo
+                          });
+                        }}
+                        className="w-full py-3.5 px-3 bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-500 hover:to-sky-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Descargar PDF</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const opProf = getOperatorProfile(selectedFinding.operatorId, selectedFinding.operatorName, selectedFinding.operatorPhotoUrl);
+                          shareOperatorInspectionPDF(selectedFinding, {
+                            name: selectedFinding.operatorName || opProf.name,
+                            photoUrl: opProf.photoUrl || selectedFinding.operatorPhotoUrl,
+                            rut: opProf.rut,
+                            cargo: opProf.cargo
+                          });
+                        }}
+                        className="w-full py-3.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Share2 className="w-4 h-4" />
+                        <span>Compartir PDF</span>
+                      </button>
                     </div>
                   </div>
                 </div>

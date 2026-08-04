@@ -23,8 +23,10 @@ import {
   Compass,
   Activity,
   Plus,
-  HelpCircle
+  HelpCircle,
+  Share2
 } from 'lucide-react';
+import { useAppUsers } from '../hooks/useAppUsers';
 import { QuickHelpModal } from './QuickHelpModal';
 import { 
   doc, 
@@ -44,6 +46,7 @@ import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { downloadOperatorInspectionPDF, shareOperatorInspectionPDF } from '../utils/generateOperatorInspectionPDF';
 import { 
   BarChart, 
   Bar, 
@@ -268,6 +271,7 @@ export const OrdenYLimpiezaDashboard = ({
   initialFindingId?: string | null;
   onClearPending?: () => void;
 }) => {
+  const { getOperatorProfile } = useAppUsers();
   const [allFindings, setAllFindings] = useState<Finding[]>([]);
   const [filter, setFilter] = useState<'All' | 'Open' | 'Closed' | 'InReview'>('Open');
   const [subcatFilter, setSubcatFilter] = useState<string>('All');
@@ -892,6 +896,42 @@ export const OrdenYLimpiezaDashboard = ({
                     <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{selectedFinding.solution || 'Solucionado por supervisor/operador'}</p>
                   </div>
                 )}
+
+                <div className="pt-3 border-t border-zinc-100 dark:border-white/5 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const opProf = getOperatorProfile(selectedFinding.operatorId, selectedFinding.operatorName, (selectedFinding as any).operatorPhotoUrl);
+                      downloadOperatorInspectionPDF(selectedFinding, {
+                        name: selectedFinding.operatorName || opProf.name,
+                        photoUrl: opProf.photoUrl || (selectedFinding as any).operatorPhotoUrl,
+                        rut: opProf.rut,
+                        cargo: opProf.cargo
+                      });
+                    }}
+                    className="w-full py-3.5 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Descargar PDF</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const opProf = getOperatorProfile(selectedFinding.operatorId, selectedFinding.operatorName, (selectedFinding as any).operatorPhotoUrl);
+                      shareOperatorInspectionPDF(selectedFinding, {
+                        name: selectedFinding.operatorName || opProf.name,
+                        photoUrl: opProf.photoUrl || (selectedFinding as any).operatorPhotoUrl,
+                        rut: opProf.rut,
+                        cargo: opProf.cargo
+                      });
+                    }}
+                    className="w-full py-3.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span>Compartir PDF</span>
+                  </button>
+                </div>
 
                 {user.role === 'Administrador' && (
                   <div className="pt-4 border-t border-zinc-100 dark:border-white/5">

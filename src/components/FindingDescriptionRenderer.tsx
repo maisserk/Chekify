@@ -150,7 +150,8 @@ export const parseFindingDescription = (description: string, source?: string) =>
   // Multi-item or inspection report
   const lines = desc.split('\n').map(l => l.trim()).filter(Boolean);
   const firstLine = lines[0] || '';
-  const header = (firstLine.includes('Inspección') || firstLine.includes('Reporte')) ? firstLine : null;
+  const firstLower = firstLine.toLowerCase();
+  const header = (firstLower.includes('inspección') || firstLower.includes('inspeccion') || firstLower.includes('reporte')) ? firstLine : null;
 
   const vosoItems: ParsedItem[] = [];
   const ordenItems: ParsedItem[] = [];
@@ -160,12 +161,30 @@ export const parseFindingDescription = (description: string, source?: string) =>
 
   for (const line of lines) {
     const upperLine = line.toUpperCase();
+    const lowerLine = line.toLowerCase();
+
+    // Skip section titles
     if (upperLine.includes('HALLAZGOS VOSO') || upperLine.includes('HALLAZGOS:')) {
       currentSection = 'VOSO';
       continue;
     }
     if (upperLine.includes('OTROS PUNTOS') || upperLine.includes('CHECKLIST TRADICIONAL')) {
       currentSection = 'TRAD';
+      continue;
+    }
+
+    // Skip header line or lines describing overall inspection / operating status
+    const isHeaderLine = 
+      line === header ||
+      lowerLine.startsWith('inspección') || 
+      lowerLine.startsWith('inspeccion') || 
+      lowerLine.startsWith('reporte') ||
+      lowerLine.includes('condición operativa') ||
+      lowerLine.includes('condicion operativa') ||
+      (lowerLine.includes('condicion') && (lowerLine.includes('funcionamiento') || lowerLine.includes('detenido'))) ||
+      (lowerLine.includes('condición') && (lowerLine.includes('funcionamiento') || lowerLine.includes('detenido')));
+
+    if (isHeaderLine) {
       continue;
     }
 
