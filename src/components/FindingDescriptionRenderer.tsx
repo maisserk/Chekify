@@ -10,10 +10,9 @@ import {
   CheckCircle2, 
   LayoutDashboard, 
   FileSearch, 
-  ShieldAlert,
   ClipboardList,
-  Broom,
-  Layers
+  MessageSquare,
+  FileText
 } from 'lucide-react';
 
 const VOSO_ICONS: Record<string, React.ElementType> = {
@@ -47,6 +46,7 @@ export const parseFindingDescription = (description: string, source?: string) =>
   }
 
   const desc = description.trim();
+  const upperDesc = desc.toUpperCase();
 
   // Check if it has inspection features
   const isInspection = desc.includes('Inspección') || 
@@ -56,8 +56,8 @@ export const parseFindingDescription = (description: string, source?: string) =>
                        desc.includes('OTROS PUNTOS');
 
   if (!isInspection) {
-    const isOrdenBracket = desc.toUpperCase().startsWith('[ORDEN]') || 
-                           desc.toUpperCase().startsWith('[5S]') || 
+    const isOrdenBracket = upperDesc.startsWith('[ORDEN]') || 
+                           upperDesc.startsWith('[5S]') || 
                            source === 'OrdenYLimpieza';
     const isVOSOBracket = desc.match(/^\[(VER|OÍR|OIR|SENTIR|OLER)\]/i);
 
@@ -72,11 +72,11 @@ export const parseFindingDescription = (description: string, source?: string) =>
         vosoItems: [],
         ordenItems: [{
           category: 'ORDEN',
-          rawTitle: subcat,
+          rawTitle: subcat !== comment ? subcat : 'Programa 5S - Orden & Limpieza',
           detail: comment,
           status: 'Observación' as const,
           isSolved: desc.includes('[SOLUCIONADO]'),
-          comment: comment.replace('[SOLUCIONADO]', '').trim()
+          comment: comment.replace('[SOLUCIONADO]', '').replace(/-\s*Solucionado por operador/gi, '').trim()
         }],
         tradItems: [],
         rawText: desc
@@ -92,11 +92,11 @@ export const parseFindingDescription = (description: string, source?: string) =>
         header: null,
         vosoItems: [{
           category,
-          rawTitle: `Observación ${category}`,
+          rawTitle: `Punto de Control VOSO (${category})`,
           detail: clean,
           status: 'Observación' as const,
           isSolved: desc.includes('[SOLUCIONADO]'),
-          comment: clean.replace('[SOLUCIONADO]', '').trim()
+          comment: clean.replace('[SOLUCIONADO]', '').replace(/-\s*Solucionado por operador/gi, '').trim()
         }],
         ordenItems: [],
         tradItems: [],
@@ -110,12 +110,29 @@ export const parseFindingDescription = (description: string, source?: string) =>
         vosoItems: [],
         ordenItems: [{
           category: 'ORDEN',
-          rawTitle: 'Orden & Limpieza',
+          rawTitle: 'Programa 5S - Orden & Limpieza',
           detail: desc,
           status: 'Observación' as const,
           isSolved: desc.includes('[SOLUCIONADO]'),
-          comment: desc.replace('[SOLUCIONADO]', '').trim()
+          comment: desc.replace('[SOLUCIONADO]', '').replace(/-\s*Solucionado por operador/gi, '').trim()
         }],
+        tradItems: [],
+        rawText: desc
+      };
+    }
+
+    if (source === 'VOSO') {
+      return {
+        header: null,
+        vosoItems: [{
+          category: 'VER',
+          rawTitle: 'Observación VOSO',
+          detail: desc,
+          status: 'Observación' as const,
+          isSolved: desc.includes('[SOLUCIONADO]'),
+          comment: desc.replace('[SOLUCIONADO]', '').replace(/-\s*Solucionado por operador/gi, '').trim()
+        }],
+        ordenItems: [],
         tradItems: [],
         rawText: desc
       };
@@ -163,8 +180,8 @@ export const parseFindingDescription = (description: string, source?: string) =>
       const afterCat = categoryMatch ? cleanLine.substring(categoryMatch[0].length).trim() : cleanLine;
       
       const parts = afterCat.split(':');
-      const rawTitle = parts[0]?.replace(/^-\s*/, '').trim() || 'Punto Inspeccionado';
-      const detail = parts.slice(1).join(':').trim() || parts[0]?.trim() || '';
+      let rawTitle = parts[0]?.replace(/^-\s*/, '').trim() || 'Punto Inspeccionado';
+      let detail = parts.slice(1).join(':').trim() || parts[0]?.trim() || '';
 
       const isSolved = detail.includes('[SOLUCIONADO]') || line.includes('Solucionado por operador');
       const statusMatch = detail.match(/^(Crítico|Observación|Bueno|Falla)/i);
@@ -180,13 +197,18 @@ export const parseFindingDescription = (description: string, source?: string) =>
       let comment = statusStr ? detail.substring(statusStr.length).replace(/^[\s\-:]+/, '').trim() : detail;
       comment = comment.replace(/\[SOLUCIONADO\]/g, '').replace(/-\s*Solucionado por operador/gi, '').trim();
 
+      if (rawTitle.toLowerCase() === comment.toLowerCase() || !comment) {
+        rawTitle = `Punto de Control (${category})`;
+        comment = detail.replace(/\[SOLUCIONADO\]/g, '').replace(/-\s*Solucionado por operador/gi, '').trim();
+      }
+
       const item: ParsedItem = {
         category,
         rawTitle,
         detail,
         status,
         isSolved,
-        comment: comment || (isSolved ? 'El hallazgo fue solucionado en terreno.' : '')
+        comment: comment || (isSolved ? 'El hallazgo fue solucionado en terreno por el operador.' : 'Reportado por el operador sin detalles adicionales.')
       };
 
       if (category === 'ORDEN' || category === 'ORDEN Y LIMPIEZA' || category === '5S') {
@@ -237,10 +259,6 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
       const vosoCats = Array.from(new Set(parsed.vosoItems.map(i => i.category)));
       const hasOrden = parsed.ordenItems.length > 0;
       
-      const parts: string[] = [];
-      if (vosoCats.length > 0) parts.push(`VOSO (${vosoCats.join(', ')})`);
-      if (hasOrden) parts.push(`Orden & Limpieza (${parsed.ordenItems.length})`);
-
       const summaryText = parsed.vosoItems[0]?.comment || parsed.ordenItems[0]?.comment || parsed.rawText.split('\n')[0];
 
       return (
@@ -271,13 +289,13 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
       <div className={`p-4 sm:p-5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-white/10 rounded-2xl shadow-xs ${className}`}>
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 border border-sky-100 dark:border-sky-500/20">
-            <ClipboardList className="w-5 h-5" />
+            <MessageSquare className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block mb-1">
-              Detalle del Hallazgo
+            <span className="text-[10px] font-black text-sky-600 dark:text-sky-400 uppercase tracking-widest block mb-1">
+              Detalle Ingresado por el Operador
             </span>
-            <p className="text-zinc-800 dark:text-zinc-200 text-sm font-semibold leading-relaxed whitespace-pre-wrap">
+            <p className="text-zinc-900 dark:text-zinc-100 text-sm font-bold leading-relaxed whitespace-pre-wrap">
               {parsed.rawText}
             </p>
           </div>
@@ -369,7 +387,7 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-2">
                         <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-wider ${styles.bg} ${styles.text} ${styles.border}`}>
                           {item.category}
                         </span>
@@ -387,17 +405,23 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                         {item.isSolved && (
                           <span className="text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" />
-                            SUBSANADO
+                            SUBSANADO EN TERRENO
                           </span>
                         )}
                       </div>
 
-                      <h6 className="text-zinc-900 dark:text-white font-black text-sm leading-snug">
+                      <h6 className="text-zinc-900 dark:text-white font-black text-sm leading-tight tracking-tight mb-2">
                         {item.rawTitle}
                       </h6>
 
-                      <div className="mt-2 p-2.5 bg-zinc-50 dark:bg-zinc-950/60 rounded-xl border border-zinc-100 dark:border-white/5">
-                        <p className="text-zinc-700 dark:text-zinc-300 text-xs font-medium leading-relaxed">
+                      <div className="p-3 bg-zinc-50 dark:bg-zinc-950/80 rounded-xl border border-zinc-200/80 dark:border-white/10 space-y-1">
+                        <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+                          <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider">
+                            Detalle Ingresado por Operador:
+                          </span>
+                        </div>
+                        <p className="text-zinc-800 dark:text-zinc-100 text-xs sm:text-sm font-semibold leading-relaxed">
                           {item.comment || item.detail || 'Sin comentarios adicionales.'}
                         </p>
                       </div>
@@ -439,7 +463,7 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
                       <span className="text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-wider bg-purple-500 text-white border-purple-500">
                         5S - ORDEN & LIMPIEZA
                       </span>
@@ -457,17 +481,23 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                       {item.isSolved && (
                         <span className="text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" />
-                          SUBSANADO
+                          SUBSANADO EN TERRENO
                         </span>
                       )}
                     </div>
 
-                    <h6 className="text-zinc-900 dark:text-white font-black text-sm leading-snug">
+                    <h6 className="text-zinc-900 dark:text-white font-black text-sm leading-tight tracking-tight mb-2">
                       {item.rawTitle}
                     </h6>
 
-                    <div className="mt-2 p-2.5 bg-zinc-50 dark:bg-zinc-950/60 rounded-xl border border-zinc-100 dark:border-white/5">
-                      <p className="text-zinc-700 dark:text-zinc-300 text-xs font-medium leading-relaxed">
+                    <div className="p-3 bg-purple-50/50 dark:bg-zinc-950/80 rounded-xl border border-purple-200/60 dark:border-purple-500/20 space-y-1">
+                      <div className="flex items-center gap-1.5 text-purple-700 dark:text-purple-300">
+                        <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[10px] font-black uppercase tracking-wider">
+                          Detalle Ingresado por Operador:
+                        </span>
+                      </div>
+                      <p className="text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm font-semibold leading-relaxed">
                         {item.comment || item.detail || 'Falta de orden, aseo o disposición detectada.'}
                       </p>
                     </div>
@@ -495,8 +525,16 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
             {parsed.tradItems.map((item, i) => (
               <div key={`trad-item-${i}`} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-white/10 rounded-xl flex items-center gap-3">
                 <FileSearch className="w-4 h-4 text-zinc-400 shrink-0" />
-                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex-1">{item.rawTitle}</span>
-                <span className="text-[9px] font-black bg-amber-500 text-white px-2 py-0.5 rounded uppercase">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Checklist Adicional</p>
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block truncate">{item.rawTitle}</span>
+                  {item.comment && item.comment !== item.rawTitle && (
+                    <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mt-1 pl-2 border-l-2 border-amber-400">
+                      {item.comment}
+                    </p>
+                  )}
+                </div>
+                <span className="text-[9px] font-black bg-amber-500 text-white px-2 py-0.5 rounded uppercase shrink-0">
                   {item.status || 'FALLA'}
                 </span>
               </div>
@@ -507,3 +545,4 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
     </div>
   );
 };
+
