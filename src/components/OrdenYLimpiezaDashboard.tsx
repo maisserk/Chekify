@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './FindingPhotoGallery';
+import { FindingDescriptionRenderer } from './FindingDescriptionRenderer';
 import { 
   Sparkles, 
   Search, 
@@ -850,7 +851,12 @@ export const OrdenYLimpiezaDashboard = ({
                   <h3 className="text-2xl font-black text-zinc-900 dark:text-white uppercase leading-tight">
                     {selectedFinding.areaName}
                   </h3>
-                  <p className="text-xs text-zinc-500 mt-1">{selectedFinding.description}</p>
+                  <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-white/10">
+                    <FindingDescriptionRenderer 
+                      description={selectedFinding.description} 
+                      source="OrdenYLimpieza" 
+                    />
+                  </div>
                 </div>
 
                 {selectedFinding.status !== 'Closed' ? (
