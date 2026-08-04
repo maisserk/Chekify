@@ -6,31 +6,68 @@ import { Finding } from '../types';
 
 export const extractFindingPhotos = (finding: Finding | null | undefined): string[] => {
   if (!finding) return [];
-  const list: string[] = [];
+  const rawList: string[] = [];
 
   if (Array.isArray(finding.photoUrls) && finding.photoUrls.length > 0) {
     finding.photoUrls.forEach(p => {
-      if (p && typeof p === 'string' && p.trim() && !list.includes(p)) {
-        list.push(p);
+      if (p && typeof p === 'string' && p.trim()) {
+        rawList.push(p.trim());
       }
     });
   }
 
   if (finding.photoUrl && typeof finding.photoUrl === 'string' && finding.photoUrl.trim()) {
-    if (!list.includes(finding.photoUrl)) {
-      list.push(finding.photoUrl);
-    }
+    rawList.push(finding.photoUrl.trim());
   }
 
   if ((finding as any).vosoResponses && typeof (finding as any).vosoResponses === 'object') {
     Object.values((finding as any).vosoResponses).forEach((resp: any) => {
-      if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim() && !list.includes(resp.photoUrl)) {
-        list.push(resp.photoUrl);
+      if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim()) {
+        rawList.push(resp.photoUrl.trim());
       }
     });
   }
 
-  return list;
+  if (rawList.length === 0) return [];
+
+  const result: string[] = [];
+  const seenSignatures = new Set<string>();
+
+  const getSignature = (str: string): string => {
+    if (str.startsWith('offline-cached://')) {
+      return str;
+    }
+    if (str.startsWith('data:image/')) {
+      const commaIdx = str.indexOf(',');
+      const payload = commaIdx !== -1 ? str.substring(commaIdx + 1) : str;
+      if (payload.length > 100) {
+        return `b64_${payload.length}_${payload.substring(0, 50)}_${payload.substring(payload.length - 50)}`;
+      }
+      return `b64_${payload}`;
+    }
+    try {
+      const url = new URL(str);
+      return `url_${url.origin}${url.pathname}`;
+    } catch {
+      return `str_${str}`;
+    }
+  };
+
+  const hasDataUrlOrHttp = rawList.some(p => !p.startsWith('offline-cached://'));
+
+  for (const item of rawList) {
+    if (item.startsWith('offline-cached://') && hasDataUrlOrHttp) {
+      continue;
+    }
+
+    const sig = getSignature(item);
+    if (!seenSignatures.has(sig)) {
+      seenSignatures.add(sig);
+      result.push(item);
+    }
+  }
+
+  return result;
 };
 
 interface FindingPhotoGalleryProps {
@@ -50,7 +87,7 @@ export const FindingPhotoGallery: React.FC<FindingPhotoGalleryProps> = ({
   onClose,
   showCloseButton = false,
 }) => {
-  const validPhotos = photos.filter(p => p && typeof p === 'string' && p.trim() !== '');
+  const validPhotos = Array.from(new Set(photos.filter(p => p && typeof p === 'string' && p.trim() !== '')));
   const [currentIndex, setCurrentIndex] = useState<number>(initialIndex);
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
 
@@ -210,7 +247,7 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
   className = '',
   size = 'md',
 }) => {
-  const validPhotos = photos.filter(p => p && typeof p === 'string' && p.trim() !== '');
+  const validPhotos = Array.from(new Set(photos.filter(p => p && typeof p === 'string' && p.trim() !== '')));
 
   if (validPhotos.length === 0) return null;
 
