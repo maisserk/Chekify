@@ -130,6 +130,7 @@ import { PushNotificationWidget } from './components/PushNotificationWidget';
 import { FlashlightWidget } from './components/FlashlightWidget';
 import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './components/FindingPhotoGallery';
 import { FindingDescriptionRenderer } from './components/FindingDescriptionRenderer';
+import { OperatingStatusBadge } from './components/OperatingStatusBadge';
 import { downloadOperatorInspectionPDF, shareOperatorInspectionPDF, downloadOrShareOperatorInspectionPDF, getWhiteChekifyLogoBase64 } from './utils/generateOperatorInspectionPDF';
 import { useAppUsers } from './hooks/useAppUsers';
 import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText } from './utils/dateUtils';
@@ -4009,8 +4010,11 @@ const SupervisorDashboard = ({
                      <CheckCircle2 className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h4 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight leading-tighter">{finding.areaName}</h4>
-                    <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mt-0.5">
+                    <h4 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight leading-tighter mb-0.5">
+                      {finding.equipmentName || finding.equipmentId || finding.areaName || 'Sin Equipo'}
+                    </h4>
+                    <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">
+                      {finding.equipmentName && finding.areaName && finding.equipmentName !== finding.areaName ? `${finding.areaName} • ` : ''}
                       {getFindingDate(finding) ? format(getFindingDate(finding)!, 'EEE dd MMM, HH:mm', { locale: es }) : 'Recién'}
                     </p>
                   </div>
@@ -4074,7 +4078,10 @@ const SupervisorDashboard = ({
                        selectedFinding.status === 'InReview' ? 'En Revisión' : 
                        'Cerrado'}
                     </span>
-                    <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none">{selectedFinding.areaName}</span>
+                    <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none">
+                      {selectedFinding.equipmentName || selectedFinding.equipmentId || selectedFinding.areaName || 'Sin Equipo'}
+                    </span>
+                    <OperatingStatusBadge finding={selectedFinding} size="sm" />
                   </div>
                   <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-white/10 space-y-3">
                     <FindingDescriptionRenderer 
@@ -5605,8 +5612,11 @@ const ReportsView = ({
                          'Cerrado'}
                       </span>
                       <span className="text-zinc-400 text-[10px]">ID: {selectedFinding.id}</span>
+                      <OperatingStatusBadge finding={selectedFinding} size="sm" />
                     </div>
-                    <h3 className="text-2xl font-bold text-zinc-900 dark:text-white">{selectedFinding.areaName}</h3>
+                    <h3 className="text-2xl font-bold text-zinc-900 dark:text-white">
+                      {selectedFinding.equipmentName || selectedFinding.equipmentId || selectedFinding.areaName || 'Sin Equipo'}
+                    </h3>
                     <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Reportado por {selectedFinding.operatorName}</p>
                   </div>
 

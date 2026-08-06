@@ -266,10 +266,27 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
 }) => {
   if (!description) return <p className={className}>-</p>;
 
-  const cleanHeader = (desc: string) => desc
-    .replace('Reporte autogenerado de ', '')
-    .replace('Inspección VOSO en ', '')
-    .replace('Inspección en ', 'Inspección: ');
+  const cleanHeader = (desc: string) => {
+    if (!desc) return '';
+    let result = desc
+      .replace(/^Reporte autogenerado de\s*/i, '')
+      .replace(/^Inspección VOSO en\s*/i, '')
+      .replace(/^Inspección en\s*/i, '')
+      .replace(/^Inspección:\s*/i, '');
+
+    result = result
+      .replace(/[\.\s]*Condici[óo]n operativa: (En Funcionamiento|Detenido)[\.\s\]]*/gi, '')
+      .replace(/[\s\.]*\[Condici[óo]n:.*?\]/gi, '')
+      .replace(/[\s\.]*Condición operativa:.*?(\.|$)/gi, '')
+      .replace(/[\s\.]*Condicion operativa:.*?(\.|$)/gi, '')
+      .trim();
+
+    if (result.endsWith('.')) {
+      result = result.slice(0, -1).trim();
+    }
+
+    return result || desc;
+  };
 
   if (isPreview) {
     const parsed = parseFindingDescription(description, source);

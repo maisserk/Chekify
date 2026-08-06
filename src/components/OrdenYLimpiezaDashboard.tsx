@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './FindingPhotoGallery';
 import { FindingDescriptionRenderer } from './FindingDescriptionRenderer';
+import { OperatingStatusBadge } from './OperatingStatusBadge';
 import { 
   Sparkles, 
   Search, 
@@ -831,8 +832,10 @@ export const OrdenYLimpiezaDashboard = ({
                      <CheckCircle2 className="w-5 h-5" />}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-black text-zinc-900 dark:text-white uppercase tracking-tight">{finding.areaName}</h4>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+                        {finding.equipmentName || finding.equipmentId || finding.areaName || 'Sin Equipo'}
+                      </h4>
                       <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 text-[9px] font-black uppercase rounded-md">
                         {getOrdenSubcategory(finding.description)}
                       </span>
@@ -904,9 +907,10 @@ export const OrdenYLimpiezaDashboard = ({
                     }`}>
                       {selectedFinding.status === 'Open' ? 'Abierto' : selectedFinding.status === 'InReview' ? 'En Revisión' : 'Cerrado'}
                     </span>
+                    <OperatingStatusBadge finding={selectedFinding} size="sm" />
                   </div>
                   <h3 className="text-2xl font-black text-zinc-900 dark:text-white uppercase leading-tight">
-                    {selectedFinding.areaName}
+                    {selectedFinding.equipmentName || selectedFinding.equipmentId || selectedFinding.areaName || 'Sin Equipo'}
                   </h3>
                   <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-white/10">
                     <FindingDescriptionRenderer 
