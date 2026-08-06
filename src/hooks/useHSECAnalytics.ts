@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Chekify Enterprise Industrial SaaS Framework
- * Hook: useHSECAnalytics
+ * Hook: useFindingAnalytics
  * 
  * Computes high-performance operational metrics on client memory.
  * Completely eliminates slow and expensive database queries, optimizing Firebase costs.
@@ -12,7 +12,7 @@
 import { useMemo } from 'react';
 import { Finding } from '../types';
 
-export interface HSECStats {
+export interface FindingStats {
   totalFindings: number;
   openFindings: number;
   closedFindings: number;
@@ -26,7 +26,9 @@ export interface HSECStats {
   operatorLeaderboard: { name: string; reportsCount: number; resolvedCount: number }[];
 }
 
-export function useHSECAnalytics(findings: Finding[]): HSECStats {
+export type HSECStats = FindingStats;
+
+export function useFindingAnalytics(findings: Finding[]): FindingStats {
   return useMemo(() => {
     if (!findings || findings.length === 0) {
       return {
@@ -201,3 +203,5 @@ export function useHSECAnalytics(findings: Finding[]): HSECStats {
     };
   }, [findings]);
 }
+
+export const useHSECAnalytics = useFindingAnalytics;

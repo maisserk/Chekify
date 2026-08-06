@@ -204,8 +204,8 @@ export class PushNotificationService {
 
       // Always display a local notification as direct confirmation
       if (registration && typeof registration.showNotification === 'function') {
-        await registration.showNotification('🚨 PROBAR ALERTA HSEC', {
-          body: '¡Alertas activas correctamente! Recibirás avisos ante cualquier hallazgo crítico.',
+        await registration.showNotification('🚨 PROBAR ALERTA DE HALLAZGO', {
+          body: '¡Alertas activas correctamente! Recibirás avisos ante cualquier hallazgo relevante.',
           icon: '/icon.png',
           badge: '/icon.png',
           tag: 'test-push-' + Date.now(),
@@ -213,8 +213,8 @@ export class PushNotificationService {
           data: { url: '/' }
         } as any);
       } else if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('🚨 PROBAR ALERTA HSEC', {
-          body: '¡Alertas activas correctamente! Recibirás avisos ante cualquier hallazgo crítico.',
+        new Notification('🚨 PROBAR ALERTA DE HALLAZGO', {
+          body: '¡Alertas activas correctamente! Recibirás avisos ante cualquier hallazgo relevante.',
           icon: '/icon.png'
         });
       }
@@ -227,7 +227,7 @@ export class PushNotificationService {
   }
 
   /**
-   * Broadcast a push notification alert to supervisors/admins when a critical finding is created
+   * Broadcast a push notification alert to supervisors/admins when any finding or critical alert is created by an operator
    */
   public static async broadcastCriticalAlert(
     finding: any,
@@ -243,11 +243,18 @@ export class PushNotificationService {
         (Array.isArray(finding?.vosoIssues) && finding.vosoIssues.some((v: any) => v?.status === 'Crítico')) ||
         (finding?.vosoResponses && Object.values(finding.vosoResponses).some((r: any) => r?.status === 'Crítico'));
 
-      if (!isCritical) return;
+      const reporter = reportedBy || finding?.operatorName || finding?.inspector || 'Operador';
+      const title = isCritical
+        ? `🚨 ALERTA CRÍTICA: ${areaName || 'Área general'}`
+        : `⚠️ NUEVO HALLAZGO: ${areaName || 'Área general'}`;
 
-      const reporter = reportedBy || finding?.operatorName || finding?.inspector || 'Inspector';
-      const title = `🚨 ALERTA CRÍTICA: ${areaName || 'Área general'}`;
-      const body = `Hallazgo Crítico reportado por ${reporter}: ${equipmentName || finding?.description?.slice(0, 50) || 'Atención prioritaria requerida.'}`;
+      const cleanDesc = finding?.description 
+        ? finding.description.replace(/^\[.*?\]\s*/g, '').slice(0, 70)
+        : '';
+
+      const body = isCritical
+        ? `Hallazgo Crítico reportado por ${reporter}: ${equipmentName ? equipmentName + ' - ' : ''}${cleanDesc || 'Atención prioritaria requerida.'}`
+        : `Hallazgo reportado por ${reporter}: ${equipmentName ? equipmentName + ' - ' : ''}${cleanDesc || 'Revisión requerida.'}`;
 
       await fetch('/api/push/send-alert', {
         method: 'POST',
@@ -256,17 +263,18 @@ export class PushNotificationService {
           title,
           body,
           url: '/',
-          priority: 'Alta',
+          priority: isCritical ? 'Alta' : 'Media',
           findingId: finding?.id || Date.now(),
           areaName,
           equipmentName,
-          reportedBy: reporter
+          reportedBy: reporter,
+          plantId: finding?.plantId || undefined
         })
       });
 
-      console.log('Push notification alert triggered for critical finding.');
+      console.log('Push notification alert triggered for finding:', title);
     } catch (error) {
-      console.warn('Could not broadcast critical push alert:', error);
+      console.warn('Could not broadcast push alert:', error);
     }
   }
 }

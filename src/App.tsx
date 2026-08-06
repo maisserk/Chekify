@@ -123,15 +123,16 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { QuickHelpModal } from './components/QuickHelpModal';
 import { OfflineImage } from './components/OfflineImage';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
-import { useHSECAnalytics } from './hooks/useHSECAnalytics';
+import { useFindingAnalytics } from './hooks/useHSECAnalytics';
 import { OrdenYLimpiezaDashboard, isOrdenYLimpiezaFinding, isVOSOFinding } from './components/OrdenYLimpiezaDashboard';
 import { VOSOHeatmapChart } from './components/VOSOHeatmapChart';
 import { PushNotificationWidget } from './components/PushNotificationWidget';
 import { FlashlightWidget } from './components/FlashlightWidget';
 import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './components/FindingPhotoGallery';
 import { FindingDescriptionRenderer } from './components/FindingDescriptionRenderer';
-import { downloadOperatorInspectionPDF, shareOperatorInspectionPDF, downloadOrShareOperatorInspectionPDF } from './utils/generateOperatorInspectionPDF';
+import { downloadOperatorInspectionPDF, shareOperatorInspectionPDF, downloadOrShareOperatorInspectionPDF, getWhiteChekifyLogoBase64 } from './utils/generateOperatorInspectionPDF';
 import { useAppUsers } from './hooks/useAppUsers';
+import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText } from './utils/dateUtils';
 
 const generateSafeId = (name: string): string => {
   return name
@@ -274,18 +275,6 @@ import {
   ReportSettings,
   VOSOResponse
 } from './types';
-
-const getFindingDate = (f: Finding | null): Date | null => {
-  if (!f) return null;
-  const d = f.date || f.createdAt;
-  if (!d) return null;
-  try {
-    return d.toDate ? d.toDate() : (d instanceof Date ? d : new Date(d));
-  } catch (err) {
-    console.error("Error parsing date:", err);
-    return null;
-  }
-};
 
 // --- Components ---
 
@@ -728,9 +717,17 @@ const VOSOExecutionCategory = ({
                       const itemPhotos: string[] = res?.photoUrls && res.photoUrls.length > 0
                         ? res.photoUrls
                         : (res?.photoUrl ? [res.photoUrl] : []);
+                      const isPhotoMissing = itemPhotos.length === 0;
                       
                       return (
                         <div className="space-y-3 pt-1">
+                          {isPhotoMissing && (
+                            <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/30 rounded-xl flex items-center gap-2 text-red-600 dark:text-red-400 text-[10px] font-bold">
+                              <span>⚠️</span>
+                              <span>FOTO OBLIGATORIA: Debes adjuntar al menos una foto evidencia para este hallazgo.</span>
+                            </div>
+                          )}
+
                           <input 
                             type="file" 
                             accept="image/*" 
@@ -769,10 +766,14 @@ const VOSOExecutionCategory = ({
                               <button 
                                 type="button"
                                 onClick={() => document.getElementById(`photo-${item.id}`)?.click()}
-                                className="flex-1 min-w-[160px] py-3 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-zinc-200 dark:shadow-none cursor-pointer"
+                                className={`flex-1 min-w-[160px] py-3 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer ${
+                                  isPhotoMissing 
+                                    ? 'bg-red-600 dark:bg-red-500 text-white border-2 border-red-400 animate-pulse shadow-lg shadow-red-200 dark:shadow-none' 
+                                    : 'bg-zinc-900 dark:bg-white text-white dark:text-black shadow-lg shadow-zinc-200 dark:shadow-none'
+                                }`}
                               >
                                 <Camera className="w-4 h-4" />
-                                {itemPhotos.length === 0 ? 'CAPTURAR EVIDENCIA (MÁX 3)' : `AÑADIR OTRA FOTO (${itemPhotos.length}/3)`}
+                                {itemPhotos.length === 0 ? '📷 CAPTURAR FOTO (OBLIGATORIO *)' : `AÑADIR OTRA FOTO (${itemPhotos.length}/3)`}
                               </button>
                             )}
 
@@ -1047,10 +1048,39 @@ const OperatorDashboard = ({
       ...(voso.ver || []), 
       ...(voso.oir || []), 
       ...(voso.sentir || []), 
-      ...(voso.oler || [])
-    ].every(item => vosoResponses[item.id]?.status);
+      ...(voso.oler || []),
+      ...(voso.orden || [])
+    ].every(item => {
+      const resp = vosoResponses[item.id];
+      if (!resp?.status) return false;
+      if (resp.status === 'Observación' || resp.status === 'Crítico') {
+        const hasPhoto = (resp.photoUrls && resp.photoUrls.length > 0) || (!!resp.photoUrl && resp.photoUrl.trim().length > 0);
+        if (!hasPhoto) return false;
+      }
+      return true;
+    });
 
     return tradChecked && vosoChecked;
+  };
+
+  const getVosoIssuesMissingPhotos = () => {
+    const voso = currentEquipment?.inspeccionVOSO;
+    if (!voso) return [];
+    const allVosoItems = [
+      ...(voso.ver || []), 
+      ...(voso.oir || []), 
+      ...(voso.sentir || []), 
+      ...(voso.oler || []),
+      ...(voso.orden || [])
+    ];
+    return allVosoItems.filter(item => {
+      const resp = vosoResponses[item.id];
+      if (resp && (resp.status === 'Observación' || resp.status === 'Crítico')) {
+        const hasPhoto = (resp.photoUrls && resp.photoUrls.length > 0) || (!!resp.photoUrl && resp.photoUrl.trim().length > 0);
+        return !hasPhoto;
+      }
+      return false;
+    });
   };
 
   const hasAnyDefect = () => {
@@ -1300,6 +1330,16 @@ const OperatorDashboard = ({
   };
 
   const handleNextEquipment = async () => {
+    const missingPhotos = getVosoIssuesMissingPhotos();
+    if (missingPhotos.length > 0) {
+      const names = missingPhotos.map(i => i.name).join(', ');
+      setMessage({ 
+        text: `Debes tomar al menos 1 foto evidencia para los hallazgos: ${names}`, 
+        type: 'error' 
+      });
+      return;
+    }
+
     const now = new Date();
     const currentOpStatus = (currentEquipment && equipmentOperatingStatus[currentEquipment.id]) || 'En Funcionamiento';
     const currentData = {
@@ -1548,6 +1588,12 @@ const OperatorDashboard = ({
     if (!findingDescription || !findingDescription.trim()) {
       setFormValidationError("La descripción del hallazgo no puede estar vacía.");
       setMessage({ text: "La descripción no puede estar vacía.", type: 'error' });
+      return;
+    }
+
+    if (findingPhotos.length === 0) {
+      setFormValidationError("Es obligatorio adjuntar al menos una foto evidencia del hallazgo.");
+      setMessage({ text: "Es obligatorio adjuntar una foto para el hallazgo.", type: 'error' });
       return;
     }
 
@@ -2626,7 +2672,7 @@ const OperatorDashboard = ({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Fotos del Hallazgo <span className="text-xs text-zinc-400 font-normal">(máx 3)</span>
+                  Fotos del Hallazgo <span className="text-xs text-red-500 font-bold">* Obligatoria (al menos 1)</span>
                 </label>
                 <FlashlightWidget variant="compact" />
               </div>
@@ -2668,10 +2714,14 @@ const OperatorDashboard = ({
                 {findingPhotos.length < 3 && (
                   <label 
                     htmlFor="findingPhotoInput"
-                    className="w-20 h-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-2xl flex flex-col items-center justify-center text-zinc-400 hover:text-brand-blue hover:border-brand-blue cursor-pointer transition-all active:scale-95 text-[10px] font-bold gap-1"
+                    className={`w-20 h-20 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95 text-[10px] font-bold gap-1 ${
+                      findingPhotos.length === 0 
+                        ? 'bg-red-50 dark:bg-red-950/30 border-2 border-red-500 text-red-600 dark:text-red-400 animate-pulse' 
+                        : 'bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-400 hover:text-brand-blue hover:border-brand-blue'
+                    }`}
                   >
                     <Camera className="w-6 h-6" />
-                    <span>{findingPhotos.length === 0 ? '+ Foto' : `${findingPhotos.length}/3`}</span>
+                    <span>{findingPhotos.length === 0 ? '+ Foto *' : `${findingPhotos.length}/3`}</span>
                   </label>
                 )}
 
@@ -3221,6 +3271,8 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
     return 'light';
   });
 
+  const [activeTab, setActiveTab] = useState<'summary' | 'heatmap' | 'full'>('summary');
+
   useEffect(() => {
     const handleStorageChange = () => {
       setTheme((localStorage.getItem('theme') as 'light' | 'dark') || 'light');
@@ -3240,21 +3292,37 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [groupBy, setGroupBy] = useState<'area' | 'operador'>('area');
 
-  const hsecStats = useHSECAnalytics(findings);
+  const findingStats = useFindingAnalytics(findings);
 
-  const filteredByDate = findings.filter(f => {
-    const fDate = getFindingDate(f);
-    if (!fDate) return true;
-    const start = dateRange.start ? new Date(dateRange.start) : null;
-    const end = dateRange.end ? new Date(dateRange.end) : null;
-    if (start && fDate < start) return false;
-    if (end) {
-      const endOfDay = new Date(end);
-      endOfDay.setHours(23, 59, 59, 999);
-      if (fDate > endOfDay) return false;
+  const filteredByDate = React.useMemo(() => {
+    return findings.filter(f => {
+      const fDate = getFindingDate(f);
+      if (!fDate) return true;
+      const start = dateRange.start ? new Date(dateRange.start) : null;
+      const end = dateRange.end ? new Date(dateRange.end) : null;
+      if (start && fDate < start) return false;
+      if (end) {
+        const endOfDay = new Date(end);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (fDate > endOfDay) return false;
+      }
+      return true;
+    });
+  }, [findings, dateRange]);
+
+  const setPresetRange = (days: number | 'all') => {
+    if (days === 'all') {
+      setDateRange({ start: '', end: '' });
+      return;
     }
-    return true;
-  });
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    setDateRange({
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0],
+    });
+  };
 
   const chartData = React.useMemo(() => {
     const counts: Record<string, { name: string, open: number, closed: number, inReview: number }> = {};
@@ -3274,210 +3342,306 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
       .slice(0, 8);
   }, [filteredByDate, groupBy]);
 
+  const criticalCount = findingStats.findingsByPriority.find(p => p.name.includes('Alta'))?.value || 0;
+
   return (
-    <div className="space-y-6">
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Compliance Card */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Cumplimiento</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+    <div className="space-y-4">
+      {/* Top Header Controls Bar */}
+      <div className="bg-white dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center font-bold">
+            <BarChart3 className="w-4 h-4" />
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-tight dark:text-white">{hsecStats.complianceRate}%</span>
-            <span className="text-[10px] font-bold text-emerald-500">Cerrados + Revisión</span>
+          <div>
+            <h3 className="font-extrabold text-sm text-zinc-900 dark:text-white tracking-tight">Dashboard Analítico de Hallazgos</h3>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Visualización compacta de métricas y reportes operativos en planta</p>
           </div>
-          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Indicador clave de mitigación de riesgos en terreno.</p>
-        </div>
-
-        {/* MTTR Card */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Tiempo de Cierre</span>
-            <Clock className="w-4 h-4 text-sky-500" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-tight dark:text-white">{hsecStats.meanTimeToResolutionHours}h</span>
-            <span className="text-[10px] font-bold text-sky-500">Horas promedio</span>
-          </div>
-          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Tiempo medio para resolver un hallazgo de terreno.</p>
-        </div>
-
-        {/* High Priority count */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Hallazgos Críticos</span>
-            <AlertTriangle className="w-4 h-4 text-red-500" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-tight dark:text-white">
-              {hsecStats.findingsByPriority.find(p => p.name.includes('Alta'))?.value || 0}
-            </span>
-            <span className="text-[10px] font-bold text-red-500">Prioridad Alta</span>
-          </div>
-          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Amenazas activas que requieren acción inmediata.</p>
-        </div>
-
-        {/* Total stats */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-2">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Total Histórico</span>
-            <FileText className="w-4 h-4 text-brand-blue" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-tight dark:text-white">{hsecStats.totalFindings}</span>
-            <span className="text-[10px] font-bold text-zinc-500">Reportados</span>
-          </div>
-          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Registros consolidados de riesgos en planta.</p>
         </div>
       </div>
 
-      {/* Main Charts area */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Core Bar Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-black rounded-3xl p-5 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-zinc-900 dark:text-white" />
-              <h3 className="font-bold text-xs text-zinc-900 dark:text-white uppercase tracking-wider">Frecuencia de Hallazgos</h3>
-            </div>
-            <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
-              <button 
-                onClick={() => setGroupBy('area')}
-                className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${groupBy === 'area' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'}`}
-              >
-                Por Área
-              </button>
-              <button 
-                onClick={() => setGroupBy('operador')}
-                className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${groupBy === 'operador' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'}`}
-              >
-                Por Operador
-              </button>
+      {/* KPI Cards Grid - Compact 2x2 on Mobile, 4x1 on Desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Compliance Card */}
+        <div className="bg-white dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs space-y-2 hover:border-emerald-500/30 transition-all">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Cumplimiento</span>
+            <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+              <CheckCircle2 className="w-3.5 h-3.5" />
             </div>
           </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl sm:text-3xl font-black tracking-tight dark:text-white">{findingStats.complianceRate}%</span>
+            <span className="text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">Cerrados</span>
+          </div>
+          <div className="w-full bg-zinc-100 dark:bg-zinc-900 h-1.5 rounded-full overflow-hidden">
+            <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(findingStats.complianceRate, 100)}%` }} />
+          </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 border-b border-zinc-50 dark:border-white/5">
-            <div className="space-y-1">
-              <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-600 uppercase ml-1">Desde</label>
-              <div className="relative">
-                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600" />
+        {/* MTTR Card */}
+        <div className="bg-white dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs space-y-2 hover:border-sky-500/30 transition-all">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Tiempo de Cierre</span>
+            <div className="w-6 h-6 rounded-lg bg-sky-500/10 text-sky-500 flex items-center justify-center">
+              <Clock className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl sm:text-3xl font-black tracking-tight dark:text-white">{findingStats.meanTimeToResolutionHours}h</span>
+            <span className="text-[9px] font-bold text-sky-500 bg-sky-500/10 px-1.5 py-0.5 rounded-md">Promedio</span>
+          </div>
+          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate">Tiempo medio de resolución</p>
+        </div>
+
+        {/* High Priority count */}
+        <div className="bg-white dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs space-y-2 hover:border-red-500/30 transition-all">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Críticos</span>
+            <div className="w-6 h-6 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center">
+              <AlertTriangle className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl sm:text-3xl font-black tracking-tight dark:text-white">{criticalCount}</span>
+            <span className="text-[9px] font-bold text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              Alta
+            </span>
+          </div>
+          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate">Requieren acción prioritaria</p>
+        </div>
+
+        {/* Total stats */}
+        <div className="bg-white dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs space-y-2 hover:border-indigo-500/30 transition-all">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Total Histórico</span>
+            <div className="w-6 h-6 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+              <FileText className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl sm:text-3xl font-black tracking-tight dark:text-white">{findingStats.totalFindings}</span>
+            <span className="text-[9px] font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded-md">Reportes</span>
+          </div>
+          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate">Registros totales en planta</p>
+        </div>
+      </div>
+
+      {/* View Switcher Bar - Placed directly above the content it toggles */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white dark:bg-zinc-950 p-2 sm:p-2.5 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs gap-2">
+        <span className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-2">
+          Seleccionar Vista
+        </span>
+        <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('summary')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'summary' 
+                ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' 
+                : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5 text-sky-500" />
+            <span>Resumen</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('heatmap')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'heatmap' 
+                ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' 
+                : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5 text-amber-500" />
+            <span>Mapa de Calidez VOSO</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('full')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'full' 
+                ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' 
+                : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Consolidado</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Interactive Content Panel */}
+      {(activeTab === 'summary' || activeTab === 'full') && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Core Bar Chart Card */}
+          <div className="lg:col-span-2 bg-white dark:bg-zinc-950 rounded-2xl p-4 sm:p-5 border border-zinc-100 dark:border-white/10 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-sky-500" />
+                <h3 className="font-extrabold text-xs text-zinc-900 dark:text-white uppercase tracking-wider">Frecuencia de Hallazgos</h3>
+              </div>
+              
+              {/* Group By selector */}
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
+                <button 
+                  onClick={() => setGroupBy('area')}
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${groupBy === 'area' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'}`}
+                >
+                  Por Área
+                </button>
+                <button 
+                  onClick={() => setGroupBy('operador')}
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${groupBy === 'operador' ? 'bg-white dark:bg-black text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'}`}
+                >
+                  Por Operador
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Date Presets & Date Pickers Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-100 dark:border-white/5">
+              <div className="flex items-center gap-1 overflow-x-auto">
+                <span className="text-[9px] font-bold text-zinc-400 uppercase mr-1">Rango:</span>
+                <button 
+                  onClick={() => setPresetRange(7)} 
+                  className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition-colors ${dateRange.start && !dateRange.end ? 'bg-sky-500 text-white' : 'bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}
+                >
+                  7 días
+                </button>
+                <button 
+                  onClick={() => setPresetRange(30)} 
+                  className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+                >
+                  30 días
+                </button>
+                <button 
+                  onClick={() => setPresetRange('all')} 
+                  className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition-colors ${!dateRange.start && !dateRange.end ? 'bg-sky-500 text-white' : 'bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}
+                >
+                  Todo
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
                 <input 
                   type="date" 
                   value={dateRange.start}
                   onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                  className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue font-bold dark:text-white"
+                  className="px-2 py-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-lg text-[10px] outline-none focus:ring-1 focus:ring-sky-500 font-medium dark:text-white"
                 />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-600 uppercase ml-1">Hasta</label>
-              <div className="relative">
-                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600" />
+                <span className="text-zinc-400 text-xs">-</span>
                 <input 
                   type="date" 
                   value={dateRange.end}
                   onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                  className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue font-bold dark:text-white"
+                  className="px-2 py-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-lg text-[10px] outline-none focus:ring-1 focus:ring-sky-500 font-medium dark:text-white"
                 />
               </div>
             </div>
+
+            <div className="h-56 sm:h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart id="stats-summary-chart" data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#27272a' : '#e4e4e7'} />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 9, fill: '#71717a' }}
+                    interval={0}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 9, fill: '#71717a' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      borderRadius: '12px', 
+                      border: theme === 'dark' ? '1px solid #27272a' : '1px solid #e4e4e7', 
+                      backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff', 
+                      color: theme === 'dark' ? '#ffffff' : '#18181b', 
+                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' 
+                    }}
+                    cursor={{ fill: theme === 'dark' ? '#27272a' : '#f4f4f5' }}
+                  />
+                  <Bar dataKey="open" name="Pendientes" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="inReview" name="En Revisión" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="closed" name="Cerrados" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart id="stats-summary-chart" data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#27272a' : '#e4e4e7'} />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 9, fill: '#71717a' }}
-                  interval={0}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 9, fill: '#71717a' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: '16px', 
-                    border: theme === 'dark' ? '1px solid #27272a' : '1px solid #e4e4e7', 
-                    backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff', 
-                    color: theme === 'dark' ? '#ffffff' : '#18181b', 
-                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' 
-                  }}
-                  cursor={{ fill: theme === 'dark' ? '#27272a' : '#f4f4f5' }}
-                />
-                <Bar dataKey="open" name="Pendientes" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="inReview" name="En Revisión" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="closed" name="Cerrados" fill="#10b981" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          {/* Dynamic Hotspots & Operator Contribution side Card */}
+          <div className="bg-white dark:bg-zinc-950 p-4 sm:p-5 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs flex flex-col justify-between gap-4">
+            {/* Areas Section */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-amber-500" />
+                  <h4 className="font-extrabold text-[10px] text-zinc-900 dark:text-white uppercase tracking-wider">Áreas con Mayor Frecuencia</h4>
+                </div>
+                <span className="text-[9px] font-bold text-zinc-400 bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded-md">Top Áreas</span>
+              </div>
+
+              {findingStats.vulnerableAreas.length === 0 ? (
+                <p className="text-xs text-zinc-400 dark:text-zinc-600 py-3 text-center font-medium">Planta sin incidencias activas.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
+                  {findingStats.vulnerableAreas.slice(0, 5).map((area, index) => (
+                    <div key={`vln-${index}`} className="flex items-center justify-between text-xs p-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-900/40 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
+                      <span className="font-semibold text-zinc-700 dark:text-zinc-300 truncate max-w-[140px]">{area.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-extrabold bg-zinc-200/70 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 rounded-md">
+                          {area.count}
+                        </span>
+                        <span className={`w-2 h-2 rounded-full ${
+                          area.status === 'Crítico' ? 'bg-red-500 animate-pulse' :
+                          area.status === 'Estable' ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Leaderboard Section */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-emerald-500" />
+                  <h4 className="font-extrabold text-[10px] text-zinc-900 dark:text-white uppercase tracking-wider">Aporte Operacional</h4>
+                </div>
+                <span className="text-[9px] font-bold text-zinc-400 bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded-md">Ranking</span>
+              </div>
+
+              {findingStats.operatorLeaderboard.length === 0 ? (
+                <p className="text-xs text-zinc-400 dark:text-zinc-600 py-3 text-center font-medium">Sin datos de operadores.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
+                  {findingStats.operatorLeaderboard.slice(0, 5).map((op, index) => (
+                    <div key={`ldr-${index}`} className="flex items-center justify-between text-xs p-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-900/40 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
+                      <span className="font-semibold text-zinc-700 dark:text-zinc-300 truncate max-w-[130px]">{op.name}</span>
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-400">
+                        <span className="bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 py-0.5 rounded-md">Rep: {op.reportsCount}</span>
+                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-md">Res: {op.resolvedCount}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Dynamic vulnerable areas list & leaderboard */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none flex flex-col justify-between gap-6">
-          {/* Areas Section */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-1.5 border-b border-zinc-100 dark:border-white/5 pb-2">
-              <Compass className="w-3.5 h-3.5 text-zinc-400" />
-              <h4 className="font-bold text-[10px] text-zinc-900 dark:text-white uppercase tracking-wider">Hotspots de Riesgo</h4>
-            </div>
-
-            {hsecStats.vulnerableAreas.length === 0 ? (
-              <p className="text-xs text-zinc-400 dark:text-zinc-600 py-4 text-center">Planta sin incidencias activas registradas.</p>
-            ) : (
-              <div className="space-y-2">
-                {hsecStats.vulnerableAreas.map((area, index) => (
-                  <div key={`vln-${index}`} className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-zinc-700 dark:text-zinc-300 truncate max-w-[150px]">{area.name}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-extrabold bg-zinc-50 dark:bg-zinc-900/60 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded-md">
-                        {area.count}
-                      </span>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        area.status === 'Crítico' ? 'bg-red-500 animate-pulse' :
-                        area.status === 'Estable' ? 'bg-amber-500' : 'bg-emerald-500'
-                      }`} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Leaderboard Section */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-1.5 border-b border-zinc-100 dark:border-white/5 pb-2">
-              <Activity className="w-3.5 h-3.5 text-zinc-400" />
-              <h4 className="font-bold text-[10px] text-zinc-900 dark:text-white uppercase tracking-wider">Aporte Operacional</h4>
-            </div>
-
-            {hsecStats.operatorLeaderboard.length === 0 ? (
-              <p className="text-xs text-zinc-400 dark:text-zinc-600 py-4 text-center font-medium">Buscando contribuciones de operadores...</p>
-            ) : (
-              <div className="space-y-2">
-                {hsecStats.operatorLeaderboard.map((op, index) => (
-                  <div key={`ldr-${index}`} className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[140px]">{op.name}</span>
-                    <div className="flex items-center gap-3 text-[10px] font-bold text-zinc-400">
-                      <span>R: <b className="text-zinc-700 dark:text-zinc-200">{op.reportsCount}</b></span>
-                      <span>C: <b className="text-emerald-500">{op.resolvedCount}</b></span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* Heatmap Tab View */}
+      {(activeTab === 'heatmap' || activeTab === 'full') && (
+        <div className="bg-white dark:bg-zinc-950 p-4 sm:p-5 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs">
+          <VOSOHeatmapChart findings={filteredByDate} />
         </div>
-      </div>
-
-      {/* Heatmap of VOSO Findings by Area */}
-      <VOSOHeatmapChart findings={filteredByDate} />
+      )}
     </div>
   );
 };
@@ -3502,6 +3666,11 @@ const SupervisorDashboard = ({
   const [supervisorComments, setSupervisorComments] = useState('');
   const [showQuickHelp, setShowQuickHelp] = useState(false);
   
+  // Custom Resolution Date/Time State for MTTR calculation
+  const [customClosedDate, setCustomClosedDate] = useState<string>('');
+  const [useCustomClosedDate, setUseCustomClosedDate] = useState<boolean>(false);
+  const [isEditingClosedDate, setIsEditingClosedDate] = useState<boolean>(false);
+
   // Advanced Filter States
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -3509,6 +3678,21 @@ const SupervisorDashboard = ({
 
   const [searchTerm, setSearchTerm] = useState('');
   const { getOperatorProfile } = useAppUsers();
+
+  useEffect(() => {
+    if (selectedFinding) {
+      setSupervisorComments(selectedFinding.solution || selectedFinding.supervisorComments || '');
+      setUseCustomClosedDate(false);
+      const closedD = getFindingClosedDate(selectedFinding);
+      setCustomClosedDate(formatToDatetimeLocal(closedD || new Date()));
+      setIsEditingClosedDate(false);
+    } else {
+      setSupervisorComments('');
+      setUseCustomClosedDate(false);
+      setCustomClosedDate(formatToDatetimeLocal(new Date()));
+      setIsEditingClosedDate(false);
+    }
+  }, [selectedFinding?.id]);
 
   useEffect(() => {
     // Elegant plant-scoped real-time listener using Enterprise FindingService
@@ -3576,7 +3760,8 @@ const SupervisorDashboard = ({
 
   const handleCloseFinding = async () => {
     if (!selectedFinding) return;
-    const resultStatus = await FindingService.transitionStatus(selectedFinding.id, 'Closed', user, supervisorComments);
+    const dateToUse = useCustomClosedDate && customClosedDate ? new Date(customClosedDate) : null;
+    const resultStatus = await FindingService.transitionStatus(selectedFinding.id, 'Closed', user, supervisorComments, dateToUse);
     
     // Notify operator
     await addDoc(collection(db, 'notifications'), {
@@ -3594,12 +3779,26 @@ const SupervisorDashboard = ({
 
     setSelectedFinding(null);
     setSupervisorComments('');
+    setUseCustomClosedDate(false);
     
     if (resultStatus.queued) {
       showToast("Cierre Encolado", "Cierre registrado localmente en cola offline. Se sincronizará al recuperar señal.", "warning");
     } else {
       showToast("Hallazgo Cerrado", "El hallazgo se ha cerrado exitosamente.", "success");
     }
+  };
+
+  const handleUpdateClosureDate = async () => {
+    if (!selectedFinding) return;
+    const dateToUse = customClosedDate ? new Date(customClosedDate) : new Date();
+    const result = await FindingService.updateFindingClosure(
+      selectedFinding.id,
+      user,
+      supervisorComments,
+      dateToUse
+    );
+    setIsEditingClosedDate(false);
+    showToast("Fecha de Cierre Actualizada", "La fecha y hora de solución del hallazgo se actualizó correctamente.", "success");
   };
 
   const handleSetInReview = async () => {
@@ -3634,13 +3833,13 @@ const SupervisorDashboard = ({
     if (!selectedFinding) return;
     
     try {
-      await deleteDoc(doc(db, 'findings', selectedFinding.id));
+      await FindingService.deleteFinding(selectedFinding.id);
       setSelectedFinding(null);
       setIsConfirmingDelete(false);
-      showToast("Hallazgo Eliminado", "El hallazgo ha sido eliminado permanentemente.", "success");
+      showToast("Hallazgo Eliminado", "El hallazgo ha sido eliminado correctamente.", "success");
     } catch (err) {
       console.error("Error deleting finding:", err);
-      showToast("Error", "Error al eliminar el hallazgo. Revisa tus permisos de administrador.", "error");
+      showToast("Error", "Error al eliminar el hallazgo.", "error");
     }
   };
 
@@ -3877,11 +4076,53 @@ const SupervisorDashboard = ({
                     </span>
                     <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none">{selectedFinding.areaName}</span>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-white/10">
+                  <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-white/10 space-y-3">
                     <FindingDescriptionRenderer 
                       description={selectedFinding.description} 
                       source={selectedFinding.source || selectedFinding.category} 
                     />
+
+                    {extractFindingPhotos(selectedFinding).length === 0 && (
+                      <div className="p-3.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/30 rounded-2xl space-y-2">
+                        <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span className="text-[11px] font-bold uppercase tracking-wider">Hallazgo pasado sin foto evidencia</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-600 dark:text-zinc-400 font-medium">
+                          Este hallazgo reportado anteriormente no incluye evidencia fotográfica. Adjunta la foto para completar el reporte.
+                        </p>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          id={`attach-photo-app-${selectedFinding.id}`}
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const res = await FindingService.attachPhotoToFinding(selectedFinding.id, file, user);
+                                setSelectedFinding({
+                                  ...selectedFinding,
+                                  photoUrl: res.photoUrl,
+                                  photoUrls: [res.photoUrl]
+                                });
+                                showToast("Foto Adjuntada", "Foto evidencia adjuntada exitosamente al hallazgo.", "success");
+                              } catch (err: any) {
+                                showToast("Error", `Error al subir foto: ${err.message}`, "error");
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById(`attach-photo-app-${selectedFinding.id}`)?.click()}
+                          className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>Adjuntar Foto Evidencia</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -3896,6 +4137,102 @@ const SupervisorDashboard = ({
                         placeholder="Instrucciones o notas de cierre..."
                       />
                     </div>
+
+                    {/* Resolution Date & Time (MTTR Adjustment) */}
+                    <div className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-500/20 p-4 rounded-2xl space-y-3">
+                      <div 
+                        className="flex items-center justify-between cursor-pointer select-none" 
+                        onClick={() => setUseCustomClosedDate(!useCustomClosedDate)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                          <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                            ¿Ajustar fecha/hora de solución? (Cierre retroactivo)
+                          </span>
+                        </div>
+                        <input 
+                          type="checkbox" 
+                          checked={useCustomClosedDate}
+                          onChange={(e) => setUseCustomClosedDate(e.target.checked)}
+                          className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                        />
+                      </div>
+
+                      {useCustomClosedDate ? (
+                        <div className="space-y-3 pt-2 border-t border-amber-200/50 dark:border-amber-500/10">
+                          <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">
+                            Indica cuándo se solucionó realmente en terreno para mantener el cálculo de MTTR preciso sin retrasos ficticios.
+                          </p>
+
+                          <div>
+                            <label className="block text-[10px] font-black text-amber-900 dark:text-amber-300 uppercase tracking-widest mb-1">
+                              Fecha y Hora de Solución
+                            </label>
+                            <input 
+                              type="datetime-local"
+                              value={customClosedDate}
+                              onChange={(e) => setCustomClosedDate(e.target.value)}
+                              max={formatToDatetimeLocal(new Date())}
+                              className="w-full p-3 bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-500/30 rounded-xl text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          {/* Quick Presets */}
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date()))}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50 rounded-lg transition-colors"
+                            >
+                              ⚡ Ahora mismo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 3600 * 1000)))}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50 rounded-lg transition-colors"
+                            >
+                              ⏱️ Hace 1 hr
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 4 * 3600 * 1000)))}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50 rounded-lg transition-colors"
+                            >
+                              🕒 Hace 4 hrs
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 24 * 3600 * 1000)))}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50 rounded-lg transition-colors"
+                            >
+                              📅 Ayer
+                            </button>
+                            {getFindingDate(selectedFinding) && (
+                              <button
+                                type="button"
+                                onClick={() => setCustomClosedDate(formatToDatetimeLocal(getFindingDate(selectedFinding)))}
+                                className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50 rounded-lg transition-colors"
+                              >
+                                📋 Hora de reporte
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Dynamic MTTR Preview */}
+                          {getFindingDate(selectedFinding) && customClosedDate && (
+                            <div className="p-2.5 bg-amber-100/70 dark:bg-amber-900/40 rounded-xl text-[11px] font-bold text-amber-950 dark:text-amber-200 flex items-center justify-between">
+                              <span>MTTR Resultante:</span>
+                              <span className="font-mono">{getCalculatedMTTRText(getFindingDate(selectedFinding)!, customClosedDate)}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 italic">
+                          Se utilizará la fecha y hora actual al presionar "Cerrar Hallazgo".
+                        </p>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <button 
                         onClick={handleSetInReview}
@@ -3922,10 +4259,45 @@ const SupervisorDashboard = ({
                       <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Solución Aplicada</p>
                       <p className="text-zinc-700 dark:text-zinc-300 font-medium">{selectedFinding.solution || 'Cerrado por supervisor'}</p>
                     </div>
-                    {selectedFinding.supervisorComments && (
+
+                    <div className="pt-2 border-t border-zinc-200/60 dark:border-white/5 flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Comentarios de Supervisión</p>
-                        <p className="text-zinc-700 dark:text-zinc-400 italic">"{selectedFinding.supervisorComments}"</p>
+                        <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Fecha / Hora de Solución</p>
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          {getFindingClosedDate(selectedFinding) ? getFindingClosedDate(selectedFinding)!.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'No especificada'}
+                        </p>
+                        {getFindingDate(selectedFinding) && getFindingClosedDate(selectedFinding) && (
+                          <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
+                            MTTR: {getCalculatedMTTRText(getFindingDate(selectedFinding)!, getFindingClosedDate(selectedFinding))}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingClosedDate(!isEditingClosedDate)}
+                        className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-[11px] font-bold rounded-xl transition-colors"
+                      >
+                        {isEditingClosedDate ? 'Cancelar' : '✏️ Editar Fecha'}
+                      </button>
+                    </div>
+
+                    {isEditingClosedDate && (
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/20 rounded-xl space-y-2">
+                        <label className="block text-[10px] font-black text-amber-900 dark:text-amber-300 uppercase">Nueva Fecha y Hora de Solución:</label>
+                        <input 
+                          type="datetime-local"
+                          value={customClosedDate}
+                          onChange={(e) => setCustomClosedDate(e.target.value)}
+                          className="w-full p-2.5 bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-500/30 rounded-lg text-xs font-bold dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleUpdateClosureDate}
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs uppercase"
+                        >
+                          Guardar Cambio de Fecha (Ajustar MTTR)
+                        </button>
                       </div>
                     )}
                   </div>
@@ -3967,8 +4339,8 @@ const SupervisorDashboard = ({
                   </button>
                 </div>
 
-                {user.role === 'Administrador' && (
-                  <div className="pt-4 border-t border-zinc-100">
+                {(user.role === 'Administrador' || user.role === 'Supervisor') && (
+                  <div className="pt-4 border-t border-zinc-100 font-sans">
                     {isConfirmingDelete ? (
                       <div className="flex flex-col gap-3 p-4 bg-red-50 rounded-2xl border border-red-100 animate-in fade-in slide-in-from-bottom-2">
                         <p className="text-xs font-bold text-red-600 text-center uppercase tracking-widest">¿Confirmar eliminación permanente?</p>
@@ -4207,20 +4579,41 @@ const ReportsView = ({
       const docPDF = new jsPDF();
       const reportTitle = moduleTab === 'VOSO' ? 'Reporte de Inspecciones VOSO' : 'Reporte de Orden y Limpieza (5S)';
       
-      // Header Text & Company
-      docPDF.setFontSize(18);
-      docPDF.setTextColor(24, 24, 27); // zinc-900
-      docPDF.text(sanitizeForPDF(sett.companyName || reportTitle, 40), 14, 22);
-      
-      docPDF.setFontSize(10);
-      docPDF.setTextColor(113, 113, 122); // zinc-500
-      docPDF.text(sanitizeForPDF(sett.headerText || (moduleTab === 'VOSO' ? 'Sistema de Gestión VOSO' : 'Módulo de Orden y Limpieza'), 80), 14, 30);
-      docPDF.text(`Generado el: ${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}`, 14, 36);
+      // Header Banner with Chekify Brand Colors
+      docPDF.setFillColor(15, 23, 42); // Chekify Deep Navy Slate background (#0F172A)
+      docPDF.rect(0, 0, 210, 28, 'F');
 
-      // Add Logo if exists
+      docPDF.setFillColor(14, 165, 233); // Chekify Sky-500 accent (#0EA5E9)
+      docPDF.rect(0, 28, 210, 1.5, 'F');
+
+      // Header Text & Company
+      docPDF.setFontSize(13);
+      docPDF.setFont('helvetica', 'bold');
+      docPDF.setTextColor(255, 255, 255);
+      docPDF.text(sanitizeForPDF(sett.companyName ? `${sett.companyName} - ${reportTitle}` : reportTitle, 40), 14, 13);
+      
+      docPDF.setFontSize(8.5);
+      docPDF.setFont('helvetica', 'normal');
+      docPDF.setTextColor(186, 230, 253); // Chekify Sky-200
+      docPDF.text(sanitizeForPDF(sett.headerText || (moduleTab === 'VOSO' ? 'Sistema de Gestión de Inspecciones VOSO' : 'Módulo de Orden y Limpieza 5S'), 60), 14, 20.5);
+
+      // White Chekify Logo
+      const chekifyLogo = await getWhiteChekifyLogoBase64();
+      let logoW = 34;
+      if (chekifyLogo) {
+        try {
+          const hHeight = 13;
+          logoW = Math.min(42, Math.max(26, hHeight * chekifyLogo.aspect));
+          docPDF.addImage(chekifyLogo.dataUrl, 'PNG', 210 - 14 - logoW, (28 - hHeight) / 2, logoW, hHeight);
+        } catch (e) {
+          console.warn('Error embedding white Chekify logo in exportToPDF:', e);
+        }
+      }
+
+      // Add Company Logo if configured
       if (sett.logoUrl) {
         try {
-          docPDF.addImage(sett.logoUrl, 'JPEG', 160, 10, 35, 35);
+          docPDF.addImage(sett.logoUrl, 'JPEG', 210 - 14 - logoW - 20, 6, 16, 16);
         } catch (e) {
           console.error("Error adding logo to PDF", e);
         }
@@ -4237,12 +4630,13 @@ const ReportsView = ({
       ]);
 
       autoTable(docPDF, {
-        startY: 45,
+        startY: 35,
         head: [['Fecha', 'Área / Equipo', 'Operador', 'Prioridad', 'Descripción y Detalle', 'Estado', 'Cierre']],
         body: tableData,
-        theme: 'striped',
-        headStyles: { fillColor: moduleTab === 'VOSO' ? [24, 24, 27] : [147, 51, 234], textColor: [255, 255, 255], fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+        theme: 'grid',
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8, cellPadding: 3 },
+        alternateRowStyles: { fillColor: [240, 249, 255] },
+        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak', lineColor: [226, 232, 240] },
         columnStyles: {
           0: { cellWidth: 22 },
           1: { cellWidth: 28 },
@@ -4252,21 +4646,30 @@ const ReportsView = ({
           5: { cellWidth: 18 },
           6: { cellWidth: 22 }
         },
-        margin: { top: 45 }
+        margin: { top: 35, left: 14, right: 14 }
       });
 
       // Footer
       const pageCount = (docPDF as any).internal.getNumberOfPages();
       for(let i = 1; i <= pageCount; i++) {
         docPDF.setPage(i);
-        docPDF.setFontSize(8);
-        docPDF.setTextColor(161, 161, 170); // zinc-400
+        docPDF.setDrawColor(186, 230, 253);
+        docPDF.setLineWidth(0.4);
+        docPDF.line(14, docPDF.internal.pageSize.height - 12, docPDF.internal.pageSize.width - 14, docPDF.internal.pageSize.height - 12);
+
+        docPDF.setFontSize(7.5);
+        docPDF.setFont('helvetica', 'bold');
+        docPDF.setTextColor(3, 105, 161);
         docPDF.text(
-          sanitizeForPDF(sett.footerText || 'Este documento es un reporte oficial del sistema.', 90),
+          sanitizeForPDF(sett.footerText || 'Chekify Enterprise - Reporte Oficial de Inspecciones.', 90),
           14, 
-          docPDF.internal.pageSize.height - 10
+          docPDF.internal.pageSize.height - 6
         );
-        docPDF.text(`Página ${i} de ${pageCount}`, docPDF.internal.pageSize.width - 30, docPDF.internal.pageSize.height - 10);
+
+        docPDF.setFontSize(7.5);
+        docPDF.setFont('helvetica', 'normal');
+        docPDF.setTextColor(100, 116, 139);
+        docPDF.text(`Página ${i} de ${pageCount}`, docPDF.internal.pageSize.width - 30, docPDF.internal.pageSize.height - 6);
       }
 
       const fileName = moduleTab === 'VOSO' ? 'reporte-voso' : 'reporte-orden-limpieza';

@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, Image as ImageIcon, Camera, Maximize2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Image as ImageIcon, Camera, Maximize2, X, CloudOff } from 'lucide-react';
 import { OfflineImage } from './OfflineImage';
 import { Finding } from '../types';
+
+export const isPendingUpload = (url: string | null | undefined): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return trimmed.startsWith('offline-cached://') || trimmed.startsWith('data:');
+};
 
 export const extractFindingPhotos = (finding: Finding | null | undefined): string[] => {
   if (!finding) return [];
@@ -140,19 +146,28 @@ export const FindingPhotoGallery: React.FC<FindingPhotoGalleryProps> = ({
     <div className={`relative w-full h-full min-h-[260px] bg-zinc-950 flex flex-col justify-between overflow-hidden select-none ${className}`}>
       {/* Top Bar / Badge */}
       <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
-        {validPhotos.length > 1 ? (
-          <div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-bold tracking-wider flex items-center gap-1.5 border border-white/10 shadow-lg pointer-events-auto">
-            <Camera className="w-3.5 h-3.5 text-sky-400" />
-            <span>
-              Foto {currentIndex + 1} de {validPhotos.length}
-            </span>
-          </div>
-        ) : (
-          <div className="px-2.5 py-1 rounded-full bg-black/50 backdrop-blur-md text-zinc-300 text-[10px] font-semibold flex items-center gap-1 border border-white/10">
-            <Camera className="w-3 h-3 text-emerald-400" />
-            <span>1 Foto</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {validPhotos.length > 1 ? (
+            <div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-bold tracking-wider flex items-center gap-1.5 border border-white/10 shadow-lg">
+              <Camera className="w-3.5 h-3.5 text-sky-400" />
+              <span>
+                Foto {currentIndex + 1} de {validPhotos.length}
+              </span>
+            </div>
+          ) : (
+            <div className="px-2.5 py-1 rounded-full bg-black/50 backdrop-blur-md text-zinc-300 text-[10px] font-semibold flex items-center gap-1 border border-white/10">
+              <Camera className="w-3 h-3 text-emerald-400" />
+              <span>1 Foto</span>
+            </div>
+          )}
+
+          {isPendingUpload(currentPhoto) && (
+            <div className="px-3 py-1.5 rounded-full bg-amber-500/95 text-white text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 border border-amber-300/40 shadow-lg backdrop-blur-md animate-pulse">
+              <CloudOff className="w-3.5 h-3.5 text-amber-100 shrink-0" />
+              <span>Pendiente de subir a la nube (Offline)</span>
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">
           <button
@@ -224,6 +239,7 @@ export const FindingPhotoGallery: React.FC<FindingPhotoGalleryProps> = ({
         <div className="w-full p-2.5 bg-zinc-900/90 backdrop-blur-md border-t border-white/10 flex items-center justify-center gap-2 overflow-x-auto custom-scrollbar z-20 shrink-0">
           {validPhotos.map((photo, idx) => {
             const isActive = idx === currentIndex;
+            const pending = isPendingUpload(photo);
             return (
               <button
                 key={`thumb-${idx}`}
@@ -240,6 +256,14 @@ export const FindingPhotoGallery: React.FC<FindingPhotoGalleryProps> = ({
                   alt={`Miniatura ${idx + 1}`}
                   className="w-full h-full object-cover"
                 />
+                {pending && (
+                  <div 
+                    className="absolute top-0.5 right-0.5 z-20 w-3.5 h-3.5 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md border border-white/60 animate-pulse"
+                    title="Foto pendiente de subir a la nube"
+                  >
+                    <CloudOff className="w-2 h-2" />
+                  </div>
+                )}
                 {isActive && (
                   <div className="absolute inset-0 bg-sky-500/10 pointer-events-none" />
                 )}
@@ -276,16 +300,33 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
   }[size];
 
   if (validPhotos.length === 1) {
+    const isSinglePending = isPendingUpload(validPhotos[0]);
     return (
-      <div 
-        onClick={() => onSelectPhoto && onSelectPhoto(0)}
-        className={`relative ${dimensionClasses} overflow-hidden border border-zinc-200/60 dark:border-white/10 shadow-xs shrink-0 cursor-pointer group bg-zinc-900 ${className}`}
-      >
-        <OfflineImage
-          src={validPhotos[0]}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          alt="Foto hallazgo"
-        />
+      <div className="inline-flex flex-col items-start gap-1">
+        <div 
+          onClick={() => onSelectPhoto && onSelectPhoto(0)}
+          className={`relative ${dimensionClasses} overflow-hidden border border-zinc-200/60 dark:border-white/10 shadow-xs shrink-0 cursor-pointer group bg-zinc-900 ${className}`}
+        >
+          <OfflineImage
+            src={validPhotos[0]}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            alt="Foto hallazgo"
+          />
+          {isSinglePending && (
+            <div 
+              className="absolute top-0.5 right-0.5 z-20 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md border border-white/60 animate-pulse" 
+              title="Foto pendiente de subir a la nube (Conexión inestable)"
+            >
+              <CloudOff className="w-2.5 h-2.5" />
+            </div>
+          )}
+        </div>
+        {isSinglePending && (
+          <span className="inline-flex items-center gap-1 text-[8px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded-md border border-amber-200 dark:border-amber-500/30 whitespace-nowrap shadow-2xs animate-pulse">
+            <CloudOff className="w-2.5 h-2.5 shrink-0" />
+            <span>Pendiente Nube</span>
+          </span>
+        )}
       </div>
     );
   }
@@ -293,24 +334,36 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
   // Gallery view with multiple photos
   const displayPhotos = validPhotos.slice(0, 3);
   const remainingCount = validPhotos.length - displayPhotos.length;
+  const hasPending = validPhotos.some(isPendingUpload);
 
   return (
     <div className={`flex items-center gap-1.5 ${className}`}>
       <div className="flex items-center -space-x-3">
-        {displayPhotos.map((photo, idx) => (
-          <div
-            key={`grid-thumb-${idx}`}
-            onClick={() => onSelectPhoto && onSelectPhoto(idx)}
-            className={`relative ${dimensionClasses} overflow-hidden border-2 border-white dark:border-zinc-900 shadow-md shrink-0 cursor-pointer group bg-zinc-900 hover:z-10 transition-transform duration-200 hover:scale-110`}
-            style={{ zIndex: displayPhotos.length - idx }}
-          >
-            <OfflineImage
-              src={photo}
-              className="w-full h-full object-cover"
-              alt={`Foto ${idx + 1}`}
-            />
-          </div>
-        ))}
+        {displayPhotos.map((photo, idx) => {
+          const pending = isPendingUpload(photo);
+          return (
+            <div
+              key={`grid-thumb-${idx}`}
+              onClick={() => onSelectPhoto && onSelectPhoto(idx)}
+              className={`relative ${dimensionClasses} overflow-hidden border-2 border-white dark:border-zinc-900 shadow-md shrink-0 cursor-pointer group bg-zinc-900 hover:z-10 transition-transform duration-200 hover:scale-110`}
+              style={{ zIndex: displayPhotos.length - idx }}
+            >
+              <OfflineImage
+                src={photo}
+                className="w-full h-full object-cover"
+                alt={`Foto ${idx + 1}`}
+              />
+              {pending && (
+                <div 
+                  className="absolute top-0.5 right-0.5 z-20 w-3.5 h-3.5 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md border border-white/60 animate-pulse"
+                  title="Foto pendiente de subir a la nube"
+                >
+                  <CloudOff className="w-2 h-2" />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {remainingCount > 0 && (
@@ -323,9 +376,19 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
         </button>
       )}
 
-      <span className="text-[10px] font-extrabold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 shrink-0">
-        📷 {validPhotos.length} fotos
-      </span>
+      {hasPending ? (
+        <span 
+          className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-500/40 whitespace-nowrap shadow-xs animate-pulse"
+          title="Fotografías guardadas localmente pendientes de subida automática a la nube"
+        >
+          <CloudOff className="w-2.5 h-2.5 shrink-0" />
+          <span>Pendiente Subida</span>
+        </span>
+      ) : (
+        <span className="text-[10px] font-extrabold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 shrink-0">
+          📷 {validPhotos.length} fotos
+        </span>
+      )}
     </div>
   );
 };

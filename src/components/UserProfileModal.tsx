@@ -374,7 +374,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   type="text"
                   value={cargo}
                   onChange={(e) => setCargo(e.target.value)}
-                  placeholder="Ej: Supervisor HSEC / Operador Senior"
+                  placeholder="Ej: Supervisor de Planta / Operador Senior"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all"
                 />
               </div>

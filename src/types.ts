@@ -125,5 +125,6 @@ export interface VOSOResponse {
   status: 'OK' | 'Observación' | 'Crítico' | 'NA';
   comment?: string;
   photoUrl?: string;
+  photoUrls?: string[];
   solvedByOperator?: boolean;
 }

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useAppUsers } from '../hooks/useAppUsers';
 import { QuickHelpModal } from './QuickHelpModal';
+import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText } from '../utils/dateUtils';
 import { 
   doc, 
   getDoc, 
@@ -80,17 +81,6 @@ export const getOrdenSubcategory = (desc: string): string => {
   if (u.includes('OBSTRUCC') || u.includes('ACCESO') || u.includes('PASILLO')) return 'Obstrucciones';
   if (u.includes('LIMPIEZA') || u.includes('SUCIO') || u.includes('POLVO')) return 'Limpieza';
   return 'General 5S';
-};
-
-const getFindingDate = (f: Finding | null): Date | null => {
-  if (!f) return null;
-  const d = f.date || f.createdAt;
-  if (!d) return null;
-  try {
-    return d.toDate ? d.toDate() : (d instanceof Date ? d : new Date(d));
-  } catch (err) {
-    return null;
-  }
 };
 
 const showToast = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
@@ -279,12 +269,32 @@ export const OrdenYLimpiezaDashboard = ({
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [supervisorComments, setSupervisorComments] = useState('');
 
+  // Custom Resolution Date/Time State for MTTR calculation
+  const [customClosedDate, setCustomClosedDate] = useState<string>('');
+  const [useCustomClosedDate, setUseCustomClosedDate] = useState<boolean>(false);
+  const [isEditingClosedDate, setIsEditingClosedDate] = useState<boolean>(false);
+
   // Advanced Filters
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [operatorFilter, setOperatorFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [showQuickHelp, setShowQuickHelp] = useState(false);
+
+  useEffect(() => {
+    if (selectedFinding) {
+      setSupervisorComments(selectedFinding.solution || selectedFinding.supervisorComments || '');
+      setUseCustomClosedDate(false);
+      const closedD = getFindingClosedDate(selectedFinding);
+      setCustomClosedDate(formatToDatetimeLocal(closedD || new Date()));
+      setIsEditingClosedDate(false);
+    } else {
+      setSupervisorComments('');
+      setUseCustomClosedDate(false);
+      setCustomClosedDate(formatToDatetimeLocal(new Date()));
+      setIsEditingClosedDate(false);
+    }
+  }, [selectedFinding?.id]);
 
   useEffect(() => {
     const plantIdScope = user.role !== 'Administrador' ? user.plantId : undefined;
@@ -433,7 +443,8 @@ export const OrdenYLimpiezaDashboard = ({
 
   const handleCloseFinding = async () => {
     if (!selectedFinding) return;
-    const resultStatus = await FindingService.transitionStatus(selectedFinding.id, 'Closed', user, supervisorComments);
+    const dateToUse = useCustomClosedDate && customClosedDate ? new Date(customClosedDate) : null;
+    const resultStatus = await FindingService.transitionStatus(selectedFinding.id, 'Closed', user, supervisorComments, dateToUse);
     
     await addDoc(collection(db, 'notifications'), {
       title: 'Hallazgo de Orden y Limpieza Cerrado',
@@ -450,12 +461,26 @@ export const OrdenYLimpiezaDashboard = ({
 
     setSelectedFinding(null);
     setSupervisorComments('');
+    setUseCustomClosedDate(false);
     
     if (resultStatus.queued) {
       showToast("Cierre Encolado", "Guardado localmente. Se sincronizará al recuperar conexión.", "warning");
     } else {
       showToast("Hallazgo Cerrado", "Cierre registrado exitosamente.", "success");
     }
+  };
+
+  const handleUpdateClosureDate = async () => {
+    if (!selectedFinding) return;
+    const dateToUse = customClosedDate ? new Date(customClosedDate) : new Date();
+    const result = await FindingService.updateFindingClosure(
+      selectedFinding.id,
+      user,
+      supervisorComments,
+      dateToUse
+    );
+    setIsEditingClosedDate(false);
+    showToast("Fecha de Cierre Actualizada", "La fecha y hora de solución del hallazgo se actualizó correctamente.", "success");
   };
 
   const handleSetInReview = async () => {
@@ -485,10 +510,28 @@ export const OrdenYLimpiezaDashboard = ({
     }
   };
 
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+
+  const handleCleanupDuplicates = async () => {
+    setIsCleaningDuplicates(true);
+    try {
+      const res = await FindingService.cleanupDuplicates();
+      showToast(
+        "Depuración Exitosa",
+        `Se eliminaron ${res.deletedFindingsCount} hallazgos duplicados y se depuraron ${res.cleanedPhotosCount} fotos duplicadas.`,
+        "success"
+      );
+    } catch (err: any) {
+      showToast("Error", `Error al depurar duplicados: ${err.message}`, "error");
+    } finally {
+      setIsCleaningDuplicates(false);
+    }
+  };
+
   const handleDeleteFinding = async () => {
     if (!selectedFinding) return;
     try {
-      await deleteDoc(doc(db, 'findings', selectedFinding.id));
+      await FindingService.deleteFinding(selectedFinding.id);
       setSelectedFinding(null);
       setIsConfirmingDelete(false);
       showToast("Eliminado", "Hallazgo de Orden y Limpieza eliminado.", "success");
@@ -520,6 +563,16 @@ export const OrdenYLimpiezaDashboard = ({
           </div>
 
           <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-purple-500/20">
+            <button
+              onClick={handleCleanupDuplicates}
+              disabled={isCleaningDuplicates}
+              className="px-3.5 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/30 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer disabled:opacity-50"
+              title="Elimina hallazgos duplicados realizados anteriormente y limpia fotos duplicadas"
+            >
+              <Trash2 className="w-4 h-4 text-red-300 shrink-0" />
+              <span>{isCleaningDuplicates ? 'Depurando...' : '🧹 Depurar Duplicados'}</span>
+            </button>
+
             <button
               onClick={() => setShowQuickHelp(true)}
               className="px-3.5 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
@@ -874,6 +927,102 @@ export const OrdenYLimpiezaDashboard = ({
                         placeholder="Instrucciones o acciones correctivas aplicadas..."
                       />
                     </div>
+
+                    {/* Resolution Date & Time (MTTR Adjustment) */}
+                    <div className="bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-500/20 p-4 rounded-2xl space-y-3">
+                      <div 
+                        className="flex items-center justify-between cursor-pointer select-none" 
+                        onClick={() => setUseCustomClosedDate(!useCustomClosedDate)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                          <span className="text-xs font-bold text-purple-900 dark:text-purple-200">
+                            ¿Ajustar fecha/hora de solución? (Cierre retroactivo)
+                          </span>
+                        </div>
+                        <input 
+                          type="checkbox" 
+                          checked={useCustomClosedDate}
+                          onChange={(e) => setUseCustomClosedDate(e.target.checked)}
+                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                        />
+                      </div>
+
+                      {useCustomClosedDate ? (
+                        <div className="space-y-3 pt-2 border-t border-purple-200/50 dark:border-purple-500/10">
+                          <p className="text-[11px] text-purple-800 dark:text-purple-300 font-medium">
+                            Indica cuándo se solucionó realmente en terreno para mantener el cálculo de MTTR preciso sin retrasos ficticios.
+                          </p>
+
+                          <div>
+                            <label className="block text-[10px] font-black text-purple-900 dark:text-purple-300 uppercase tracking-widest mb-1">
+                              Fecha y Hora de Solución
+                            </label>
+                            <input 
+                              type="datetime-local"
+                              value={customClosedDate}
+                              onChange={(e) => setCustomClosedDate(e.target.value)}
+                              max={formatToDatetimeLocal(new Date())}
+                              className="w-full p-3 bg-white dark:bg-zinc-900 border border-purple-300 dark:border-purple-500/30 rounded-xl text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+
+                          {/* Quick Presets */}
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date()))}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
+                            >
+                              ⚡ Ahora mismo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 3600 * 1000)))}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
+                            >
+                              ⏱️ Hace 1 hr
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 4 * 3600 * 1000)))}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
+                            >
+                              🕒 Hace 4 hrs
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 24 * 3600 * 1000)))}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
+                            >
+                              📅 Ayer
+                            </button>
+                            {getFindingDate(selectedFinding) && (
+                              <button
+                                type="button"
+                                onClick={() => setCustomClosedDate(formatToDatetimeLocal(getFindingDate(selectedFinding)))}
+                                className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
+                              >
+                                📋 Hora de reporte
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Dynamic MTTR Preview */}
+                          {getFindingDate(selectedFinding) && customClosedDate && (
+                            <div className="p-2.5 bg-purple-100/70 dark:bg-purple-900/40 rounded-xl text-[11px] font-bold text-purple-950 dark:text-purple-200 flex items-center justify-between">
+                              <span>MTTR Resultante:</span>
+                              <span className="font-mono">{getCalculatedMTTRText(getFindingDate(selectedFinding)!, customClosedDate)}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-purple-800/80 dark:text-purple-300/80 italic">
+                          Se utilizará la fecha y hora actual al presionar "Cerrar Hallazgo".
+                        </p>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <button 
                         onClick={handleSetInReview}
@@ -891,9 +1040,52 @@ export const OrdenYLimpiezaDashboard = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-2xl space-y-2 border border-zinc-100 dark:border-white/5">
-                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Solución Aplicada</p>
-                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{selectedFinding.solution || 'Solucionado por supervisor/operador'}</p>
+                  <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-2xl space-y-3 border border-zinc-100 dark:border-white/5">
+                    <div>
+                      <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Solución Aplicada</p>
+                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{selectedFinding.solution || 'Solucionado por supervisor/operador'}</p>
+                    </div>
+
+                    <div className="pt-2 border-t border-zinc-200/60 dark:border-white/5 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Fecha / Hora de Solución</p>
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          {getFindingClosedDate(selectedFinding) ? getFindingClosedDate(selectedFinding)!.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'No especificada'}
+                        </p>
+                        {getFindingDate(selectedFinding) && getFindingClosedDate(selectedFinding) && (
+                          <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
+                            MTTR: {getCalculatedMTTRText(getFindingDate(selectedFinding)!, getFindingClosedDate(selectedFinding))}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingClosedDate(!isEditingClosedDate)}
+                        className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-[11px] font-bold rounded-xl transition-colors"
+                      >
+                        {isEditingClosedDate ? 'Cancelar' : '✏️ Editar Fecha'}
+                      </button>
+                    </div>
+
+                    {isEditingClosedDate && (
+                      <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-500/20 rounded-xl space-y-2">
+                        <label className="block text-[10px] font-black text-purple-900 dark:text-purple-300 uppercase">Nueva Fecha y Hora de Solución:</label>
+                        <input 
+                          type="datetime-local"
+                          value={customClosedDate}
+                          onChange={(e) => setCustomClosedDate(e.target.value)}
+                          className="w-full p-2.5 bg-white dark:bg-zinc-900 border border-purple-300 dark:border-purple-500/30 rounded-lg text-xs font-bold dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleUpdateClosureDate}
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs uppercase"
+                        >
+                          Guardar Cambio de Fecha (Ajustar MTTR)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -97,9 +97,9 @@ function getHeatmapCellStyles(count: number, maxCellCount: number) {
   };
 }
 
-function getAreaRiskStatus(totalCount: number): { label: string; bg: string; dot: string } {
+function getEquipmentRiskStatus(totalCount: number): { label: string; bg: string; dot: string } {
   if (totalCount >= 5) {
-    return { label: 'Reincidente Crítico', bg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20', dot: 'bg-rose-500 animate-pulse' };
+    return { label: 'Equipo Crítico', bg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20', dot: 'bg-rose-500 animate-pulse' };
   }
   if (totalCount >= 3) {
     return { label: 'Atención Moderada', bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20', dot: 'bg-amber-500' };
@@ -109,55 +109,60 @@ function getAreaRiskStatus(totalCount: number): { label: string; bg: string; dot
 
 export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) => {
   const [viewMode, setViewMode] = useState<'voso' | 'priority'>('voso');
-  const [selectedCell, setSelectedCell] = useState<{ areaName: string; categoryKey: string; categoryLabel: string; list: Finding[] } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ equipmentName: string; categoryKey: string; categoryLabel: string; list: Finding[] } | null>(null);
 
   const activeCategories = viewMode === 'voso' ? VOSO_CATEGORIES : PRIORITY_CATEGORIES;
 
-  // Aggregate matrix: matrixData[areaName][categoryKey] = Finding[]
-  const { matrix, sortedAreas, colTotals, grandTotal, topHotspot } = useMemo(() => {
+  // Aggregate matrix: matrixData[equipmentName][categoryKey] = Finding[]
+  const { matrix, sortedEquipments, equipmentAreas, colTotals, grandTotal, topHotspot } = useMemo(() => {
     const mat: Record<string, Record<string, Finding[]>> = {};
+    const equipAreaMap: Record<string, string> = {};
     const colTot: Record<string, number> = {};
     let gTotal = 0;
 
     activeCategories.forEach(c => { colTot[c.key] = 0; });
 
     let maxCellCount = 0;
-    let maxArea = '';
+    let maxEquipment = '';
     let maxCatKey = '';
 
     findings.forEach(f => {
-      const area = f.areaName || 'Área General';
-      if (!mat[area]) {
-        mat[area] = {};
-        activeCategories.forEach(c => { mat[area][c.key] = []; });
+      const equip = f.equipmentName || f.equipmentId || f.areaName || 'Sin Equipo';
+      if (!mat[equip]) {
+        mat[equip] = {};
+        activeCategories.forEach(c => { mat[equip][c.key] = []; });
+      }
+      if (f.areaName && !equipAreaMap[equip]) {
+        equipAreaMap[equip] = f.areaName;
       }
 
       const cats = viewMode === 'voso' ? getVOSOCategoriesForFinding(f) : [getPriorityCategoryForFinding(f)];
 
       cats.forEach(catKey => {
-        if (!mat[area][catKey]) mat[area][catKey] = [];
-        mat[area][catKey].push(f);
+        if (!mat[equip][catKey]) mat[equip][catKey] = [];
+        mat[equip][catKey].push(f);
         colTot[catKey] = (colTot[catKey] || 0) + 1;
         gTotal++;
 
-        if (mat[area][catKey].length > maxCellCount) {
-          maxCellCount = mat[area][catKey].length;
-          maxArea = area;
+        if (mat[equip][catKey].length > maxCellCount) {
+          maxCellCount = mat[equip][catKey].length;
+          maxEquipment = equip;
           maxCatKey = catKey;
         }
       });
     });
 
-    // Sort areas by total findings descending
-    const areaTotals: Record<string, number> = {};
-    Object.keys(mat).forEach(area => {
-      areaTotals[area] = Object.values(mat[area]).reduce((acc, list) => acc + list.length, 0);
+    // Sort equipments by total findings descending
+    const equipTotals: Record<string, number> = {};
+    Object.keys(mat).forEach(equip => {
+      equipTotals[equip] = Object.values(mat[equip]).reduce((acc, list) => acc + list.length, 0);
     });
 
-    const sAreas = Object.keys(mat).sort((a, b) => areaTotals[b] - areaTotals[a]);
+    const sEquipments = Object.keys(mat).sort((a, b) => equipTotals[b] - equipTotals[a]);
 
     const hotspot = maxCellCount > 0 ? {
-      area: maxArea,
+      equipment: maxEquipment,
+      area: equipAreaMap[maxEquipment] || '',
       categoryKey: maxCatKey,
       count: maxCellCount,
       categoryLabel: activeCategories.find(c => c.key === maxCatKey)?.label || maxCatKey
@@ -165,7 +170,8 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
 
     return {
       matrix: mat,
-      sortedAreas: sAreas,
+      sortedEquipments: sEquipments,
+      equipmentAreas: equipAreaMap,
       colTotals: colTot,
       grandTotal: gTotal,
       topHotspot: hotspot
@@ -182,11 +188,11 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
               <Flame className="w-4 h-4" />
             </div>
             <h3 className="font-extrabold text-xs text-zinc-900 dark:text-white uppercase tracking-wider">
-              Mapa de Calor de Reincidencia por Área
+              Mapa de Calor de Reincidencia por Equipo
             </h3>
           </div>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            Identificación de concentración de hallazgos VOSO para prevenir fallas repetitivas.
+            Identificación de concentración de hallazgos VOSO por equipo para prevenir fallas repetitivas.
           </p>
         </div>
 
@@ -223,9 +229,10 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
           <div className="flex items-center gap-2.5">
             <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
             <div>
-              <span className="font-extrabold text-zinc-900 dark:text-white">Alerta de Reincidencia Operacional:</span>{' '}
+              <span className="font-extrabold text-zinc-900 dark:text-white">Alerta de Reincidencia en Equipo:</span>{' '}
               <span className="text-zinc-700 dark:text-zinc-300">
-                Área <strong className="text-rose-600 dark:text-rose-400">{topHotspot.area}</strong> concentra{' '}
+                Equipo <strong className="text-rose-600 dark:text-rose-400">{topHotspot.equipment}</strong>
+                {topHotspot.area ? ` (${topHotspot.area})` : ''} concentra{' '}
                 <strong className="underline decoration-rose-500">{topHotspot.count} observaciones</strong> en la categoría{' '}
                 <strong>{topHotspot.categoryLabel}</strong>.
               </span>
@@ -233,12 +240,12 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
           </div>
           <button 
             onClick={() => setSelectedCell({
-              areaName: topHotspot.area,
+              equipmentName: topHotspot.equipment,
               categoryKey: topHotspot.categoryKey,
               categoryLabel: topHotspot.categoryLabel,
-              list: matrix[topHotspot.area]?.[topHotspot.categoryKey] || []
+              list: matrix[topHotspot.equipment]?.[topHotspot.categoryKey] || []
             })}
-            className="px-3 py-1 bg-rose-500 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-rose-600 transition-colors shrink-0 self-end sm:self-auto"
+            className="px-3 py-1 bg-rose-500 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-rose-600 transition-colors shrink-0 self-end sm:self-auto cursor-pointer"
           >
             Ver Detalles
           </button>
@@ -246,7 +253,7 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
       )}
 
       {/* Matrix Table Container */}
-      {sortedAreas.length === 0 ? (
+      {sortedEquipments.length === 0 ? (
         <div className="py-12 text-center text-xs text-zinc-400 dark:text-zinc-600 border border-dashed border-zinc-200 dark:border-white/10 rounded-2xl">
           No hay hallazgos registrados para generar el mapa de calor en el rango seleccionado.
         </div>
@@ -255,7 +262,7 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
           <table className="w-full text-left border-collapse min-w-[650px]">
             <thead>
               <tr className="bg-zinc-50 dark:bg-zinc-900/60 border-b border-zinc-100 dark:border-white/10 text-[10px] font-black uppercase text-zinc-500 dark:text-zinc-400 tracking-wider">
-                <th className="py-3 px-4 w-48">Área / Sector Planta</th>
+                <th className="py-3 px-4 w-52">Equipo / Maquinaria</th>
                 {activeCategories.map(cat => {
                   const IconComp = cat.icon;
                   return (
@@ -267,25 +274,26 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
                     </th>
                   );
                 })}
-                <th className="py-3 px-4 text-center w-28">Total Área</th>
+                <th className="py-3 px-4 text-center w-28">Total Equipo</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-white/5 text-xs">
-              {sortedAreas.map(areaName => {
-                const areaRow = matrix[areaName];
-                const areaTotal = activeCategories.reduce((acc, cat) => acc + (areaRow[cat.key]?.length || 0), 0);
-                const riskStatus = getAreaRiskStatus(areaTotal);
+              {sortedEquipments.map(equipName => {
+                const equipRow = matrix[equipName];
+                const equipTotal = activeCategories.reduce((acc, cat) => acc + (equipRow[cat.key]?.length || 0), 0);
+                const riskStatus = getEquipmentRiskStatus(equipTotal);
+                const areaName = equipmentAreas[equipName];
 
                 return (
-                  <tr key={areaName} className="hover:bg-zinc-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                    {/* Area Name Column */}
+                  <tr key={equipName} className="hover:bg-zinc-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                    {/* Equipment Name Column */}
                     <td className="py-3 px-4 font-bold text-zinc-800 dark:text-zinc-200">
                       <div className="flex flex-col gap-1">
-                        <span className="truncate max-w-[180px]">{areaName}</span>
-                        <div className="flex items-center gap-1.5">
+                        <span className="truncate max-w-[200px]" title={equipName}>{equipName}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className={`inline-block w-1.5 h-1.5 rounded-full ${riskStatus.dot}`} />
                           <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500">
-                            {riskStatus.label}
+                            {riskStatus.label} {areaName ? `• ${areaName}` : ''}
                           </span>
                         </div>
                       </div>
@@ -293,7 +301,7 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
 
                     {/* Category Cells */}
                     {activeCategories.map(cat => {
-                      const cellList = areaRow[cat.key] || [];
+                      const cellList = equipRow[cat.key] || [];
                       const cellCount = cellList.length;
                       const cellStyle = getHeatmapCellStyles(cellCount, grandTotal);
 
@@ -302,7 +310,7 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
                           <button
                             disabled={cellCount === 0}
                             onClick={() => setSelectedCell({
-                              areaName,
+                              equipmentName: equipName,
                               categoryKey: cat.key,
                               categoryLabel: cat.label,
                               list: cellList
@@ -310,7 +318,7 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
                             className={`w-full py-2.5 rounded-xl border transition-all text-xs flex items-center justify-center ${cellStyle.bg} ${
                               cellCount > 0 ? 'cursor-pointer active:scale-95' : 'cursor-default'
                             }`}
-                            title={cellCount > 0 ? `Ver ${cellCount} hallazgos en ${areaName} (${cat.label})` : 'Sin registros'}
+                            title={cellCount > 0 ? `Ver ${cellCount} hallazgos en ${equipName} (${cat.label})` : 'Sin registros'}
                           >
                             {cellStyle.label}
                           </button>
@@ -321,7 +329,7 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
                     {/* Row Total */}
                     <td className="py-3 px-4 text-center">
                       <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-xl text-xs font-black border ${riskStatus.bg}`}>
-                        {areaTotal}
+                        {equipTotal}
                       </span>
                     </td>
                   </tr>
@@ -392,7 +400,7 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
                   </h4>
                 </div>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Área: <strong className="text-zinc-800 dark:text-zinc-200">{selectedCell.areaName}</strong> | Categoría:{' '}
+                  Equipo: <strong className="text-zinc-800 dark:text-zinc-200">{selectedCell.equipmentName}</strong> | Categoría:{' '}
                   <strong className="text-rose-500">{selectedCell.categoryLabel}</strong> ({selectedCell.list.length} registros)
                 </p>
               </div>

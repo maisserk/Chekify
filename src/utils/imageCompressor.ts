@@ -100,3 +100,17 @@ export function blobToBase64(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
+
+/**
+ * Utility to convert Base64 string back to Blob
+ */
+export function base64ToBlob(base64: string, mimeType = 'image/jpeg'): Blob {
+  const parts = base64.split(',');
+  const byteString = atob(parts[1] || parts[0]);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeType });
+}

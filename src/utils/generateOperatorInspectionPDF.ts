@@ -57,6 +57,59 @@ const formatDurationPDF = (totalSecs?: number): string => {
 };
 
 /**
+ * Helper to generate a white transparent PNG base64 of the Chekify logo for PDF headers
+ */
+export const getWhiteChekifyLogoBase64 = async (): Promise<{ dataUrl: string; aspect: number } | null> => {
+  try {
+    const loadFromUrl = async (url: string) => {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) return null;
+        const blob = await resp.blob();
+        return new Promise<HTMLImageElement | null>((resolve) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => resolve(null);
+          image.src = URL.createObjectURL(blob);
+        });
+      } catch (e) {
+        return null;
+      }
+    };
+
+    let img = await loadFromUrl('/logo.png');
+    if (!img) img = await loadFromUrl('/logo_small.png');
+    if (!img) return null;
+
+    const canvas = document.createElement('canvas');
+    const w = img.naturalWidth || img.width || 300;
+    const h = img.naturalHeight || img.height || 100;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.drawImage(img, 0, 0);
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 10) {
+        data[i] = 255;
+        data[i + 1] = 255;
+        data[i + 2] = 255;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    const dataUrl = canvas.toDataURL('image/png');
+    return { dataUrl, aspect: w / h };
+  } catch (err) {
+    console.warn('Error creating white Chekify logo base64:', err);
+    return null;
+  }
+};
+
+/**
  * Loads an image URL safely into a base64 Data URL for jsPDF embedding
  */
 const loadImageAsBase64 = async (url: string): Promise<string | null> => {
@@ -181,39 +234,69 @@ export const generateOperatorInspectionPDF = async (
   }
 
   // --- HEADER BANNER ---
-  docPDF.setFillColor(24, 24, 27); // Dark Zinc background
+  docPDF.setFillColor(15, 23, 42); // Chekify Deep Navy Slate background (#0F172A)
   docPDF.rect(0, 0, pageWidth, 28, 'F');
 
   // Accent Line
-  docPDF.setFillColor(14, 165, 233); // Sky-500 accent
+  docPDF.setFillColor(14, 165, 233); // Chekify Sky-500 accent (#0EA5E9)
   docPDF.rect(0, 28, pageWidth, 1.5, 'F');
 
+  // Dynamic Equipment / Area Title for Header
+  const targetEquipmentName = (finding.equipmentName && finding.equipmentName.trim() && finding.equipmentName !== 'Puntos Generales de Inspección')
+    ? finding.equipmentName.trim().toUpperCase()
+    : (finding.areaName && finding.areaName.trim() ? finding.areaName.trim().toUpperCase() : 'ÁREA COMPLETA');
+
+  const mainInspectionTitle = `INFORME DE INSPECCIÓN DE ${targetEquipmentName}`;
+  const headerMainText = settings?.companyName
+    ? `${settings.companyName.toUpperCase()} - ${mainInspectionTitle}`
+    : mainInspectionTitle;
+
   // Header Title
-  docPDF.setFontSize(13);
+  docPDF.setFontSize(headerMainText.length > 45 ? 10.5 : 12);
   docPDF.setFont('helvetica', 'bold');
   docPDF.setTextColor(255, 255, 255);
   docPDF.text(
-    sanitizeForPDF(settings?.companyName ? `${settings.companyName} - INFORME DE INSPECCIÓN DE ÁREA` : 'INFORME DE INSPECCIÓN DE ÁREA COMPLETA'),
+    sanitizeForPDF(headerMainText, 55),
     margin,
-    13
+    12.5
   );
 
-  docPDF.setFontSize(8.5);
+  docPDF.setFontSize(8);
   docPDF.setFont('helvetica', 'normal');
-  docPDF.setTextColor(186, 230, 253);
+  docPDF.setTextColor(186, 230, 253); // Chekify Sky-200
   docPDF.text(
-    `FOLIO: ${folioId}  |  FECHA: ${formattedDate}  |  INSPECCIÓN DE ÁREA`,
+    `FOLIO: ${folioId}  |  FECHA: ${formattedDate}  |  ÁREA: ${sanitizeForPDF(areaName.toUpperCase(), 30)}`,
     margin,
-    21
+    20.5
   );
 
+  // Chekify White Logo in top right corner of header
+  const chekifyLogo = await getWhiteChekifyLogoBase64();
+  let chekifyLogoWidth = 34;
+  if (chekifyLogo) {
+    try {
+      const hHeight = 13; // mm
+      chekifyLogoWidth = Math.min(42, Math.max(26, hHeight * chekifyLogo.aspect));
+      const hX = pageWidth - margin - chekifyLogoWidth;
+      const hY = (28 - hHeight) / 2; // Centered vertically in 28mm banner
+      docPDF.addImage(chekifyLogo.dataUrl, 'PNG', hX, hY, chekifyLogoWidth, hHeight);
+    } catch (err) {
+      console.warn('Error embedding white Chekify logo in header:', err);
+    }
+  }
+
+  // Custom Company Logo if configured in settings
   if (settings?.logoUrl) {
     const logoBase64 = await loadImageAsBase64(settings.logoUrl);
     if (logoBase64) {
       try {
-        docPDF.addImage(logoBase64, 'JPEG', pageWidth - margin - 22, 4, 20, 20);
+        const compW = 16;
+        const compH = 16;
+        const compX = pageWidth - margin - chekifyLogoWidth - compW - 5;
+        const compY = (28 - compH) / 2;
+        docPDF.addImage(logoBase64, 'JPEG', compX, compY, compW, compH);
       } catch (e) {
-        console.warn('Error adding logo to header', e);
+        console.warn('Error adding custom company logo to header', e);
       }
     }
   }
@@ -222,8 +305,8 @@ export const generateOperatorInspectionPDF = async (
   const cardHeight = 44;
 
   // --- OPERATOR & INSPECTION METADATA CARD ---
-  docPDF.setFillColor(248, 250, 252); // Slate-50
-  docPDF.setDrawColor(226, 232, 240); // Slate-200
+  docPDF.setFillColor(240, 249, 255); // Chekify Sky-50 (#F0F9FF)
+  docPDF.setDrawColor(186, 230, 253); // Chekify Sky-200 (#BAE6FD)
   docPDF.roundedRect(margin, currentY, contentWidth, cardHeight, 3, 3, 'FD');
 
   // Load operator avatar or photo if provided
@@ -260,27 +343,27 @@ export const generateOperatorInspectionPDF = async (
 
   docPDF.setFontSize(7.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(100, 116, 139);
+  docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('OPERADOR / INSPECTOR:', infoX, infoY);
   docPDF.setFontSize(9.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(15, 23, 42);
+  docPDF.setTextColor(15, 23, 42); // Chekify Navy Slate
   docPDF.text(sanitizeForPDF(operatorName, 26), infoX + 37, infoY);
 
   infoY += 6;
   docPDF.setFontSize(7.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(100, 116, 139);
+  docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('ÁREA DE INSPECCIÓN:', infoX, infoY);
   docPDF.setFontSize(8.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(14, 116, 144);
+  docPDF.setTextColor(2, 132, 199); // Chekify Sky-600
   docPDF.text(sanitizeForPDF(`${areaName} (${plantId})`, 28), infoX + 37, infoY);
 
   infoY += 6;
   docPDF.setFontSize(7.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(100, 116, 139);
+  docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('EQUIPO / COMPONENTE:', infoX, infoY);
   docPDF.setFontSize(8.5);
   docPDF.setFont('helvetica', 'normal');
@@ -290,11 +373,11 @@ export const generateOperatorInspectionPDF = async (
   infoY += 6;
   docPDF.setFontSize(7.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(100, 116, 139);
+  docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('TIEMPO INSPECCIÓN:', infoX, infoY);
   docPDF.setFontSize(8.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(2, 132, 199); // Sky-600
+  docPDF.setTextColor(2, 132, 199); // Chekify Sky-600
   docPDF.text(durationFormatted, infoX + 37, infoY);
 
   if (operatorRutCargo) {
@@ -335,17 +418,17 @@ export const generateOperatorInspectionPDF = async (
   // Digital Signature Stamp Box
   const sigY = stampY + 12;
   docPDF.setFillColor(255, 255, 255);
-  docPDF.setDrawColor(203, 213, 225);
+  docPDF.setDrawColor(186, 230, 253); // Chekify Sky-200
   docPDF.roundedRect(stampX, sigY, rightColWidth, 23, 1.5, 1.5, 'FD');
 
   docPDF.setFontSize(6.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(15, 23, 42);
+  docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('FIRMA DIGITAL REGISTRADA', stampX + 3, sigY + 5);
 
   docPDF.setFontSize(7.5);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(14, 116, 144);
+  docPDF.setTextColor(15, 23, 42);
   docPDF.text(sanitizeForPDF(operatorName, 20), stampX + 3, sigY + 11);
 
   docPDF.setFontSize(6);
@@ -357,12 +440,14 @@ export const generateOperatorInspectionPDF = async (
   currentY += cardHeight + 8;
 
   // --- SECTION TITLE: DETALLE DE LA INSPECCIÓN ---
-  docPDF.setFillColor(241, 245, 249);
+  docPDF.setFillColor(224, 242, 254); // Chekify Sky-100 (#E0F2FE)
   docPDF.rect(margin, currentY, contentWidth, 7, 'F');
+  docPDF.setFillColor(2, 132, 199); // Chekify Sky-600 Left Accent Line
+  docPDF.rect(margin, currentY, 3, 7, 'F');
   docPDF.setFontSize(9);
   docPDF.setFont('helvetica', 'bold');
-  docPDF.setTextColor(15, 23, 42);
-  docPDF.text('HALLAZGOS Y DETALLE REGISTRADO EN LA INSPECCIÓN', margin + 3, currentY + 5);
+  docPDF.setTextColor(3, 105, 161); // Chekify Sky-700 (#0369A1)
+  docPDF.text('HALLAZGOS Y DETALLE REGISTRADO EN LA INSPECCIÓN', margin + 6, currentY + 5);
 
   currentY += 10;
 
@@ -501,12 +586,14 @@ export const generateOperatorInspectionPDF = async (
       currentY = 20;
     }
 
-    docPDF.setFillColor(241, 245, 249);
+    docPDF.setFillColor(224, 242, 254); // Chekify Sky-100 (#E0F2FE)
     docPDF.rect(margin, currentY, contentWidth, 7, 'F');
+    docPDF.setFillColor(2, 132, 199); // Chekify Sky-600 Left Accent Line
+    docPDF.rect(margin, currentY, 3, 7, 'F');
     docPDF.setFontSize(9);
     docPDF.setFont('helvetica', 'bold');
-    docPDF.setTextColor(15, 23, 42);
-    docPDF.text(`EVIDENCIA FOTOGRÁFICA EN TERRENO (${photos.length} FOTO${photos.length > 1 ? 'S' : ''})`, margin + 3, currentY + 5);
+    docPDF.setTextColor(3, 105, 161); // Chekify Sky-700 (#0369A1)
+    docPDF.text(`EVIDENCIA FOTOGRÁFICA EN TERRENO (${photos.length} FOTO${photos.length > 1 ? 'S' : ''})`, margin + 6, currentY + 5);
 
     currentY += 10;
 
@@ -585,15 +672,15 @@ export const generateOperatorInspectionPDF = async (
       if (pBase64) {
         try {
           docPDF.addImage(pBase64, 'JPEG', pX, currentY, photoWidth, photoHeight);
-          docPDF.setDrawColor(203, 213, 225);
-          docPDF.setLineWidth(0.3);
+          docPDF.setDrawColor(186, 230, 253); // Chekify Sky-200 border
+          docPDF.setLineWidth(0.4);
           docPDF.rect(pX, currentY, photoWidth, photoHeight, 'D');
 
           // Caption Title
           let captionY = currentY + photoHeight + 3.5;
           docPDF.setFontSize(7.5);
           docPDF.setFont('helvetica', 'bold');
-          docPDF.setTextColor(30, 41, 59);
+          docPDF.setTextColor(15, 23, 42); // Chekify Deep Navy
           const titleLines = docPDF.splitTextToSize(sanitizeForPDF(photoInfo.title), photoWidth);
           docPDF.text(titleLines, pX, captionY);
 
@@ -603,7 +690,7 @@ export const generateOperatorInspectionPDF = async (
           if (photoInfo.detail) {
             docPDF.setFontSize(7);
             docPDF.setFont('helvetica', 'normal');
-            docPDF.setTextColor(100, 116, 139);
+            docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
             const detailLines = docPDF.splitTextToSize(sanitizeForPDF(`Obs: ${photoInfo.detail}`), photoWidth);
             docPDF.text(detailLines, pX, captionY);
           }
@@ -625,19 +712,22 @@ export const generateOperatorInspectionPDF = async (
   for (let i = 1; i <= totalPages; i++) {
     docPDF.setPage(i);
 
-    docPDF.setDrawColor(226, 232, 240);
-    docPDF.setLineWidth(0.3);
+    docPDF.setDrawColor(186, 230, 253); // Chekify Sky-200
+    docPDF.setLineWidth(0.4);
     docPDF.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
 
     docPDF.setFontSize(7.5);
     docPDF.setFont('helvetica', 'bold');
-    docPDF.setTextColor(148, 163, 184);
+    docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
     docPDF.text(
-      sanitizeForPDF(settings?.footerText || 'Este documento es un informe independiente autogenerado de inspección operativa en terreno.'),
+      sanitizeForPDF(settings?.footerText || 'Chekify Enterprise - Informe Oficial de Inspección Operativa en Terreno.'),
       margin,
       pageHeight - 6
     );
 
+    docPDF.setFontSize(7.5);
+    docPDF.setFont('helvetica', 'normal');
+    docPDF.setTextColor(100, 116, 139);
     docPDF.text(
       `Página ${i} de ${totalPages}`,
       pageWidth - margin - 20,

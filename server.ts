@@ -233,7 +233,7 @@ expressApp.post('/api/push/test', async (req, res) => {
 
 // API Route: Send critical finding alert push notification to supervisors & admins
 expressApp.post('/api/push/send-alert', async (req, res) => {
-  const { title, body, url, priority, findingId, areaName, equipmentName, reportedBy, tag } = req.body;
+  const { title, body, url, priority, findingId, areaName, equipmentName, reportedBy, tag, plantId } = req.body;
 
   try {
     if (!adminApp) {
@@ -249,10 +249,10 @@ expressApp.post('/api/push/send-alert', async (req, res) => {
     }
 
     const payload = JSON.stringify({
-      title: title || '⚠️ ¡ALERTA: Hallazgo Crítico Reportado!',
-      body: body || `Se reportó un hallazgo crítico en ${areaName || 'Área general'} (${equipmentName || 'Equipo'})`,
+      title: title || '⚠️ ¡ALERTA: Hallazgo Reportado!',
+      body: body || `Se reportó un hallazgo en ${areaName || 'Área general'} (${equipmentName || 'Equipo'})`,
       url: url || '/',
-      tag: tag || `critical-finding-${findingId || Date.now()}`,
+      tag: tag || `finding-alert-${findingId || Date.now()}`,
       priority: priority || 'Alta',
       findingId: findingId || null,
       areaName,
@@ -267,6 +267,17 @@ expressApp.post('/api/push/send-alert', async (req, res) => {
     const sendPromises = subsSnapshot.docs.map(async (doc) => {
       const data = doc.data();
       if (!data || !data.subscription) return;
+
+      // Filter by plantId if both data and request specify plantId (and not default-plant)
+      if (
+        plantId &&
+        plantId !== 'default-plant' &&
+        data.user?.plantId &&
+        data.user.plantId !== 'default-plant' &&
+        data.user.plantId !== plantId
+      ) {
+        return;
+      }
 
       try {
         await webPush.sendNotification(data.subscription, payload);
@@ -288,7 +299,7 @@ expressApp.post('/api/push/send-alert', async (req, res) => {
 
     await Promise.all(sendPromises);
 
-    console.log(`Critical push alert broadcasted. Sent: ${sentCount}, Total targets: ${subsSnapshot.size}`);
+    console.log(`Push alert broadcasted. Sent: ${sentCount}, Total targets in DB: ${subsSnapshot.size}`);
     res.json({ success: true, sentCount, errors });
   } catch (error: any) {
     console.error('Error broadcasting push alert:', error);

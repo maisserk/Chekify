@@ -39,17 +39,17 @@ const MODULE_HELP_DATA: Record<string, ModuleHelpContent> = {
   'VOSO': {
     title: 'Panel VOSO (Ver, Oír, Sentir, Oler)',
     badge: 'Panel Administrador',
-    description: 'Consolidador de hallazgos HSEC, gestión de criticidades y seguimiento de acciones correctivas.',
+    description: 'Consolidador de hallazgos operativos, gestión de prioridades y seguimiento de acciones correctivas.',
     tips: [
       {
         icon: Activity,
-        title: 'Evaluación de Criticidad',
-        text: 'Filtra hallazgos por nivel de riesgo (Baja, Media, Alta, Crítica) para priorizar las acciones correctivas inmediatas.'
+        title: 'Evaluación de Prioridad',
+        text: 'Filtra hallazgos por nivel de prioridad (Baja, Media, Alta, Crítica) para gestionar las acciones correctivas inmediatas.'
       },
       {
         icon: FileSpreadsheet,
         title: 'Reportes y Exportación',
-        text: 'Exporta consolidados en formato CSV o PDF corporativo para enviar en reuniones diarias de seguridad (DDS).'
+        text: 'Exporta consolidados en formato CSV o PDF corporativo para compartir en reuniones diarias de operación.'
       },
       {
         icon: CheckCircle2,
