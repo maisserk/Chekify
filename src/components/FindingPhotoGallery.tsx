@@ -4,10 +4,8 @@ import { ChevronLeft, ChevronRight, Image as ImageIcon, Camera, Maximize2, X, Cl
 import { OfflineImage } from './OfflineImage';
 import { Finding } from '../types';
 
-export const isPendingUpload = (url: string | null | undefined): boolean => {
-  if (!url || typeof url !== 'string') return false;
-  const trimmed = url.trim();
-  return trimmed.startsWith('offline-cached://') || trimmed.startsWith('data:');
+export const isPendingUpload = (_url: string | null | undefined): boolean => {
+  return false;
 };
 
 export const extractFindingPhotos = (finding: Finding | null | undefined): string[] => {
@@ -54,13 +52,38 @@ export const extractFindingPhotos = (finding: Finding | null | undefined): strin
 
   if (rawList.length === 0) return [];
 
+  // Separate cloud / HTTP(S) / blob URLs from local temporary placeholders (offline-cached:// or data:)
+  const onlineUrls = rawList.filter(p => p.startsWith('http://') || p.startsWith('https://') || p.startsWith('blob:'));
+  const localUrls = rawList.filter(p => p.startsWith('offline-cached://') || p.startsWith('data:'));
+
+  // If online uploaded URLs exist, prioritize them completely to avoid showing stale offline/data placeholders
+  if (onlineUrls.length > 0) {
+    const uniqueOnline: string[] = [];
+    onlineUrls.forEach(url => {
+      if (!uniqueOnline.includes(url)) {
+        uniqueOnline.push(url);
+      }
+    });
+
+    if (uniqueOnline.length >= localUrls.length) {
+      return uniqueOnline;
+    }
+
+    const result: string[] = [...uniqueOnline];
+    localUrls.forEach((local, idx) => {
+      if (idx >= uniqueOnline.length && !result.includes(local)) {
+        result.push(local);
+      }
+    });
+    return result;
+  }
+
+  // If no online URLs exist yet, return deduplicated local temporary URLs
   const result: string[] = [];
   const seenSignatures = new Set<string>();
 
   const getSignature = (str: string): string => {
-    if (str.startsWith('offline-cached://')) {
-      return str;
-    }
+    if (str.startsWith('offline-cached://')) return str;
     if (str.startsWith('data:image/')) {
       const commaIdx = str.indexOf(',');
       const payload = commaIdx !== -1 ? str.substring(commaIdx + 1) : str;
@@ -69,21 +92,15 @@ export const extractFindingPhotos = (finding: Finding | null | undefined): strin
       }
       return `b64_${payload}`;
     }
-    try {
-      const url = new URL(str);
-      return `url_${url.origin}${url.pathname}`;
-    } catch {
-      return `str_${str}`;
-    }
+    return str;
   };
 
-  const hasDataUrlOrHttp = rawList.some(p => !p.startsWith('offline-cached://'));
+  const hasDataUrl = localUrls.some(p => p.startsWith('data:'));
 
-  for (const item of rawList) {
-    if (item.startsWith('offline-cached://') && hasDataUrlOrHttp) {
+  for (const item of localUrls) {
+    if (item.startsWith('offline-cached://') && hasDataUrl) {
       continue;
     }
-
     const sig = getSignature(item);
     if (!seenSignatures.has(sig)) {
       seenSignatures.add(sig);
@@ -158,13 +175,6 @@ export const FindingPhotoGallery: React.FC<FindingPhotoGalleryProps> = ({
             <div className="px-2.5 py-1 rounded-full bg-black/50 backdrop-blur-md text-zinc-300 text-[10px] font-semibold flex items-center gap-1 border border-white/10">
               <Camera className="w-3 h-3 text-emerald-400" />
               <span>1 Foto</span>
-            </div>
-          )}
-
-          {isPendingUpload(currentPhoto) && (
-            <div className="px-3 py-1.5 rounded-full bg-amber-500/95 text-white text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 border border-amber-300/40 shadow-lg backdrop-blur-md animate-pulse">
-              <CloudOff className="w-3.5 h-3.5 text-amber-100 shrink-0" />
-              <span>Pendiente de subir a la nube (Offline)</span>
             </div>
           )}
         </div>
@@ -300,7 +310,6 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
   }[size];
 
   if (validPhotos.length === 1) {
-    const isSinglePending = isPendingUpload(validPhotos[0]);
     return (
       <div className="inline-flex flex-col items-start gap-1">
         <div 
@@ -312,21 +321,7 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             alt="Foto hallazgo"
           />
-          {isSinglePending && (
-            <div 
-              className="absolute top-0.5 right-0.5 z-20 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md border border-white/60 animate-pulse" 
-              title="Foto pendiente de subir a la nube (Conexión inestable)"
-            >
-              <CloudOff className="w-2.5 h-2.5" />
-            </div>
-          )}
         </div>
-        {isSinglePending && (
-          <span className="inline-flex items-center gap-1 text-[8px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded-md border border-amber-200 dark:border-amber-500/30 whitespace-nowrap shadow-2xs animate-pulse">
-            <CloudOff className="w-2.5 h-2.5 shrink-0" />
-            <span>Pendiente Nube</span>
-          </span>
-        )}
       </div>
     );
   }
@@ -334,13 +329,11 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
   // Gallery view with multiple photos
   const displayPhotos = validPhotos.slice(0, 3);
   const remainingCount = validPhotos.length - displayPhotos.length;
-  const hasPending = validPhotos.some(isPendingUpload);
 
   return (
     <div className={`flex items-center gap-1.5 ${className}`}>
       <div className="flex items-center -space-x-3">
         {displayPhotos.map((photo, idx) => {
-          const pending = isPendingUpload(photo);
           return (
             <div
               key={`grid-thumb-${idx}`}
@@ -353,14 +346,6 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
                 className="w-full h-full object-cover"
                 alt={`Foto ${idx + 1}`}
               />
-              {pending && (
-                <div 
-                  className="absolute top-0.5 right-0.5 z-20 w-3.5 h-3.5 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md border border-white/60 animate-pulse"
-                  title="Foto pendiente de subir a la nube"
-                >
-                  <CloudOff className="w-2 h-2" />
-                </div>
-              )}
             </div>
           );
         })}
@@ -376,19 +361,9 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
         </button>
       )}
 
-      {hasPending ? (
-        <span 
-          className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-500/40 whitespace-nowrap shadow-xs animate-pulse"
-          title="Fotografías guardadas localmente pendientes de subida automática a la nube"
-        >
-          <CloudOff className="w-2.5 h-2.5 shrink-0" />
-          <span>Pendiente Subida</span>
-        </span>
-      ) : (
-        <span className="text-[10px] font-extrabold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 shrink-0">
-          📷 {validPhotos.length} fotos
-        </span>
-      )}
+      <span className="text-[10px] font-extrabold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 shrink-0">
+        📷 {validPhotos.length} fotos
+      </span>
     </div>
   );
 };
