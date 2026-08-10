@@ -5,23 +5,30 @@
 import { Finding } from '../types';
 
 /**
+ * Universally parses any date/timestamp representation (Firestore Timestamp,
+ * plain JSON object with seconds/_seconds, ISO string, or Date instance) into a valid JS Date.
+ */
+export const parseAnyDate = (val: any): Date | null => {
+  if (!val) return null;
+  try {
+    if (typeof val.toDate === 'function') return val.toDate();
+    if (typeof val.toMillis === 'function') return new Date(val.toMillis());
+    if (typeof val.seconds === 'number') return new Date(val.seconds * 1000 + (val.nanoseconds || 0) / 1000000);
+    if (typeof val._seconds === 'number') return new Date(val._seconds * 1000 + (val._nanoseconds || 0) / 1000000);
+    if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+    const parsed = new Date(val);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Extracts a valid Date object from a finding's creation date field.
  */
 export const getFindingDate = (f: Finding | null): Date | null => {
   if (!f) return null;
-  const d = f.date || f.createdAt;
-  if (!d) return null;
-  try {
-    if (typeof d.toDate === 'function') return d.toDate();
-    if (typeof d.toMillis === 'function') return new Date(d.toMillis());
-    if (d.seconds) return new Date(d.seconds * 1000);
-    if (d instanceof Date) return isNaN(d.getTime()) ? null : d;
-    const parsed = new Date(d);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  } catch (err) {
-    console.error("Error parsing created date:", err);
-    return null;
-  }
+  return parseAnyDate(f.date) || parseAnyDate(f.createdAt);
 };
 
 /**
@@ -29,18 +36,7 @@ export const getFindingDate = (f: Finding | null): Date | null => {
  */
 export const getFindingClosedDate = (f: Finding | null): Date | null => {
   if (!f || !f.closedAt) return null;
-  const d = f.closedAt;
-  try {
-    if (typeof d.toDate === 'function') return d.toDate();
-    if (typeof d.toMillis === 'function') return new Date(d.toMillis());
-    if (d.seconds) return new Date(d.seconds * 1000);
-    if (d instanceof Date) return isNaN(d.getTime()) ? null : d;
-    const parsed = new Date(d);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  } catch (err) {
-    console.error("Error parsing closed date:", err);
-    return null;
-  }
+  return parseAnyDate(f.closedAt);
 };
 
 /**

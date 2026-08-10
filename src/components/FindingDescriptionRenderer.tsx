@@ -40,10 +40,16 @@ export interface ParsedItem {
   comment: string;
 }
 
-export const parseFindingDescription = (description: string, source?: string) => {
+export const parseFindingDescription = (
+  description: string, 
+  source?: string, 
+  filterModule?: 'ALL' | 'VOSO' | 'OrdenYLimpieza'
+) => {
   if (!description) {
     return { header: null, vosoItems: [], ordenItems: [], tradItems: [], rawText: '' };
   }
+
+  const effectiveModule = filterModule || (source === 'VOSO' ? 'VOSO' : source === 'OrdenYLimpieza' ? 'OrdenYLimpieza' : 'ALL');
 
   const desc = description.trim();
   const upperDesc = desc.toUpperCase();
@@ -62,6 +68,9 @@ export const parseFindingDescription = (description: string, source?: string) =>
     const isVOSOBracket = desc.match(/^\[(VER|OÍR|OIR|SENTIR|OLER)\]/i);
 
     if (isOrdenBracket) {
+      if (effectiveModule === 'VOSO') {
+        return { header: null, vosoItems: [], ordenItems: [], tradItems: [], rawText: '' };
+      }
       const clean = desc.replace(/^\[ORDEN\]/i, '').replace(/^\[5S\]/i, '').trim();
       const subcatMatch = clean.match(/^\[(.*?)\]/);
       const subcat = subcatMatch ? subcatMatch[1] : '5S / Aseo';
@@ -84,6 +93,9 @@ export const parseFindingDescription = (description: string, source?: string) =>
     }
 
     if (isVOSOBracket) {
+      if (effectiveModule === 'OrdenYLimpieza') {
+        return { header: null, vosoItems: [], ordenItems: [], tradItems: [], rawText: '' };
+      }
       let category = isVOSOBracket[1].toUpperCase();
       if (category === 'OIR') category = 'OÍR';
       const clean = desc.replace(/^\[(VER|OÍR|OIR|SENTIR|OLER)\]/i, '').trim();
@@ -92,7 +104,7 @@ export const parseFindingDescription = (description: string, source?: string) =>
         header: null,
         vosoItems: [{
           category,
-          rawTitle: `Punto de Control VOSO (${category})`,
+          rawTitle: `Ítem VOSO (${category})`,
           detail: clean,
           status: 'Observación' as const,
           isSolved: desc.includes('[SOLUCIONADO]'),
@@ -104,7 +116,10 @@ export const parseFindingDescription = (description: string, source?: string) =>
       };
     }
 
-    if (source === 'OrdenYLimpieza') {
+    if (source === 'OrdenYLimpieza' || effectiveModule === 'OrdenYLimpieza') {
+      if (effectiveModule === 'VOSO') {
+        return { header: null, vosoItems: [], ordenItems: [], tradItems: [], rawText: '' };
+      }
       return {
         header: null,
         vosoItems: [],
@@ -121,7 +136,7 @@ export const parseFindingDescription = (description: string, source?: string) =>
       };
     }
 
-    if (source === 'VOSO') {
+    if (source === 'VOSO' || effectiveModule === 'VOSO') {
       return {
         header: null,
         vosoItems: [{
@@ -153,9 +168,9 @@ export const parseFindingDescription = (description: string, source?: string) =>
   const firstLower = firstLine.toLowerCase();
   const header = (firstLower.includes('inspección') || firstLower.includes('inspeccion') || firstLower.includes('reporte')) ? firstLine : null;
 
-  const vosoItems: ParsedItem[] = [];
-  const ordenItems: ParsedItem[] = [];
-  const tradItems: ParsedItem[] = [];
+  let vosoItems: ParsedItem[] = [];
+  let ordenItems: ParsedItem[] = [];
+  let tradItems: ParsedItem[] = [];
 
   let currentSection: 'VOSO' | 'TRAD' | 'NONE' = 'NONE';
 
@@ -217,7 +232,7 @@ export const parseFindingDescription = (description: string, source?: string) =>
       comment = comment.replace(/\[SOLUCIONADO\]/g, '').replace(/-\s*Solucionado por operador/gi, '').trim();
 
       if (rawTitle.toLowerCase() === comment.toLowerCase() || !comment) {
-        rawTitle = `Punto de Control (${category})`;
+        rawTitle = `Ítem (${category})`;
         comment = detail.replace(/\[SOLUCIONADO\]/g, '').replace(/-\s*Solucionado por operador/gi, '').trim();
       }
 
@@ -235,11 +250,28 @@ export const parseFindingDescription = (description: string, source?: string) =>
       } else if (['VER', 'OÍR', 'SENTIR', 'OLER'].includes(category)) {
         vosoItems.push(item);
       } else if (currentSection === 'TRAD' || category === 'GENERAL') {
-        tradItems.push(item);
+        // If raw title or comment explicitly marks [ORDEN] or Limpieza
+        if (rawTitle.toUpperCase().includes('[ORDEN]') || rawTitle.toUpperCase().includes('LIMPIEZA') || comment.toUpperCase().includes('LIMPIEZA DE') || comment.toUpperCase().includes('ACUMULACION')) {
+          ordenItems.push({ ...item, category: 'ORDEN' });
+        } else {
+          tradItems.push(item);
+        }
       } else {
         vosoItems.push(item);
       }
     }
+  }
+
+  // Strict separation per active module filter
+  if (effectiveModule === 'VOSO') {
+    ordenItems = [];
+    tradItems = tradItems.filter(i => {
+      const u = (i.rawTitle + ' ' + i.comment + ' ' + i.category).toUpperCase();
+      return !u.includes('[ORDEN]') && !u.includes('LIMPIEZA') && !u.includes('ASEO') && !u.includes('5S');
+    });
+  } else if (effectiveModule === 'OrdenYLimpieza') {
+    vosoItems = [];
+    tradItems = [];
   }
 
   return {
@@ -254,6 +286,7 @@ export const parseFindingDescription = (description: string, source?: string) =>
 interface FindingDescriptionRendererProps {
   description: string;
   source?: string;
+  filterModule?: 'ALL' | 'VOSO' | 'OrdenYLimpieza';
   className?: string;
   isPreview?: boolean;
 }
@@ -261,10 +294,13 @@ interface FindingDescriptionRendererProps {
 export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProps> = ({
   description,
   source,
+  filterModule,
   className = "",
   isPreview = false
 }) => {
   if (!description) return <p className={className}>-</p>;
+
+  const effectiveModule = filterModule || (source === 'VOSO' ? 'VOSO' : source === 'OrdenYLimpieza' ? 'OrdenYLimpieza' : 'ALL');
 
   const cleanHeader = (desc: string) => {
     if (!desc) return '';
@@ -289,7 +325,7 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
   };
 
   if (isPreview) {
-    const parsed = parseFindingDescription(description, source);
+    const parsed = parseFindingDescription(description, source, effectiveModule);
 
     if (parsed.vosoItems.length > 0 || parsed.ordenItems.length > 0) {
       const vosoCats = Array.from(new Set(parsed.vosoItems.map(i => i.category)));
@@ -317,7 +353,7 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
     return <span className={`truncate block ${className}`}>{cleanHeader(description.split('\n')[0])}</span>;
   }
 
-  const parsed = parseFindingDescription(description, source);
+  const parsed = parseFindingDescription(description, source, effectiveModule);
 
   // If no items extracted and plain text, show elegant single observation card
   if (parsed.vosoItems.length === 0 && parsed.ordenItems.length === 0 && parsed.tradItems.length === 0) {
@@ -401,7 +437,7 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
               1. Inspección Primaria (Metodología VOSO)
             </h5>
             <span className="ml-auto text-[10px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-200 dark:border-sky-500/20">
-              {parsed.vosoItems.length} {parsed.vosoItems.length === 1 ? 'punto' : 'puntos'}
+              {parsed.vosoItems.length} {parsed.vosoItems.length === 1 ? 'ítem' : 'ítems'}
             </span>
           </div>
 
@@ -481,7 +517,7 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
               2. Orden & Limpieza (Programa 5S / Aseo)
             </h5>
             <span className="ml-auto text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-500/20">
-              {parsed.ordenItems.length} {parsed.ordenItems.length === 1 ? 'punto' : 'puntos'}
+              {parsed.ordenItems.length} {parsed.ordenItems.length === 1 ? 'ítem' : 'ítems'}
             </span>
           </div>
 

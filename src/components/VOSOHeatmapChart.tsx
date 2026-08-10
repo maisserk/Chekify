@@ -126,7 +126,14 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
     let maxEquipment = '';
     let maxCatKey = '';
 
-    findings.forEach(f => {
+    const vosoOnlyFindings = findings.filter(f => {
+      if (f.source === 'OrdenYLimpieza' || (f as any).category === 'OrdenYLimpieza') return false;
+      const desc = (f.description || '').toUpperCase();
+      if (desc.includes('[ORDEN]') || desc.includes('ORDEN Y LIMPIEZA')) return false;
+      return true;
+    });
+
+    vosoOnlyFindings.forEach(f => {
       const equip = f.equipmentName || f.equipmentId || f.areaName || 'Sin Equipo';
       if (!mat[equip]) {
         mat[equip] = {};
@@ -398,6 +405,9 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
                   <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white uppercase tracking-wider">
                     Detalle de Reincidencia
                   </h4>
+                  <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300 border border-sky-300 dark:border-sky-700/50">
+                    👁️ Metodología VOSO
+                  </span>
                 </div>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   Equipo: <strong className="text-zinc-800 dark:text-zinc-200">{selectedCell.equipmentName}</strong> | Categoría:{' '}

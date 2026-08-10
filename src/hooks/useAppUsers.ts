@@ -47,11 +47,11 @@ export const useAppUsers = () => {
       }
     }
 
-    if (operatorName) {
+    if (operatorName && typeof operatorName === 'string') {
       const cleanName = operatorName.trim().toLowerCase();
       const match = users.find(u => 
-        (u.name && u.name.trim().toLowerCase() === cleanName) || 
-        (u.email && u.email.trim().toLowerCase() === cleanName)
+        (u.name && typeof u.name === 'string' && u.name.trim().toLowerCase() === cleanName) || 
+        (u.email && typeof u.email === 'string' && u.email.trim().toLowerCase() === cleanName)
       );
       if (match) {
         return {

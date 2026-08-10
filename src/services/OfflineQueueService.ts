@@ -11,7 +11,9 @@
  */
 
 import { db, handleFirestoreError } from '../firebase';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, writeBatch, Timestamp } from 'firebase/firestore';
+import { getCachedAreas, getCachedEquipment } from '../utils/offlineCache';
+import { parseAnyDate } from '../utils/dateUtils';
 
 export interface QueueItem {
   id: string;
@@ -185,14 +187,55 @@ class OfflineQueueService {
 
       try {
         const docRef = doc(db, item.collection, item.docId);
+        const cleanPayload = this.sanitizePayload(item.payload);
+
+        if (item.collection === 'findings' && cleanPayload && typeof cleanPayload === 'object') {
+          const cachedAreas = getCachedAreas();
+          const cachedEquip = getCachedEquipment();
+
+          if (!cleanPayload.areaName && cleanPayload.areaId) {
+            const area = cachedAreas.find(a => a.id === cleanPayload.areaId);
+            if (area) cleanPayload.areaName = area.name;
+          }
+          if (!cleanPayload.areaName) {
+            cleanPayload.areaName = 'Área General';
+          }
+
+          if (!cleanPayload.equipmentName && cleanPayload.equipmentId && cleanPayload.equipmentId !== 'general') {
+            const equip = cachedEquip.find(e => e.id === cleanPayload.equipmentId);
+            if (equip) cleanPayload.equipmentName = equip.name;
+          }
+          if (!cleanPayload.equipmentName) {
+            cleanPayload.equipmentName = 'Puntos Generales de Inspección';
+          }
+
+          const baseDate = parseAnyDate(cleanPayload.createdAt || cleanPayload.date) || new Date();
+          const baseTs = Timestamp.fromDate(baseDate);
+
+          if (!cleanPayload.inspectionStartedAt) cleanPayload.inspectionStartedAt = baseTs;
+          if (!cleanPayload.inspectionCompletedAt) cleanPayload.inspectionCompletedAt = baseTs;
+          if (!cleanPayload.equipmentStartedAt) cleanPayload.equipmentStartedAt = cleanPayload.inspectionStartedAt;
+          if (!cleanPayload.equipmentCompletedAt) cleanPayload.equipmentCompletedAt = cleanPayload.inspectionCompletedAt;
+
+          const sMs = parseAnyDate(cleanPayload.inspectionStartedAt)?.getTime() || baseDate.getTime();
+          const eMs = parseAnyDate(cleanPayload.inspectionCompletedAt)?.getTime() || baseDate.getTime();
+          const dur = Math.max(0, Math.round((eMs - sMs) / 1000));
+
+          if (cleanPayload.inspectionDurationSeconds === undefined || cleanPayload.inspectionDurationSeconds === null) {
+            cleanPayload.inspectionDurationSeconds = dur;
+          }
+          if (cleanPayload.equipmentDurationSeconds === undefined || cleanPayload.equipmentDurationSeconds === null) {
+            cleanPayload.equipmentDurationSeconds = dur;
+          }
+        }
         
         if (item.operation === 'delete') {
           await setDoc(docRef, { status: 'deleted' }, { merge: true });
         } else if (item.operation === 'merge') {
-          await setDoc(docRef, item.payload, { merge: true });
+          await setDoc(docRef, cleanPayload, { merge: true });
         } else {
           // 'create' or 'update' writes complete payload
-          await setDoc(docRef, item.payload);
+          await setDoc(docRef, cleanPayload);
         }
 
         // Execution success: remove item from memory & disk
@@ -227,6 +270,61 @@ class OfflineQueueService {
     this.isSyncing = false;
     this.notifyQueueChange();
     console.log('[OfflineQueue] Sync cycle completed.');
+  }
+
+  /**
+   * Sanitizes payload data stored in localStorage so it conforms cleanly
+   * to Firestore field types upon sync.
+   */
+  private sanitizePayload(data: any): any {
+    if (data === null || data === undefined) return null;
+    if (typeof data !== 'object') return data;
+
+    // Convert stringified Timestamp objects ({seconds: ..., nanoseconds: ...} or {_seconds: ..., _nanoseconds: ...})
+    if (typeof data === 'object' && !Array.isArray(data) && !(data instanceof Date) && (typeof data.seconds === 'number' || typeof data._seconds === 'number')) {
+      const secs = typeof data.seconds === 'number' ? data.seconds : data._seconds;
+      const nanos = typeof data.nanoseconds === 'number' ? data.nanoseconds : (typeof data._nanoseconds === 'number' ? data._nanoseconds : 0);
+      try {
+        return Timestamp.fromDate(new Date(secs * 1000 + nanos / 1000000));
+      } catch {
+        return null;
+      }
+    }
+
+    if (Array.isArray(data)) {
+      return data.map(item => this.sanitizePayload(item)).filter(item => item !== undefined);
+    }
+
+    const timestampKeys = new Set([
+      'createdAt', 'date', 'closedAt', 'inspectionStartedAt', 'inspectionCompletedAt',
+      'equipmentStartedAt', 'equipmentCompletedAt', 'timestamp', 'startedAt', 'completedAt', 'scheduledAt'
+    ]);
+
+    const clean: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data)) {
+      if (val === undefined) continue;
+
+      if (key === 'history' && val && typeof val === 'object' && !Array.isArray(val) && !(val as any)._methodName) {
+        if ((val as any).status || (val as any).action) {
+          clean[key] = [this.sanitizePayload(val)];
+          continue;
+        }
+      }
+
+      // If a known timestamp field is an ISO date string or Date instance, convert to Timestamp
+      if (timestampKeys.has(key) && val !== null) {
+        if (typeof val === 'string' || val instanceof Date) {
+          const parsedDate = val instanceof Date ? val : new Date(val);
+          if (!isNaN(parsedDate.getTime())) {
+            clean[key] = Timestamp.fromDate(parsedDate);
+            continue;
+          }
+        }
+      }
+
+      clean[key] = this.sanitizePayload(val);
+    }
+    return clean;
   }
 
   /**

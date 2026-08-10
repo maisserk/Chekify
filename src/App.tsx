@@ -88,6 +88,7 @@ import {
   ListChecks,
   FileSearch,
   Sparkles,
+  Copy,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
@@ -133,7 +134,8 @@ import { FindingDescriptionRenderer } from './components/FindingDescriptionRende
 import { OperatingStatusBadge } from './components/OperatingStatusBadge';
 import { downloadOperatorInspectionPDF, shareOperatorInspectionPDF, downloadOrShareOperatorInspectionPDF, getWhiteChekifyLogoBase64 } from './utils/generateOperatorInspectionPDF';
 import { useAppUsers } from './hooks/useAppUsers';
-import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText } from './utils/dateUtils';
+import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText, parseAnyDate } from './utils/dateUtils';
+import { getCachedAreas, cacheAreas, getCachedEquipment, cacheEquipment } from './utils/offlineCache';
 
 const generateSafeId = (name: string): string => {
   return name
@@ -639,7 +641,7 @@ const VOSOExecutionCategory = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800" />
-                    <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none">Punto de Control</span>
+                    <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none">Ítem de Inspección</span>
                   </div>
                   <p className="text-xl font-black text-zinc-900 dark:text-white leading-tight tracking-tight">{item.name}</p>
                   <div className="flex flex-wrap gap-2 mt-4">
@@ -827,8 +829,8 @@ const OperatorDashboard = ({
   const [scanning, setScanning] = useState(false);
   const [showQuickHelp, setShowQuickHelp] = useState(false);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [areas, setAreas] = useState<Area[]>(() => getCachedAreas());
+  const [equipment, setEquipment] = useState<Equipment[]>(() => getCachedEquipment());
   const [currentEquipmentIndex, setCurrentEquipmentIndex] = useState(0);
   const [showFindingForm, setShowFindingForm] = useState(false);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
@@ -1124,13 +1126,16 @@ const OperatorDashboard = ({
         areaData = areaData.filter(a => a.plantId === user.plantId);
       }
       setAreas(areaData);
+      cacheAreas(areaData);
     }, (error) => {
       console.error("Error listening to areas:", error);
     });
 
     // Listen for equipment
     const unsubEquip = onSnapshot(collection(db, 'equipment'), (snapshot) => {
-      setEquipment(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment)));
+      const equipData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment));
+      setEquipment(equipData);
+      cacheEquipment(equipData);
     }, (error) => {
       console.error("Error listening to equipment:", error);
     });
@@ -1448,27 +1453,30 @@ const OperatorDashboard = ({
           const tradIssues = Object.entries(resTrad).filter(([_, s]) => s !== 'Bueno');
           const vosoIssues = (Object.entries(resVoso) as [string, VOSOResponse][]).filter(([_, v]) => v && (v.status === 'Observación' || v.status === 'Crítico'));
 
-          if (tradIssues.length > 0 || vosoIssues.length > 0) {
+          const ordenList = equip?.inspeccionVOSO?.orden || [];
+          const pureVosoIssues = vosoIssues.filter(([id]) => !ordenList.some(o => o.id === id));
+          const pureOrdenIssues = vosoIssues.filter(([id]) => ordenList.some(o => o.id === id));
+
+          // 1. Create VOSO Finding if pure VOSO or traditional issues exist
+          if (pureVosoIssues.length > 0 || tradIssues.length > 0) {
             const opStatusLabel = res?.operatingStatus === 'Detenido' ? 'Detenido' : 'En Funcionamiento';
-            let description = `Inspección en ${equip?.name || equipId}. Condición operativa: ${opStatusLabel}.\n\n`;
+            let description = `Inspección VOSO en ${equip?.name || equipId}. Condición operativa: ${opStatusLabel}.\n\n`;
             
-            if (vosoIssues.length > 0) {
+            if (pureVosoIssues.length > 0) {
               description += "HALLAZGOS VOSO:\n";
-              vosoIssues.forEach(([id, v]) => {
+              pureVosoIssues.forEach(([id, v]) => {
                 const ver = equip?.inspeccionVOSO?.ver || [];
                 const oir = equip?.inspeccionVOSO?.oir || [];
                 const sentir = equip?.inspeccionVOSO?.sentir || [];
                 const oler = equip?.inspeccionVOSO?.oler || [];
-                const orden = equip?.inspeccionVOSO?.orden || [];
 
                 let categoryName = "GENERAL";
                 if (ver.some(i => i.id === id)) { categoryName = "VER"; }
                 else if (oir.some(i => i.id === id)) { categoryName = "OÍR"; }
                 else if (sentir.some(i => i.id === id)) { categoryName = "SENTIR"; }
                 else if (oler.some(i => i.id === id)) { categoryName = "OLER"; }
-                else if (orden.some(i => i.id === id)) { categoryName = "ORDEN"; }
 
-                const allVOSO = [...ver, ...oir, ...sentir, ...oler, ...orden];
+                const allVOSO = [...ver, ...oir, ...sentir, ...oler];
                 const item = allVOSO.find(i => i.id === id);
                 const itemName = item?.name || id;
                 const commentText = v.comment ? ` - ${v.comment}` : '';
@@ -1478,16 +1486,16 @@ const OperatorDashboard = ({
             }
 
             if (tradIssues.length > 0) {
-              description += "\nOTROS PUNTOS DE INSPECCIÓN:\n";
+              description += "\nOTRAS EVALUACIONES DE INSPECCIÓN:\n";
               tradIssues.forEach(([id, s]) => {
                 const item = equip?.checkItems?.find(i => id === id);
                 description += `• ${item?.name || id}: ${s}\n`;
               });
             }
 
-            const priority = vosoIssues.some(v => v[1]?.status === 'Crítico') ? 'Alta' : 'Media';
+            const priority = pureVosoIssues.some(v => v[1]?.status === 'Crítico') ? 'Alta' : 'Media';
             const allPhotos: string[] = [];
-            vosoIssues.forEach(v => {
+            pureVosoIssues.forEach(v => {
               const resp = v[1];
               if (Array.isArray(resp?.photoUrls) && resp.photoUrls.length > 0) {
                 resp.photoUrls.forEach((p: string) => {
@@ -1510,7 +1518,7 @@ const OperatorDashboard = ({
               description: description,
               photoUrl: firstPhoto || undefined,
               photoUrls: allPhotos,
-              status: vosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
+              status: pureVosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
               priority,
               date: new Date(),
               inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
@@ -1522,11 +1530,11 @@ const OperatorDashboard = ({
               operatorId: user.uid,
               operatorName: user.name || user.email,
               operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
-              source: 'Inspection',
+              source: 'VOSO',
               clima: climaPayload,
               history: [
                 {
-                  status: (vosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
+                  status: (pureVosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
                   userId: user.uid,
                   userName: user.name || user.email,
                   timestamp: new Date().toISOString(),
@@ -1538,20 +1546,18 @@ const OperatorDashboard = ({
 
             setLastSavedFindingForPdf(resultObj as unknown as Finding);
 
-            const findingRef = { id: resultObj.id };
-
             const notificationId = doc(collection(db, 'notifications')).id;
             const notificationPayload = {
               id: notificationId,
               title: 'Nuevo Hallazgo VOSO',
-              message: `${user.name || user.email} ha reportado hallazgos en ${equip?.name || equipId}`,
+              message: `${user.name || user.email} ha reportado hallazgos VOSO en ${equip?.name || equipId}`,
               type: 'Finding',
               targetRole: 'Supervisor',
               scheduledAt: isOnline ? serverTimestamp() : new Date(),
               status: 'Sent',
               createdBy: user.uid,
               createdAt: isOnline ? serverTimestamp() : new Date(),
-              referenceId: findingRef.id,
+              referenceId: resultObj.id,
               plantId: selectedArea!.plantId || user.plantId || 'default-plant'
             };
 
@@ -1559,10 +1565,74 @@ const OperatorDashboard = ({
               try {
                 await setDoc(doc(db, 'notifications', notificationId), notificationPayload);
               } catch (err) {
-                await offlineQueueService.enqueue('notifications', notificationId, notificationPayload, 'create');
+                console.warn('Notification setDoc error:', err);
               }
-            } else {
-              await offlineQueueService.enqueue('notifications', notificationId, notificationPayload, 'create');
+            }
+          }
+
+          // 2. Create Orden y Limpieza Finding if Orden issues exist
+          if (pureOrdenIssues.length > 0) {
+            let ordenDesc = `[ORDEN] Programa 5S / Aseo en ${equip?.name || equipId}.\n\n`;
+            pureOrdenIssues.forEach(([id, v]) => {
+              const item = ordenList.find(i => i.id === id);
+              const itemName = item?.name || id;
+              const commentText = v.comment ? ` - ${v.comment}` : '';
+              const solvedText = v.solvedByOperator ? ' - Solucionado por operador' : '';
+              ordenDesc += `• [ORDEN] ${itemName}: ${v.status}${commentText}${solvedText}\n`;
+            });
+
+            const ordenPhotos: string[] = [];
+            pureOrdenIssues.forEach(v => {
+              const resp = v[1];
+              if (Array.isArray(resp?.photoUrls) && resp.photoUrls.length > 0) {
+                resp.photoUrls.forEach((p: string) => {
+                  if (p && typeof p === 'string' && p.trim() && !ordenPhotos.includes(p.trim())) {
+                    ordenPhotos.push(p.trim());
+                  }
+                });
+              } else if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim() && !ordenPhotos.includes(resp.photoUrl.trim())) {
+                ordenPhotos.push(resp.photoUrl.trim());
+              }
+            });
+            const firstOrdenPhoto = ordenPhotos[0] || null;
+
+            const ordenResultObj = await FindingService.createFinding({
+              areaId: selectedArea!.id,
+              areaName: selectedArea!.name,
+              plantId: selectedArea!.plantId || user.plantId || 'default-plant',
+              equipmentId: equipId,
+              equipmentName: equip?.name || null,
+              description: ordenDesc,
+              photoUrl: firstOrdenPhoto || undefined,
+              photoUrls: ordenPhotos,
+              status: pureOrdenIssues.every(v => v[1]?.solvedByOperator) ? 'Closed' : 'Open',
+              priority: 'Media',
+              date: new Date(),
+              inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
+              inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
+              inspectionDurationSeconds: totalDurationSeconds,
+              equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
+              equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
+              equipmentDurationSeconds: equipDuration,
+              operatorId: user.uid,
+              operatorName: user.name || user.email,
+              operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
+              source: 'OrdenYLimpieza',
+              clima: climaPayload,
+              history: [
+                {
+                  status: (pureOrdenIssues.every(v => v[1]?.solvedByOperator) ? 'Closed' : 'Open') as any,
+                  userId: user.uid,
+                  userName: user.name || user.email,
+                  timestamp: new Date().toISOString(),
+                  action: 'Hallazgo autogenerado (Orden & Limpieza)',
+                  comment: 'Desviación de 5S detectada durante la inspección.'
+                } as any
+              ]
+            }, firstOrdenPhoto);
+
+            if (pureVosoIssues.length === 0 && tradIssues.length === 0) {
+              setLastSavedFindingForPdf(ordenResultObj as unknown as Finding);
             }
           }
         }
@@ -2082,9 +2152,9 @@ const OperatorDashboard = ({
                 <div className="grid gap-2">
                   {areas
                     .filter(a => 
-                      a.name.toLowerCase().includes(areaSearchQuery.toLowerCase()) || 
-                      a.id.toLowerCase().includes(areaSearchQuery.toLowerCase()) ||
-                      (a as any).qrCode?.toLowerCase().includes(areaSearchQuery.toLowerCase())
+                      (a.name || '').toLowerCase().includes((areaSearchQuery || '').toLowerCase()) || 
+                      (a.id || '').toLowerCase().includes((areaSearchQuery || '').toLowerCase()) ||
+                      ((a as any).qrCode || '').toLowerCase().includes((areaSearchQuery || '').toLowerCase())
                     )
                     .map((area, idx) => (
                       <button 
@@ -2511,7 +2581,7 @@ const OperatorDashboard = ({
 
             {areaEquipment.length > 0 && currentEquipment?.checkItems && currentEquipment.checkItems.length > 0 && (
               <div className="space-y-4 py-2">
-                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Puntos de Revisión</h4>
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Ítems de Revisión</h4>
                 <div className="space-y-3">
                   {currentEquipment.checkItems.map((item, idx) => (
                     <div key={`insp-item-${item.id}-${idx}`} className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100 flex flex-col gap-3">
@@ -3667,6 +3737,8 @@ const SupervisorDashboard = ({
   const [supervisorComments, setSupervisorComments] = useState('');
   const [showQuickHelp, setShowQuickHelp] = useState(false);
   
+  const [moduleFilter, setModuleFilter] = useState<'ALL' | 'VOSO' | 'OrdenYLimpieza'>('VOSO');
+
   // Custom Resolution Date/Time State for MTTR calculation
   const [customClosedDate, setCustomClosedDate] = useState<string>('');
   const [useCustomClosedDate, setUseCustomClosedDate] = useState<boolean>(false);
@@ -3713,22 +3785,25 @@ const SupervisorDashboard = ({
     }
   }, [initialFindingId, findings, onClearPending]);
 
-  // Extract unique operators for the filter dropdown
-  const vosoFindings = React.useMemo(() => {
-    return findings.filter(isVOSOFinding);
-  }, [findings]);
+  // Extract findings scoped by module selector
+  const activeModuleFindings = React.useMemo(() => {
+    if (moduleFilter === 'VOSO') return findings.filter(isVOSOFinding);
+    if (moduleFilter === 'OrdenYLimpieza') return findings.filter(isOrdenYLimpiezaFinding);
+    return findings;
+  }, [findings, moduleFilter]);
 
   const uniqueOperators = React.useMemo(() => {
-    const operators = vosoFindings.map(f => f.operatorName).filter(Boolean);
+    const operators = activeModuleFindings.map(f => f.operatorName).filter(Boolean);
     return Array.from(new Set(operators)).sort();
-  }, [vosoFindings]);
+  }, [activeModuleFindings]);
 
-  const filteredFindings = vosoFindings.filter(f => {
+  const filteredFindings = activeModuleFindings.filter(f => {
     const matchesFilter = filter === 'All' || f.status === filter;
     
-    const matchesSearch = f.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          f.areaName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          f.operatorName?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (f.description || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                          f.areaName?.toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          f.equipmentName?.toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          f.operatorName?.toLowerCase().includes((searchTerm || '').toLowerCase());
     
     const matchesOperator = operatorFilter === 'All' || f.operatorName === operatorFilter;
     
@@ -3745,7 +3820,7 @@ const SupervisorDashboard = ({
         if (fDate > end) matchesDate = false;
       }
     } else if (startDate || endDate) {
-      matchesDate = false; // "Recién" findings won't match fixed date filters usually
+      matchesDate = false;
     }
                           
     return matchesFilter && matchesSearch && matchesOperator && matchesDate;
@@ -3879,8 +3954,8 @@ const SupervisorDashboard = ({
               <span>Ayuda rápida</span>
             </button>
             <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center sm:text-right min-w-[120px] flex-1 sm:flex-initial">
-              <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">Hallazgos VOSO</p>
-              <p className="text-xs font-black text-white">{vosoFindings.length} Registros</p>
+              <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">Registros</p>
+              <p className="text-xs font-black text-white">{activeModuleFindings.length} Hallazgos</p>
             </div>
             <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center sm:text-right min-w-[120px] flex-1 sm:flex-initial">
               <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">ADMINISTRADOR</p>
@@ -3890,14 +3965,52 @@ const SupervisorDashboard = ({
         </div>
       </div>
 
-        {/* Global Statistics (Fixed for VOSO) */}
-        <SupervisorStats findings={vosoFindings} />
+        {/* Global Statistics */}
+        <SupervisorStats findings={activeModuleFindings} />
 
-        {/* Advanced Filters Panel (Fixed) */}
+        {/* Advanced Filters Panel */}
         <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-4 mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Filtros Avanzados</h4>
-            <button onClick={clearFilters} className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 dark:hover:text-white uppercase tracking-widest transition-colors">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-white/5">
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Módulo de Inspección:</h4>
+              <div className="flex bg-zinc-100 dark:bg-zinc-950 p-1 rounded-xl border border-zinc-200/50 dark:border-white/5 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setModuleFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${
+                    moduleFilter === 'ALL'
+                      ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  📋 General (Todos)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModuleFilter('VOSO')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${
+                    moduleFilter === 'VOSO'
+                      ? 'bg-brand-blue text-white shadow-xs'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  👁️ Metodología VOSO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModuleFilter('OrdenYLimpieza')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${
+                    moduleFilter === 'OrdenYLimpieza'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  ✨ Orden y Limpieza
+                </button>
+              </div>
+            </div>
+
+            <button onClick={clearFilters} className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 dark:hover:text-white uppercase tracking-widest transition-colors self-end sm:self-center">
               Limpiar Filtros
             </button>
           </div>
@@ -4068,7 +4181,14 @@ const SupervisorDashboard = ({
               </div>
               <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-6 custom-scrollbar dark:bg-zinc-950/20">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                      isVOSOFinding(selectedFinding)
+                        ? 'bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-700/50'
+                        : 'bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-700/50'
+                    }`}>
+                      {isVOSOFinding(selectedFinding) ? '👁️ Metodología VOSO' : '✨ Orden y Limpieza'}
+                    </span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${
                       selectedFinding.status === 'Open' ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' : 
                       selectedFinding.status === 'InReview' ? 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400' :
@@ -4087,6 +4207,7 @@ const SupervisorDashboard = ({
                     <FindingDescriptionRenderer 
                       description={selectedFinding.description} 
                       source={selectedFinding.source || selectedFinding.category} 
+                      filterModule={moduleFilter === 'ALL' ? (isVOSOFinding(selectedFinding) ? 'VOSO' : 'OrdenYLimpieza') : moduleFilter}
                     />
 
                     {extractFindingPhotos(selectedFinding).length === 0 && (
@@ -4416,7 +4537,9 @@ const ReportsView = ({
   onClearPending?: () => void 
 }) => {
   const [findings, setFindings] = useState<Finding[]>([]);
-  const [moduleTab, setModuleTab] = useState<'VOSO' | 'OrdenYLimpieza'>('VOSO');
+  const [moduleTab, setModuleTab] = useState<'ALL' | 'VOSO' | 'OrdenYLimpieza'>('ALL');
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
+  const [historyEquipmentFilter, setHistoryEquipmentFilter] = useState<string>('ALL');
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Finding; direction: 'asc' | 'desc' } | null>({
@@ -4428,9 +4551,40 @@ const ReportsView = ({
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
   const { getOperatorProfile } = useAppUsers();
 
+  const uniqueEquipments = React.useMemo(() => {
+    const set = new Set<string>();
+    findings.forEach(f => {
+      const eq = f.equipmentName || f.equipmentId || f.areaName;
+      if (eq) set.add(eq);
+    });
+    return Array.from(set).sort();
+  }, [findings]);
+
   const moduleFindings = React.useMemo(() => {
-    return findings.filter(f => moduleTab === 'VOSO' ? isVOSOFinding(f) : isOrdenYLimpiezaFinding(f));
-  }, [findings, moduleTab]);
+    return findings.filter(f => {
+      // 1. Module separation filter
+      if (moduleTab === 'VOSO' && !isVOSOFinding(f)) return false;
+      if (moduleTab === 'OrdenYLimpieza' && !isOrdenYLimpiezaFinding(f)) return false;
+
+      // 2. Equipment / Area filter
+      if (historyEquipmentFilter !== 'ALL') {
+        const eq = f.equipmentName || f.equipmentId || f.areaName || '';
+        if (eq !== historyEquipmentFilter) return false;
+      }
+
+      // 3. Search query filter
+      if (historySearchQuery.trim()) {
+        const q = historySearchQuery.toLowerCase();
+        const descMatches = (f.description || '').toLowerCase().includes(q);
+        const equipMatches = (f.equipmentName || '').toLowerCase().includes(q);
+        const areaMatches = (f.areaName || '').toLowerCase().includes(q);
+        const operatorMatches = (f.operatorName || '').toLowerCase().includes(q);
+        if (!descMatches && !equipMatches && !areaMatches && !operatorMatches) return false;
+      }
+
+      return true;
+    });
+  }, [findings, moduleTab, historyEquipmentFilter, historySearchQuery]);
 
   const userStatsList = React.useMemo(() => {
     const statsMap: Record<string, {
@@ -4584,7 +4738,11 @@ const ReportsView = ({
       const sett = settingsDoc.exists() ? settingsDoc.data() as ReportSettings : {};
 
       const docPDF = new jsPDF();
-      const reportTitle = moduleTab === 'VOSO' ? 'Reporte de Inspecciones VOSO' : 'Reporte de Orden y Limpieza (5S)';
+      const reportTitle = moduleTab === 'VOSO' 
+        ? 'Reporte de Inspecciones VOSO' 
+        : moduleTab === 'OrdenYLimpieza' 
+        ? 'Reporte de Orden y Limpieza (5S)' 
+        : 'Reporte General de Inspecciones (VOSO y Orden & Limpieza)';
       
       // Header Banner with Chekify Brand Colors
       docPDF.setFillColor(15, 23, 42); // Chekify Deep Navy Slate background (#0F172A)
@@ -4602,7 +4760,7 @@ const ReportsView = ({
       docPDF.setFontSize(8.5);
       docPDF.setFont('helvetica', 'normal');
       docPDF.setTextColor(186, 230, 253); // Chekify Sky-200
-      docPDF.text(sanitizeForPDF(sett.headerText || (moduleTab === 'VOSO' ? 'Sistema de Gestión de Inspecciones VOSO' : 'Módulo de Orden y Limpieza 5S'), 60), 14, 20.5);
+      docPDF.text(sanitizeForPDF(sett.headerText || (moduleTab === 'VOSO' ? 'Sistema de Gestión de Inspecciones VOSO' : moduleTab === 'OrdenYLimpieza' ? 'Módulo de Orden y Limpieza 5S' : 'Consolidado General de Inspecciones'), 60), 14, 20.5);
 
       // White Chekify Logo
       const chekifyLogo = await getWhiteChekifyLogoBase64();
@@ -4628,6 +4786,7 @@ const ReportsView = ({
 
       const tableData = moduleFindings.map(f => [
         getFindingDate(f) ? format(getFindingDate(f)!, 'dd/MM/yy HH:mm') : '-',
+        sanitizeForPDF(isVOSOFinding(f) ? 'VOSO' : '5S Orden'),
         sanitizeForPDF(`${f.areaName || 'General'}${f.equipmentName ? ' - ' + f.equipmentName : ''}`),
         sanitizeForPDF(f.operatorName || f.inspector || 'Operador'),
         sanitizeForPDF(f.priority || 'Media'),
@@ -4638,20 +4797,21 @@ const ReportsView = ({
 
       autoTable(docPDF, {
         startY: 35,
-        head: [['Fecha', 'Área / Equipo', 'Operador', 'Prioridad', 'Descripción y Detalle', 'Estado', 'Cierre']],
+        head: [['Fecha', 'Módulo', 'Área / Equipo', 'Operador', 'Prioridad', 'Descripción y Detalle', 'Estado', 'Cierre']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8, cellPadding: 3 },
         alternateRowStyles: { fillColor: [240, 249, 255] },
         styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak', lineColor: [226, 232, 240] },
         columnStyles: {
-          0: { cellWidth: 22 },
-          1: { cellWidth: 28 },
-          2: { cellWidth: 22 },
-          3: { cellWidth: 16 },
-          4: { cellWidth: 'auto' },
-          5: { cellWidth: 18 },
-          6: { cellWidth: 22 }
+          0: { cellWidth: 20 },
+          1: { cellWidth: 18 },
+          2: { cellWidth: 26 },
+          3: { cellWidth: 20 },
+          4: { cellWidth: 15 },
+          5: { cellWidth: 'auto' },
+          6: { cellWidth: 18 },
+          7: { cellWidth: 20 }
         },
         margin: { top: 35, left: 14, right: 14 }
       });
@@ -4679,7 +4839,7 @@ const ReportsView = ({
         docPDF.text(`Página ${i} de ${pageCount}`, docPDF.internal.pageSize.width - 30, docPDF.internal.pageSize.height - 6);
       }
 
-      const fileName = moduleTab === 'VOSO' ? 'reporte-voso' : 'reporte-orden-limpieza';
+      const fileName = moduleTab === 'VOSO' ? 'reporte-voso' : moduleTab === 'OrdenYLimpieza' ? 'reporte-orden-limpieza' : 'reporte-general-inspecciones';
       docPDF.save(`${fileName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
     } catch (err) {
       console.error("Error generating PDF", err);
@@ -4697,6 +4857,7 @@ const ReportsView = ({
     try {
       const headers = [
         "ID",
+        "Modulo / Metodologia",
         "Fecha Reporte",
         "Planta ID",
         "Area",
@@ -4705,10 +4866,14 @@ const ReportsView = ({
         "Descripcion / Hallazgo",
         "Prioridad",
         "Estado",
+        "Hora Inicio Area",
+        "Hora Fin Area",
         "Duracion Inspeccion Area (seg)",
+        "Hora Inicio Equipo",
+        "Hora Fin Equipo",
         "Duracion Inspeccion Equipo (seg)",
         "Fecha Cierre",
-        "Horas de Cierre",
+        "Horas de Cierre (MTTR)",
         "Comentarios Supervisor"
       ];
 
@@ -4727,29 +4892,45 @@ const ReportsView = ({
       activeList.forEach((f) => {
         const fDate = getFindingDate(f);
         const createdAtStr = fDate ? format(fDate, 'dd/MM/yyyy HH:mm:ss') : '';
-        const closedAtStr = f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yyyy HH:mm:ss') : '';
+        const closedDate = getFindingClosedDate(f);
+        const closedAtStr = closedDate ? format(closedDate, 'dd/MM/yyyy HH:mm:ss') : '';
 
         let resolutionHours = '';
-        if (fDate && f.closedAt) {
+        if (fDate && closedDate) {
           const createdTime = fDate.getTime();
-          const closedTime = f.closedAt.toDate ? f.closedAt.toDate().getTime() : 0;
-          if (createdTime && closedTime) {
+          const closedTime = closedDate.getTime();
+          if (createdTime && closedTime && closedTime >= createdTime) {
             resolutionHours = (Math.round((closedTime - createdTime) / (1000 * 60 * 60) * 10) / 10).toString();
           }
         }
 
+        const areaStart = parseAnyDate(f.inspectionStartedAt);
+        const areaEnd = parseAnyDate(f.inspectionCompletedAt);
+        const equipStart = parseAnyDate(f.equipmentStartedAt);
+        const equipEnd = parseAnyDate(f.equipmentCompletedAt);
+
+        const areaStartStr = areaStart ? format(areaStart, 'HH:mm:ss') : '';
+        const areaEndStr = areaEnd ? format(areaEnd, 'HH:mm:ss') : '';
+        const equipStartStr = equipStart ? format(equipStart, 'HH:mm:ss') : '';
+        const equipEndStr = equipEnd ? format(equipEnd, 'HH:mm:ss') : '';
+
         const row = [
           escapeCSVCell(f.id),
+          escapeCSVCell(isVOSOFinding(f) ? 'VOSO' : 'Orden y Limpieza'),
           escapeCSVCell(createdAtStr),
           escapeCSVCell(f.plantId || ''),
-          escapeCSVCell(f.areaName || ''),
-          escapeCSVCell(f.equipmentName || ''),
+          escapeCSVCell(f.areaName || 'Área General'),
+          escapeCSVCell(f.equipmentName || 'Puntos Generales de Inspección'),
           escapeCSVCell(f.operatorName || ''),
           escapeCSVCell(f.description),
           escapeCSVCell(f.priority || 'N/A'),
           escapeCSVCell(f.status === 'Open' ? 'Abierto' : f.status === 'InReview' ? 'En Revision' : 'Cerrado'),
-          escapeCSVCell(f.inspectionDurationSeconds || ''),
-          escapeCSVCell(f.equipmentDurationSeconds || ''),
+          escapeCSVCell(areaStartStr),
+          escapeCSVCell(areaEndStr),
+          escapeCSVCell(f.inspectionDurationSeconds !== undefined && f.inspectionDurationSeconds !== null ? f.inspectionDurationSeconds : ''),
+          escapeCSVCell(equipStartStr),
+          escapeCSVCell(equipEndStr),
+          escapeCSVCell(f.equipmentDurationSeconds !== undefined && f.equipmentDurationSeconds !== null ? f.equipmentDurationSeconds : ''),
           escapeCSVCell(closedAtStr),
           escapeCSVCell(resolutionHours),
           escapeCSVCell(f.supervisorComments || f.solution || '')
@@ -4762,7 +4943,8 @@ const ReportsView = ({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      link.setAttribute("download", `reporte-inspecciones-${subTab}-${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
+      const filenameTag = moduleTab === 'VOSO' ? 'voso' : moduleTab === 'OrdenYLimpieza' ? 'orden-limpieza' : 'general';
+      link.setAttribute("download", `reporte-inspecciones-${filenameTag}-${subTab}-${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -4778,28 +4960,82 @@ const ReportsView = ({
         <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight uppercase">Reportes Históricos</h2>
         
         {/* Module Tab Selector */}
-        <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/10 gap-1">
+        <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/10 gap-1 overflow-x-auto">
           <button
-            onClick={() => setModuleTab('VOSO')}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 ${
-              moduleTab === 'VOSO'
-                ? 'bg-brand-blue text-white shadow-sm'
+            onClick={() => setModuleTab('ALL')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              moduleTab === 'ALL'
+                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs'
                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
             }`}
           >
-            <span>👁️👂 Metodología VOSO</span>
+            <span>📋 General (Todos)</span>
+          </button>
+          <button
+            onClick={() => setModuleTab('VOSO')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              moduleTab === 'VOSO'
+                ? 'bg-brand-blue text-white shadow-xs'
+                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            <span>👁️ Metodología VOSO</span>
           </button>
           <button
             onClick={() => setModuleTab('OrdenYLimpieza')}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               moduleTab === 'OrdenYLimpieza'
-                ? 'bg-purple-600 text-white shadow-sm'
+                ? 'bg-purple-600 text-white shadow-xs'
                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-            <span>Orden y Limpieza</span>
+            <span>Orden y Limpieza (5S)</span>
           </button>
+        </div>
+      </div>
+
+      {/* History Search & Equipment Filter Bar */}
+      <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full md:w-80">
+          <input
+            type="text"
+            placeholder="Buscar por descripción, área o equipo..."
+            value={historySearchQuery}
+            onChange={(e) => setHistorySearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200/60 dark:border-white/10 rounded-xl text-xs outline-none focus:ring-2 focus:ring-brand-blue text-zinc-900 dark:text-zinc-100 font-medium"
+          />
+          <Filter className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5 pointer-events-none" />
+        </div>
+
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <span className="text-xs font-bold text-zinc-500 uppercase shrink-0">Equipo:</span>
+            <select
+              value={historyEquipmentFilter}
+              onChange={(e) => setHistoryEquipmentFilter(e.target.value)}
+              className="w-full md:w-64 p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200/60 dark:border-white/10 rounded-xl text-xs font-bold text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-brand-blue"
+            >
+              <option value="ALL">Todos los Equipos ({uniqueEquipments.length})</option>
+              {uniqueEquipments.map((eq, i) => (
+                <option key={`history-eq-${i}`} value={eq}>
+                  {eq}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(historySearchQuery || historyEquipmentFilter !== 'ALL') && (
+            <button
+              onClick={() => {
+                setHistorySearchQuery('');
+                setHistoryEquipmentFilter('ALL');
+              }}
+              className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-600 bg-rose-50 dark:bg-rose-500/10 rounded-xl shrink-0 transition-colors cursor-pointer"
+            >
+              Limpiar
+            </button>
+          )}
         </div>
       </div>
       
@@ -4971,7 +5207,7 @@ const ReportsView = ({
               {/* Grid of Operators */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {userStatsList
-                  .filter(u => u.operatorName.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                  .filter(u => (u.operatorName || '').toLowerCase().includes((userSearchQuery || '').toLowerCase()))
                   .map((stat, idx) => {
                     const isSelected = selectedUserFilter === stat.operatorName;
                     return (
@@ -5279,12 +5515,16 @@ const ReportsView = ({
                   </thead>
                   <tbody className="divide-y divide-zinc-50 dark:divide-white/5">
                     {activeFindingsList.map((f, index) => {
-                      const areaDuration = f.inspectionDurationSeconds || (f.inspectionStartedAt && f.inspectionCompletedAt 
-                        ? Math.round((f.inspectionCompletedAt.toDate().getTime() - f.inspectionStartedAt.toDate().getTime()) / 1000) 
+                      const areaStart = parseAnyDate(f.inspectionStartedAt);
+                      const areaEnd = parseAnyDate(f.inspectionCompletedAt);
+                      const areaDuration = f.inspectionDurationSeconds || (areaStart && areaEnd 
+                        ? Math.round((areaEnd.getTime() - areaStart.getTime()) / 1000) 
                         : null);
                       
-                      const equipDuration = f.equipmentDurationSeconds || (f.equipmentStartedAt && f.equipmentCompletedAt
-                        ? Math.round((f.equipmentCompletedAt.toDate().getTime() - f.equipmentStartedAt.toDate().getTime()) / 1000)
+                      const equipStart = parseAnyDate(f.equipmentStartedAt);
+                      const equipEnd = parseAnyDate(f.equipmentCompletedAt);
+                      const equipDuration = f.equipmentDurationSeconds || (equipStart && equipEnd
+                        ? Math.round((equipEnd.getTime() - equipStart.getTime()) / 1000)
                         : null);
 
                       return (
@@ -5298,7 +5538,7 @@ const ReportsView = ({
                           </td>
                           <td className="px-4 py-4 font-medium text-zinc-900 dark:text-white">
                             <div className="flex flex-col">
-                              <span>{f.areaName}</span>
+                              <span>{f.areaName || 'Área General'}</span>
                               <FindingDescriptionRenderer 
                                 description={f.description} 
                                 isPreview 
@@ -5316,9 +5556,9 @@ const ReportsView = ({
                                  <div className="flex flex-col text-[9px] text-zinc-400 dark:text-zinc-500 leading-none">
                                     <span className="font-bold uppercase tracking-tighter mb-1">TOTAL ÁREA</span>
                                     <div className="flex items-center gap-1 font-mono">
-                                      <span>{f.inspectionStartedAt?.toDate ? format(f.inspectionStartedAt.toDate(), 'HH:mm') : '--:--'}</span>
+                                      <span>{areaStart ? format(areaStart, 'HH:mm') : '--:--'}</span>
                                       <span className="opacity-30">→</span>
-                                      <span>{f.inspectionCompletedAt?.toDate ? format(f.inspectionCompletedAt.toDate(), 'HH:mm') : '--:--'}</span>
+                                      <span>{areaEnd ? format(areaEnd, 'HH:mm') : '--:--'}</span>
                                     </div>
                                  </div>
                                  {areaDuration !== null && (
@@ -5601,7 +5841,14 @@ const ReportsView = ({
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-6 custom-scrollbar">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                        isVOSOFinding(selectedFinding)
+                          ? 'bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-700/50'
+                          : 'bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-700/50'
+                      }`}>
+                        {isVOSOFinding(selectedFinding) ? '👁️ Metodología VOSO' : '✨ Orden y Limpieza'}
+                      </span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                         selectedFinding.status === 'Open' ? 'bg-amber-100 text-amber-700' : 
                         selectedFinding.status === 'InReview' ? 'bg-orange-100 text-orange-700' :
@@ -5623,7 +5870,12 @@ const ReportsView = ({
                   <div className="space-y-4">
                     <div className="bg-zinc-50 dark:bg-zinc-900 p-6 rounded-[2rem] border border-transparent dark:border-white/5">
                       <h4 className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-4">Descripción del Hallazgo</h4>
-                      <FindingDescriptionRenderer description={selectedFinding.description} className="text-zinc-800 dark:text-zinc-205" />
+                      <FindingDescriptionRenderer 
+                        description={selectedFinding.description} 
+                        source={selectedFinding.source} 
+                        filterModule={isVOSOFinding(selectedFinding) ? 'VOSO' : 'OrdenYLimpieza'} 
+                        className="text-zinc-800 dark:text-zinc-200" 
+                      />
                     </div>
 
                     {selectedFinding.supervisorComments && (
@@ -5681,9 +5933,9 @@ const ReportsView = ({
                         </p>
                         <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-100 dark:border-white/5 flex items-center justify-between">
                            <div className="flex flex-col text-xs text-zinc-600 dark:text-zinc-400 font-mono">
-                              <span>{selectedFinding.inspectionStartedAt?.toDate ? format(selectedFinding.inspectionStartedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
+                              <span>{parseAnyDate(selectedFinding.inspectionStartedAt) ? format(parseAnyDate(selectedFinding.inspectionStartedAt)!, 'HH:mm:ss') : '--:--:--'}</span>
                               <span className="text-zinc-300 dark:text-zinc-700">↓</span>
-                              <span>{selectedFinding.inspectionCompletedAt?.toDate ? format(selectedFinding.inspectionCompletedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
+                              <span>{parseAnyDate(selectedFinding.inspectionCompletedAt) ? format(parseAnyDate(selectedFinding.inspectionCompletedAt)!, 'HH:mm:ss') : '--:--:--'}</span>
                            </div>
                            {(selectedFinding.inspectionDurationSeconds || (selectedFinding.inspectionStartedAt && selectedFinding.inspectionCompletedAt)) && (
                               <div className="text-right">
@@ -5703,9 +5955,9 @@ const ReportsView = ({
                         </p>
                         <div className="bg-sky-50/20 dark:bg-sky-950/20 p-3 rounded-2xl border border-sky-100/30 dark:border-sky-500/10 flex items-center justify-between">
                            <div className="flex flex-col text-xs text-sky-700/60 dark:text-sky-400 font-mono">
-                              <span>{selectedFinding.equipmentStartedAt?.toDate ? format(selectedFinding.equipmentStartedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
+                              <span>{parseAnyDate(selectedFinding.equipmentStartedAt) ? format(parseAnyDate(selectedFinding.equipmentStartedAt)!, 'HH:mm:ss') : '--:--:--'}</span>
                               <span className="text-sky-200 dark:text-sky-800">↓</span>
-                              <span>{selectedFinding.equipmentCompletedAt?.toDate ? format(selectedFinding.equipmentCompletedAt.toDate(), 'HH:mm:ss') : '--:--:--'}</span>
+                              <span>{parseAnyDate(selectedFinding.equipmentCompletedAt) ? format(parseAnyDate(selectedFinding.equipmentCompletedAt)!, 'HH:mm:ss') : '--:--:--'}</span>
                            </div>
                            {(selectedFinding.equipmentDurationSeconds || (selectedFinding.equipmentStartedAt && selectedFinding.equipmentCompletedAt)) && (
                               <div className="text-right">
@@ -5847,8 +6099,6 @@ const NotificationCenter = ({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-
-              <PushNotificationWidget user={user} compact={true} />
 
               {/* Filter Tabs */}
               <div className="flex items-center justify-between gap-2">
@@ -6350,7 +6600,7 @@ const BulkUpload = ({
   plants, 
   areas 
 }: { 
-  entityType: 'Users' | 'Plants' | 'Areas' | 'Equipment',
+  entityType: 'Users' | 'Plants' | 'Areas' | 'Equipment' | 'Findings',
   onComplete: (count: number) => void,
   onError: (err: string) => void,
   plants?: {id: string, name: string}[],
@@ -6398,7 +6648,7 @@ const BulkUpload = ({
               // Find plant ID if name was provided
               let plantId = plantInput;
               if (plants) {
-                const found = plants.find(p => p.id === plantInput || p.name.toLowerCase() === plantInput.toLowerCase());
+                const found = plants.find(p => p.id === plantInput || (p.name || '').toLowerCase() === (plantInput || '').toLowerCase());
                 if (found) plantId = found.id;
               }
 
@@ -6421,14 +6671,14 @@ const BulkUpload = ({
               // Resolve Plant
               let plantId = plantInput;
               if (plants) {
-                const found = plants.find(p => p.id === plantInput || p.name.toLowerCase() === plantInput.toLowerCase());
+                const found = plants.find(p => p.id === plantInput || (p.name || '').toLowerCase() === (plantInput || '').toLowerCase());
                 if (found) plantId = found.id;
               }
 
               // Resolve Area
               let areaId = areaInput;
               if (areas) {
-                const found = areas.find(a => a.id === areaInput || a.name.toLowerCase() === areaInput.toLowerCase());
+                const found = areas.find(a => a.id === areaInput || (a.name || '').toLowerCase() === (areaInput || '').toLowerCase());
                 if (found) areaId = found.id;
               }
 
@@ -6466,7 +6716,7 @@ const BulkUpload = ({
 
               let plantId = plantInput || "";
               if (plants && plantInput) {
-                const found = plants.find(p => p.id === plantInput || p.name.toLowerCase() === plantInput.toLowerCase());
+                const found = plants.find(p => p.id === plantInput || (p.name || '').toLowerCase() === (plantInput || '').toLowerCase());
                 if (found) plantId = found.id;
               }
 
@@ -6475,20 +6725,92 @@ const BulkUpload = ({
               if (['admin', 'administrador'].includes(roleIn?.toLowerCase())) role = 'Administrador';
               if (['supervisor'].includes(roleIn?.toLowerCase())) role = 'Supervisor';
 
-              // Since we can't create Auth users easily in bulk from client, we just create Firestore doc
-              // We'll use a deterministic temporary ID or let them sign up later
-              // For now, let's use email as temporary ID or check if user exists
-              const usersRef = collection(db, 'users');
-              const q = query(usersRef, where('email', '==', email));
-              const snap = await getDoc(doc(db, 'users', email)); // Simple check
-
               await setDoc(doc(db, 'users', email.replace(/[^a-zA-Z0-9]/g, '_')), {
                 email,
                 name,
                 role,
                 plantId,
-                uid: email.replace(/[^a-zA-Z0-9]/g, '_') // Note: This will need linking when they actually login
+                uid: email.replace(/[^a-zA-Z0-9]/g, '_')
               }, { merge: true });
+              count++;
+            }
+            else if (entityType === 'Findings') {
+              const desc = item.descripcion || item.hallazgo || item.description || item.observacion;
+              if (!desc) continue;
+
+              const plantInput = item.planta_id || item.planta || item.plantid;
+              let plantId = plantInput || 'PLANTA-01';
+              if (plants && plantInput) {
+                const found = plants.find(p => p.id === plantInput || (p.name || '').toLowerCase() === (plantInput || '').toLowerCase());
+                if (found) plantId = found.id;
+              }
+
+              const areaInput = item.area_id || item.area || item.nombre_area;
+              let areaId = areaInput || '';
+              let areaName = item.area_nombre || item.area || item.nombre_area || 'Área General';
+              if (areas && areaInput) {
+                const found = areas.find(a => a.id === areaInput || (a.name || '').toLowerCase() === (areaInput || '').toLowerCase());
+                if (found) {
+                  areaId = found.id;
+                  areaName = found.name;
+                }
+              }
+
+              const equipNameInput = item.equipo || item.nombre_equipo || item.equipment || 'Puntos Generales de Inspección';
+              const operatorName = item.operador || item.operador_nombre || item.operator || 'Operador Carga Masiva';
+              
+              const id = item.id || `FIND-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+              
+              const rawDate = item.fecha_reporte || item.fecha || item.createdat;
+              const parsedDate = parseAnyDate(rawDate) || new Date();
+              const tsDate = Timestamp.fromDate(parsedDate);
+
+              const rawClosedDate = item.fecha_cierre || item.closedat;
+              let closedTs: Timestamp | null = null;
+              if (rawClosedDate) {
+                const pClosed = parseAnyDate(rawClosedDate);
+                if (pClosed) closedTs = Timestamp.fromDate(pClosed);
+              }
+
+              const statusInput = (item.estado || item.status || 'Abierto').toLowerCase();
+              let status: 'Open' | 'InReview' | 'Closed' = 'Open';
+              if (statusInput.includes('cerrad') || statusInput === 'closed') status = 'Closed';
+              else if (statusInput.includes('revis') || statusInput === 'inreview') status = 'InReview';
+
+              const priorityInput = (item.prioridad || item.priority || 'Media').toLowerCase();
+              let priority = 'Media';
+              if (priorityInput.includes('alta') || priorityInput.includes('high')) priority = 'Alta';
+              else if (priorityInput.includes('critica') || priorityInput.includes('critical')) priority = 'Crítica';
+              else if (priorityInput.includes('baja') || priorityInput.includes('low')) priority = 'Baja';
+
+              const inspDuration = item.duracion_area_seg ? parseInt(item.duracion_area_seg) : 0;
+              const equipDuration = item.duracion_equipo_seg ? parseInt(item.duracion_equipo_seg) : 0;
+
+              const payload: any = {
+                id,
+                plantId,
+                areaId,
+                areaName,
+                equipmentId: item.equipo_id || 'general',
+                equipmentName: equipNameInput,
+                operatorName,
+                description: desc,
+                priority,
+                status,
+                createdAt: tsDate,
+                date: tsDate,
+                inspectionStartedAt: tsDate,
+                inspectionCompletedAt: tsDate,
+                inspectionDurationSeconds: inspDuration,
+                equipmentStartedAt: tsDate,
+                equipmentCompletedAt: tsDate,
+                equipmentDurationSeconds: equipDuration,
+                supervisorComments: item.comentarios_supervisor || item.solucion || '',
+                photoUrl: item.foto_url || '',
+                closedAt: closedTs
+              };
+
+              await setDoc(doc(db, 'findings', id), payload, { merge: true });
               count++;
             }
           } catch (err: any) {
@@ -6513,6 +6835,7 @@ const BulkUpload = ({
     if (entityType === 'Areas') return "id,planta_id,nombre,qr\nAREA-01,PLANTA-01,Zona de Carga,QR001";
     if (entityType === 'Equipment') return "id,planta,area,nombre,orden,check_items\nEQ-01,Planta Norte,Zona de Carga,Motor Principal,1,Cableado;Aceite;Temperatura";
     if (entityType === 'Users') return "nombre,usuario,rol,planta\nJuan Perez,juan.perez,Operador,Planta Norte";
+    if (entityType === 'Findings') return "id,planta_id,area,equipo,operador,descripcion,prioridad,estado,fecha_reporte,duracion_area_seg,duracion_equipo_seg,fecha_cierre,comentarios_supervisor\nHALL-01,PLANTA-01,Zona de Carga,Motor Principal,Juan Perez,Falta orden y limpieza en la base del equipo,Alta,Abierto,2026-08-10 08:00:00,120,45,,";
     return "";
   };
 
@@ -6526,7 +6849,8 @@ const BulkUpload = ({
           <p className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">Carga Masiva de {
             entityType === 'Users' ? 'Usuarios' :
             entityType === 'Plants' ? 'Plantas' :
-            entityType === 'Areas' ? 'Áreas' : 'Equipos'
+            entityType === 'Areas' ? 'Áreas' :
+            entityType === 'Equipment' ? 'Equipos' : 'Registros / Hallazgos'
           }</p>
           <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold tracking-tight uppercase">Sube un archivo CSV con los datos</p>
         </div>
@@ -6574,7 +6898,7 @@ const BulkUpload = ({
 };
 
 const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'Users' | 'Plants' | 'Areas' | 'Equipment'>('Users');
+  const [activeSubTab, setActiveSubTab] = useState<'Users' | 'Plants' | 'Areas' | 'Equipment' | 'Findings'>('Users');
   const [areas, setAreas] = useState<Area[]>([]);
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
 
@@ -6595,7 +6919,7 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
   return (
     <div className="space-y-6">
       <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl overflow-x-auto no-scrollbar border border-transparent dark:border-white/5">
-        {(['Users', 'Plants', 'Areas', 'Equipment'] as const).map((tab, tIdx) => (
+        {(['Users', 'Plants', 'Areas', 'Equipment', 'Findings'] as const).map((tab, tIdx) => (
           <button
             key={`admin-tab-${tab}-${tIdx}`}
             onClick={() => setActiveSubTab(tab)}
@@ -6606,7 +6930,7 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
             {tab === 'Users' ? 'Usuarios' : 
              tab === 'Plants' ? 'Plantas' : 
              tab === 'Areas' ? 'Áreas' : 
-             'Equipos'}
+             tab === 'Equipment' ? 'Equipos' : 'Carga Masiva Registros'}
           </button>
         ))}
       </div>
@@ -6615,6 +6939,17 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
       {activeSubTab === 'Plants' && <AdminPlantManagement plants={plants} />}
       {activeSubTab === 'Areas' && <AdminAreaManagement plants={plants} areas={areas} />}
       {activeSubTab === 'Equipment' && <AdminEquipmentManagement plants={plants} areas={areas} equipment={equipmentList} />}
+      {activeSubTab === 'Findings' && (
+        <div className="space-y-4">
+          <BulkUpload 
+            entityType="Findings" 
+            plants={plants} 
+            areas={areas} 
+            onComplete={(c) => alert(`Se cargaron ${c} hallazgos/registros exitosamente.`)} 
+            onError={(err) => alert(err)} 
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -7222,7 +7557,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                 <div className="p-2 bg-zinc-50 dark:bg-zinc-900 rounded-xl">
                   <ListChecks className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
                 </div>
-                <h4 className="font-bold text-zinc-900 dark:text-white">Otros Puntos de Revisión</h4>
+                <h4 className="font-bold text-zinc-900 dark:text-white">Otros Ítems de Revisión</h4>
               </div>
 
               <div className="space-y-3">
@@ -7257,7 +7592,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                 <input 
                   value={newCheckItemName} 
                   onChange={e => setNewCheckItemName(e.target.value)} 
-                  placeholder="Agregar nuevo punto de revisión (ej: Nivel de aceite)"
+                  placeholder="Agregar nuevo ítem de revisión (ej: Nivel de aceite)"
                   onKeyPress={e => {
                     if (e.key === 'Enter' && newCheckItemName) {
                       e.preventDefault();
@@ -7424,10 +7759,24 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                                 inspeccionVOSO: e.inspeccionVOSO || DEFAULT_VOSO
                               }); 
                               setShowForm(true); 
-                            }} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                            }} title="Editar Equipo" className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900">
                               <FileText className="w-4 h-4" />
                             </button>
-                            <button onClick={() => setConfirmDeleteId(e.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10">
+                            <button onClick={() => { 
+                              setEditingEquip(null); 
+                              setFormData({
+                                name: `${e.name} (Copia)`, 
+                                areaId: e.areaId, 
+                                plantId: e.plantId || '', 
+                                inspectionOrder: (e.inspectionOrder || 0) + 1,
+                                checkItems: (e.checkItems || []).map(item => ({ id: Math.random().toString(36).substring(2, 9), name: item.name })),
+                                inspeccionVOSO: JSON.parse(JSON.stringify(e.inspeccionVOSO || DEFAULT_VOSO))
+                              }); 
+                              setShowForm(true); 
+                            }} title="Copiar / Duplicar Equipo" className="p-2 text-zinc-400 hover:text-brand-blue transition-colors rounded-lg hover:bg-sky-50 dark:hover:bg-sky-500/10">
+                              <Copy className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setConfirmDeleteId(e.id)} title="Eliminar Equipo" className="p-2 text-zinc-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10">
                               <X className="w-4 h-4" />
                             </button>
                           </div>
@@ -7481,10 +7830,24 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                               inspeccionVOSO: e.inspeccionVOSO || DEFAULT_VOSO
                             }); 
                             setShowForm(true); 
-                          }} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                          }} title="Editar Equipo" className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900">
                             <FileText className="w-4 h-4" />
                           </button>
-                          <button onClick={() => setConfirmDeleteId(e.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10">
+                          <button onClick={() => { 
+                            setEditingEquip(null); 
+                            setFormData({
+                              name: `${e.name} (Copia)`, 
+                              areaId: e.areaId, 
+                              plantId: e.plantId || '', 
+                              inspectionOrder: (e.inspectionOrder || 0) + 1,
+                              checkItems: (e.checkItems || []).map(item => ({ id: Math.random().toString(36).substring(2, 9), name: item.name })),
+                              inspeccionVOSO: JSON.parse(JSON.stringify(e.inspeccionVOSO || DEFAULT_VOSO))
+                            }); 
+                            setShowForm(true); 
+                          }} title="Copiar / Duplicar Equipo" className="p-2 text-zinc-400 hover:text-brand-blue transition-colors rounded-lg hover:bg-sky-50 dark:hover:bg-sky-500/10">
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setConfirmDeleteId(e.id)} title="Eliminar Equipo" className="p-2 text-zinc-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
@@ -8031,11 +8394,11 @@ const SyncStatusTray = () => {
 
               {/* Status Band */}
               <div className="flex items-center justify-between py-2 px-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-100 dark:border-white/5 text-xs">
-                <span className="text-zinc-500 font-medium">Estado Red:</span>
+                <span className="text-zinc-500 font-medium">Estado de Red:</span>
                 <div className="flex items-center gap-1.5 font-bold">
                   <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500 animate-pulse'}`} />
                   <span className={isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
-                    {isOnline ? 'ONLINE' : 'DEGRADADO (OFFLINE)'}
+                    {isOnline ? 'CONECTADO' : 'SIN CONEXIÓN (OFFLINE)'}
                   </span>
                 </div>
               </div>
@@ -8047,7 +8410,7 @@ const SyncStatusTray = () => {
                   {syncBacklog.some(item => item.state === 'failed') && (
                     <button 
                       onClick={clearFailed}
-                      className="text-red-500 hover:underline hover:text-red-600 normal-case"
+                      className="text-red-500 hover:underline hover:text-red-600 normal-case cursor-pointer"
                     >
                       Purgar fallidos
                     </button>
@@ -8062,34 +8425,61 @@ const SyncStatusTray = () => {
                   </div>
                 ) : (
                   <div className="max-h-40 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                    {syncBacklog.map((item) => (
-                      <div 
-                        key={item.id} 
-                        className="p-2.5 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/40 border border-zinc-100 dark:border-white/5 flex flex-col gap-1 text-[11px]"
-                      >
-                        <div className="flex justify-between">
-                          <span className="font-bold text-zinc-800 dark:text-zinc-200 capitalize">
-                            {item.collection === 'equipment' ? 'Equipo' : item.collection}
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-extrabold uppercase tracking-widest ${
-                            item.state === 'syncing' ? 'bg-sky-50 dark:bg-sky-500/10 text-brand-blue dark:text-sky-400' :
-                            item.state === 'failed' ? 'bg-red-50 dark:bg-red-500/10 text-red-500' :
-                            'bg-amber-50 dark:bg-amber-500/10 text-amber-500'
-                          }`}>
-                            {item.state}
-                          </span>
+                    {syncBacklog.map((item) => {
+                      const collectionNames: Record<string, string> = {
+                        equipment: 'Equipos',
+                        findings: 'Hallazgos',
+                        inspections: 'Inspecciones',
+                        notifications: 'Notificaciones',
+                        users: 'Usuarios',
+                        areas: 'Áreas'
+                      };
+                      const collectionLabel = collectionNames[item.collection] || item.collection;
+
+                      const stateLabels: Record<string, string> = {
+                        syncing: 'SINCRONIZANDO',
+                        failed: 'FALLIDO',
+                        pending: 'PENDIENTE'
+                      };
+                      const stateLabel = stateLabels[item.state] || item.state.toUpperCase();
+
+                      const opLabels: Record<string, string> = {
+                        create: 'CREAR',
+                        update: 'ACTUALIZAR',
+                        delete: 'ELIMINAR',
+                        merge: 'ACTUALIZAR'
+                      };
+                      const opLabel = opLabels[item.operation] || item.operation.toUpperCase();
+
+                      return (
+                        <div 
+                          key={item.id} 
+                          className="p-2.5 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/40 border border-zinc-100 dark:border-white/5 flex flex-col gap-1 text-[11px]"
+                        >
+                          <div className="flex justify-between">
+                            <span className="font-bold text-zinc-800 dark:text-zinc-200 capitalize">
+                              {collectionLabel}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-extrabold uppercase tracking-widest ${
+                              item.state === 'syncing' ? 'bg-sky-50 dark:bg-sky-500/10 text-brand-blue dark:text-sky-400' :
+                              item.state === 'failed' ? 'bg-red-50 dark:bg-red-500/10 text-red-500' :
+                              'bg-amber-50 dark:bg-amber-500/10 text-amber-500'
+                            }`}>
+                              {stateLabel}
+                            </span>
+                          </div>
+                          <div className="text-[9px] text-zinc-400 dark:text-zinc-500 flex justify-between">
+                            <span className="font-mono truncate max-w-[120px]">ID Doc: {item.docId}</span>
+                            <span className="font-mono">{opLabel}</span>
+                          </div>
+                          {item.error && (
+                            <p className="text-[8px] text-red-500/80 font-mono mt-0.5 max-h-8 overflow-y-auto">
+                              {item.error}
+                            </p>
+                          )}
                         </div>
-                        <div className="text-[9px] text-zinc-400 dark:text-zinc-500 flex justify-between">
-                          <span className="font-mono truncate max-w-[120px]">Payload ID: {item.docId}</span>
-                          <span className="font-mono">{item.operation.toUpperCase()}</span>
-                        </div>
-                        {item.error && (
-                          <p className="text-[8px] text-red-500/80 font-mono mt-0.5 max-h-8 overflow-y-auto">
-                            {item.error}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -8100,7 +8490,7 @@ const SyncStatusTray = () => {
                   type="button"
                   onClick={handleForceTrigger}
                   disabled={!isOnline || isRotating}
-                  className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all"
+                  className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isRotating ? 'animate-spin' : ''}`} />
                   <span>Sincronizar ahora ({pendingCount})</span>
@@ -8113,7 +8503,7 @@ const SyncStatusTray = () => {
         {/* Trigger Badge */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center gap-2.5 p-3.5 rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all text-xs font-bold leading-none ${
+          className={`flex items-center gap-2.5 p-3.5 rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all text-xs font-bold leading-none cursor-pointer ${
             pendingCount > 0 
               ? 'bg-amber-500 hover:bg-amber-600 text-white animate-pulse-subtle' 
               : isOnline 
@@ -8134,7 +8524,7 @@ const SyncStatusTray = () => {
             </span>
           ) : (
             <span className="hidden sm:inline text-zinc-500 dark:text-zinc-400">
-              {isOnline ? 'Online' : 'Conexión Offline'}
+              {isOnline ? 'En Línea' : 'Sin Conexión'}
             </span>
           )}
         </button>
@@ -8385,7 +8775,7 @@ const HelpView = () => {
                   <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">Identificación rápida de Planta, Área o Equipo</h4>
                 </div>
                 <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
-                  Al ingresar con tu cuenta de operador, selecciona la planta asignada. Podrás buscar tu área en el listado haciendo clic en ella, o usar el cómodo lector de códigos QR ubicado en la barra para escanear directamente la etiqueta del equipo. Esto te dirigirá a sus puntos de control sin demoras.
+                  Al ingresar con tu cuenta de operador, selecciona la planta asignada. Podrás buscar tu área en el listado haciendo clic en ella, o usar el cómodo lector de códigos QR ubicado en la barra para escanear directamente la etiqueta del equipo. Esto te dirigirá a sus puntos de inspección sin demoras.
                 </p>
               </div>
 

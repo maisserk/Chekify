@@ -32,6 +32,8 @@ import { offlineQueueService } from './OfflineQueueService';
 import { offlineMediaService } from './OfflineMediaService';
 import { compressImage, blobToBase64, base64ToBlob } from '../utils/imageCompressor';
 import { PushNotificationService } from './PushNotificationService';
+import { getCachedAreas, getCachedEquipment } from '../utils/offlineCache';
+import { parseAnyDate } from '../utils/dateUtils';
 
 export class FindingService {
   private static readonly COLLECTION_NAME = 'findings';
@@ -53,14 +55,127 @@ export class FindingService {
     return onSnapshot(
       q,
       (snapshot) => {
-        const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
+        const rawList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
+        
+        const cleanedList: Finding[] = [];
+        for (const finding of rawList) {
+          const desc = (finding.description || '').trim();
+          const normDesc = desc.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const upperCategory = ((finding as any).category || '').toUpperCase();
+
+          // If the finding is strictly titled/described as "Punto de Control" or "Punto de Control VOSO" or empty/placeholder
+          if (
+            normDesc === 'puntodecontrol' ||
+            normDesc === 'puntodecontrolvoso' ||
+            normDesc === 'puntosdecontrol' ||
+            normDesc === 'puntoevaluado' ||
+            upperCategory === 'PUNTO DE CONTROL' ||
+            upperCategory === 'PUNTOS DE CONTROL'
+          ) {
+            // Delete registered document from Firestore
+            deleteDoc(doc(db, this.COLLECTION_NAME, finding.id)).catch(err => {
+              console.warn('[FindingService] Could not purge Punto de Control finding:', err);
+            });
+            continue;
+          }
+
+          // If description contains "Punto de Control" or "PUNTOS DE CONTROL", sanitize it
+          if (/punto[s]?\s*de\s*control/gi.test(desc) || /otros\s*puntos\s*de\s*inspecci[oó]n/gi.test(desc)) {
+            const sanitizedDesc = desc
+              .replace(/PUNTOS DE CONTROL DE INSPECCIÓN:/gi, 'EVALUACIONES DE INSPECCIÓN:')
+              .replace(/OTROS PUNTOS DE INSPECCIÓN:/gi, 'OTRAS EVALUACIONES:')
+              .replace(/Punto[s]?\s*de\s*Control\s*VOSO/gi, 'Ítem VOSO')
+              .replace(/Punto[s]?\s*de\s*Control/gi, 'Ítem Evaluado')
+              .replace(/Punto\s*Inspeccionado/gi, 'Ítem Inspeccionado');
+
+            finding.description = sanitizedDesc;
+
+            // Background async fix in Firestore
+            setDoc(doc(db, this.COLLECTION_NAME, finding.id), { description: sanitizedDesc }, { merge: true }).catch(() => {});
+          }
+
+          const rawDoc = finding as any;
+          const updatesToPersist: Record<string, any> = {};
+
+          // Auto-enrich areaName or equipmentName if missing using local cache
+          if (!finding.areaName) {
+            if (finding.areaId) {
+              const cachedAreas = getCachedAreas();
+              const area = cachedAreas.find(a => a.id === finding.areaId);
+              if (area) finding.areaName = area.name;
+            }
+            if (!finding.areaName) {
+              finding.areaName = 'Área General';
+            }
+            if (!rawDoc.areaName) {
+              updatesToPersist.areaName = finding.areaName;
+            }
+          }
+
+          if (!finding.equipmentName) {
+            if (finding.equipmentId && finding.equipmentId !== 'general') {
+              const cachedEquip = getCachedEquipment();
+              const equip = cachedEquip.find(e => e.id === finding.equipmentId);
+              if (equip) finding.equipmentName = equip.name;
+            }
+            if (!finding.equipmentName) {
+              finding.equipmentName = 'Puntos Generales de Inspección';
+            }
+            if (!rawDoc.equipmentName) {
+              updatesToPersist.equipmentName = finding.equipmentName;
+            }
+          }
+
+          // Auto-enrich timing fields if missing
+          const baseDate = parseAnyDate(finding.createdAt || finding.date) || new Date();
+          const baseTimestamp = Timestamp.fromDate(baseDate);
+
+          if (!finding.inspectionStartedAt) {
+            finding.inspectionStartedAt = baseTimestamp;
+            if (!rawDoc.inspectionStartedAt) updatesToPersist.inspectionStartedAt = baseTimestamp;
+          }
+          if (!finding.inspectionCompletedAt) {
+            finding.inspectionCompletedAt = baseTimestamp;
+            if (!rawDoc.inspectionCompletedAt) updatesToPersist.inspectionCompletedAt = baseTimestamp;
+          }
+
+          if (!finding.equipmentStartedAt) {
+            finding.equipmentStartedAt = finding.inspectionStartedAt;
+            if (!rawDoc.equipmentStartedAt) updatesToPersist.equipmentStartedAt = finding.inspectionStartedAt;
+          }
+          if (!finding.equipmentCompletedAt) {
+            finding.equipmentCompletedAt = finding.inspectionCompletedAt;
+            if (!rawDoc.equipmentCompletedAt) updatesToPersist.equipmentCompletedAt = finding.inspectionCompletedAt;
+          }
+
+          const startMs = parseAnyDate(finding.inspectionStartedAt)?.getTime() || baseDate.getTime();
+          const endMs = parseAnyDate(finding.inspectionCompletedAt)?.getTime() || baseDate.getTime();
+          const calcSecs = Math.max(0, Math.round((endMs - startMs) / 1000));
+
+          if (finding.inspectionDurationSeconds === undefined || finding.inspectionDurationSeconds === null) {
+            finding.inspectionDurationSeconds = calcSecs;
+            if (rawDoc.inspectionDurationSeconds === undefined) updatesToPersist.inspectionDurationSeconds = calcSecs;
+          }
+
+          if (finding.equipmentDurationSeconds === undefined || finding.equipmentDurationSeconds === null) {
+            finding.equipmentDurationSeconds = calcSecs;
+            if (rawDoc.equipmentDurationSeconds === undefined) updatesToPersist.equipmentDurationSeconds = calcSecs;
+          }
+
+          if (Object.keys(updatesToPersist).length > 0) {
+            setDoc(doc(db, this.COLLECTION_NAME, finding.id), updatesToPersist, { merge: true }).catch(() => {});
+          }
+
+          cleanedList.push(finding);
+        }
+
         // Sort chronologically in memory (fail-safe for local serverTimestamp delay)
-        list.sort((a, b) => {
-          const tA = a.createdAt?.seconds || a.createdAt?.toMillis?.() || Date.now();
-          const tB = b.createdAt?.seconds || b.createdAt?.toMillis?.() || Date.now();
+        cleanedList.sort((a, b) => {
+          const tA = parseAnyDate(a.createdAt || a.date)?.getTime() || Date.now();
+          const tB = parseAnyDate(b.createdAt || b.date)?.getTime() || Date.now();
           return tB - tA; // Newest first
         });
-        callback(list);
+        callback(cleanedList);
       },
       (error) => {
         handleFirestoreError(error, 'list', this.COLLECTION_NAME);
@@ -196,8 +311,27 @@ export class FindingService {
     const cleanDescription = findingData.description ? removeEmojisBracketsAndParens(findingData.description) : '';
     const mainPhotoUrl = processedPhotoUrls[0] || '';
 
+    // Fallback fill areaName and equipmentName from local cache if missing
+    let resolvedAreaName = findingData.areaName;
+    if (!resolvedAreaName && findingData.areaId) {
+      const cachedAreas = getCachedAreas();
+      const area = cachedAreas.find(a => a.id === findingData.areaId);
+      if (area) resolvedAreaName = area.name;
+    }
+
+    let resolvedEquipmentName = findingData.equipmentName;
+    if (!resolvedEquipmentName && findingData.equipmentId && findingData.equipmentId !== 'general') {
+      const cachedEquip = getCachedEquipment();
+      const equip = cachedEquip.find(e => e.id === findingData.equipmentId);
+      if (equip) resolvedEquipmentName = equip.name;
+    } else if (!resolvedEquipmentName && (findingData.equipmentId === 'general' || !findingData.equipmentId)) {
+      resolvedEquipmentName = 'Puntos Generales de Inspección';
+    }
+
     const rawPayload: Partial<Finding> = {
       ...findingData,
+      areaName: resolvedAreaName || findingData.areaName || 'Área General',
+      equipmentName: resolvedEquipmentName || findingData.equipmentName || 'Puntos Generales de Inspección',
       description: cleanDescription || findingData.description || '',
       id: findingId,
       photoUrl: mainPhotoUrl,

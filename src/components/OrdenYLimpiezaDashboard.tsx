@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { useAppUsers } from '../hooks/useAppUsers';
 import { QuickHelpModal } from './QuickHelpModal';
-import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText } from '../utils/dateUtils';
+import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText, parseAnyDate } from '../utils/dateUtils';
 import { 
   doc, 
   getDoc, 
@@ -107,6 +107,12 @@ export const exportFindingsToCSV = (findingsList: Finding[], filenamePrefix: str
       "Descripción / Hallazgo",
       "Prioridad",
       "Estado",
+      "Hora Inicio Área",
+      "Hora Fin Área",
+      "Duración Área (seg)",
+      "Hora Inicio Equipo",
+      "Hora Fin Equipo",
+      "Duración Equipo (seg)",
       "Fecha Cierre",
       "Horas de Cierre (MTTR)",
       "Comentarios Supervisor / Solución"
@@ -126,33 +132,45 @@ export const exportFindingsToCSV = (findingsList: Finding[], filenamePrefix: str
       const fDate = getFindingDate(f);
       const dateStr = fDate ? format(fDate, 'dd/MM/yyyy HH:mm:ss') : '';
       
-      let closedStr = '';
+      const closedDate = getFindingClosedDate(f);
+      const closedStr = closedDate ? format(closedDate, 'dd/MM/yyyy HH:mm:ss') : '';
+
       let resolutionHours = '';
-      if (f.closedAt) {
-        try {
-          const cd = f.closedAt.toDate ? f.closedAt.toDate() : new Date(f.closedAt);
-          closedStr = format(cd, 'dd/MM/yyyy HH:mm:ss');
-          if (fDate) {
-            const startTime = fDate.getTime();
-            const endTime = cd.getTime();
-            if (endTime > startTime) {
-              resolutionHours = (Math.round((endTime - startTime) / (1000 * 60 * 60) * 10) / 10).toString();
-            }
-          }
-        } catch (e) {}
+      if (fDate && closedDate) {
+        const startTime = fDate.getTime();
+        const endTime = closedDate.getTime();
+        if (endTime >= startTime) {
+          resolutionHours = (Math.round((endTime - startTime) / (1000 * 60 * 60) * 10) / 10).toString();
+        }
       }
+
+      const areaStart = parseAnyDate(f.inspectionStartedAt);
+      const areaEnd = parseAnyDate(f.inspectionCompletedAt);
+      const equipStart = parseAnyDate(f.equipmentStartedAt);
+      const equipEnd = parseAnyDate(f.equipmentCompletedAt);
+
+      const areaStartStr = areaStart ? format(areaStart, 'HH:mm:ss') : '';
+      const areaEndStr = areaEnd ? format(areaEnd, 'HH:mm:ss') : '';
+      const equipStartStr = equipStart ? format(equipStart, 'HH:mm:ss') : '';
+      const equipEndStr = equipEnd ? format(equipEnd, 'HH:mm:ss') : '';
 
       const row = [
         escapeCSV(f.id),
         escapeCSV(dateStr),
         escapeCSV(f.plantId || ''),
-        escapeCSV(f.areaName || ''),
+        escapeCSV(f.areaName || 'Área General'),
         escapeCSV(getOrdenSubcategory(f.description)),
-        escapeCSV(f.equipmentName || 'Área General'),
+        escapeCSV(f.equipmentName || 'Puntos Generales de Inspección'),
         escapeCSV(f.operatorName || ''),
         escapeCSV(f.description),
         escapeCSV(f.priority || 'N/A'),
         escapeCSV(f.status === 'Open' ? 'Abierto' : f.status === 'InReview' ? 'En Revisión' : 'Cerrado'),
+        escapeCSV(areaStartStr),
+        escapeCSV(areaEndStr),
+        escapeCSV(f.inspectionDurationSeconds !== undefined && f.inspectionDurationSeconds !== null ? f.inspectionDurationSeconds : ''),
+        escapeCSV(equipStartStr),
+        escapeCSV(equipEndStr),
+        escapeCSV(f.equipmentDurationSeconds !== undefined && f.equipmentDurationSeconds !== null ? f.equipmentDurationSeconds : ''),
         escapeCSV(closedStr),
         escapeCSV(resolutionHours),
         escapeCSV(f.supervisorComments || f.solution || '')
@@ -410,9 +428,9 @@ export const OrdenYLimpiezaDashboard = ({
     return ordenFindings.filter(f => {
       const matchesFilter = filter === 'All' || f.status === filter;
       const matchesSubcat = subcatFilter === 'All' || getOrdenSubcategory(f.description) === subcatFilter;
-      const matchesSearch = f.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            f.areaName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            f.operatorName?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = (f.description || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                            f.areaName?.toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                            f.operatorName?.toLowerCase().includes((searchTerm || '').toLowerCase());
       const matchesOperator = operatorFilter === 'All' || f.operatorName === operatorFilter;
       
       let matchesDate = true;
@@ -896,8 +914,11 @@ export const OrdenYLimpiezaDashboard = ({
 
               <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 custom-scrollbar dark:bg-zinc-950/20">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="px-2.5 py-1 bg-purple-500 text-white font-black text-[9px] uppercase rounded-lg">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="px-2.5 py-1 bg-purple-600 text-white font-black text-[9px] uppercase rounded-lg border border-purple-400/30">
+                      ✨ Orden y Limpieza (5S)
+                    </span>
+                    <span className="px-2.5 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 font-bold text-[9px] uppercase rounded-lg">
                       {getOrdenSubcategory(selectedFinding.description)}
                     </span>
                     <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase ${
@@ -916,6 +937,7 @@ export const OrdenYLimpiezaDashboard = ({
                     <FindingDescriptionRenderer 
                       description={selectedFinding.description} 
                       source="OrdenYLimpieza" 
+                      filterModule="OrdenYLimpieza"
                     />
                   </div>
                 </div>

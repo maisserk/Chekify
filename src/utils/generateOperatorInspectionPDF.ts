@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { Finding } from '../types';
 import { parseFindingDescription } from '../components/FindingDescriptionRenderer';
 import { extractFindingPhotos } from '../components/FindingPhotoGallery';
+import { parseAnyDate } from './dateUtils';
 
 export interface OperatorProfile {
   name?: string;
@@ -206,17 +207,13 @@ export const generateOperatorInspectionPDF = async (
   const margin = 14;
   const contentWidth = pageWidth - (margin * 2); // 182 mm
 
-  const findingDate = finding.createdAt?.toDate 
-    ? finding.createdAt.toDate() 
-    : finding.date 
-      ? new Date(finding.date) 
-      : new Date();
+  const findingDate = parseAnyDate(finding.createdAt || finding.date) || new Date();
 
   const formattedDate = format(findingDate, 'dd/MM/yyyy HH:mm');
   const folioId = `INSP-${(finding.id || 'N/A').substring(0, 8).toUpperCase()}`;
   const operatorName = finding.operatorName || operatorProfile?.name || 'Operador en Terreno';
   const areaName = finding.areaName || 'Área General';
-  const equipmentName = finding.equipmentName || 'Puntos Generales de Inspección';
+  const equipmentName = finding.equipmentName || 'Ítems Generales de Inspección';
   const plantId = finding.plantId || 'Planta Principal';
 
   // Duration calculation
@@ -242,7 +239,7 @@ export const generateOperatorInspectionPDF = async (
   docPDF.rect(0, 28, pageWidth, 1.5, 'F');
 
   // Dynamic Equipment / Area Title for Header
-  const targetEquipmentName = (finding.equipmentName && finding.equipmentName.trim() && finding.equipmentName !== 'Puntos Generales de Inspección')
+  const targetEquipmentName = (finding.equipmentName && finding.equipmentName.trim() && finding.equipmentName !== 'Puntos Generales de Inspección' && finding.equipmentName !== 'Ítems Generales de Inspección')
     ? finding.equipmentName.trim().toUpperCase()
     : (finding.areaName && finding.areaName.trim() ? finding.areaName.trim().toUpperCase() : 'ÁREA COMPLETA');
 
@@ -487,7 +484,7 @@ export const generateOperatorInspectionPDF = async (
 
     autoTable(docPDF, {
       startY: currentY,
-      head: [['Punto de Control / Ítem Evaluado', 'Estado / Evaluación', 'Detalle Ingresado por Operador']],
+      head: [['Ítem Evaluado', 'Estado / Evaluación', 'Detalle Ingresado por Operador']],
       body: tableBody,
       theme: 'grid',
       headStyles: {
