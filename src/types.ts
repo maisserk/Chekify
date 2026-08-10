@@ -50,6 +50,7 @@ export interface Equipment {
   plantId: string;
   areaId: string;
   name: string;
+  tag?: string;
   qrCode?: string;
   inspectionOrder: number;
   checkItems?: { id: string; name: string }[];

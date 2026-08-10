@@ -2371,8 +2371,13 @@ const OperatorDashboard = ({
                     </div>
                  </div>
 
-                 <h2 className="text-2xl sm:text-4xl font-black tracking-tighter mb-4 leading-tight text-white">
-                    {currentEquipment?.name || selectedArea.name}
+                 <h2 className="text-2xl sm:text-4xl font-black tracking-tighter mb-4 leading-tight text-white flex items-center gap-3 flex-wrap">
+                    <span>{currentEquipment?.name || selectedArea.name}</span>
+                    {currentEquipment?.tag && (
+                      <span className="text-xs sm:text-sm font-bold tracking-wider bg-white/10 text-sky-300 border border-white/20 px-3 py-1 rounded-xl uppercase">
+                        TAG: {currentEquipment.tag}
+                      </span>
+                    )}
                  </h2>
                  
                  <div className="flex flex-wrap gap-3">
@@ -6690,14 +6695,17 @@ const BulkUpload = ({
                 name: s
               }));
 
+              const equipmentTag = item.tag || item.etiqueta_tag || item.tag_equipo || item.codigo_tag || "";
+
               await setDoc(doc(db, 'equipment', id), {
                 id,
                 name,
+                tag: equipmentTag,
                 plantId,
                 areaId,
                 inspectionOrder: parseInt(item.orden || "0"),
                 checkItems,
-                qrCode: item.tag || item.etiqueta_tag || id.toUpperCase(),
+                qrCode: equipmentTag || id.toUpperCase(),
                 inspeccionVOSO: DEFAULT_VOSO
               });
               count++;
@@ -7322,6 +7330,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
   const [editingEquip, setEditingEquip] = useState<any | null>(null);
   const [formData, setFormData] = useState({ 
     name: '', 
+    tag: '',
     areaId: '', 
     plantId: '', 
     inspectionOrder: 0, 
@@ -7400,6 +7409,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
       const result = await EquipmentService.saveEquipment({
         ...formData,
         id,
+        tag: formData.tag?.trim() || '',
         inspectionOrder: Number(formData.inspectionOrder) || 0,
         checkItems: formData.checkItems || [],
         inspeccionVOSO: formData.inspeccionVOSO || DEFAULT_VOSO
@@ -7407,7 +7417,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
 
       setShowForm(false);
       setEditingEquip(null);
-      setFormData({ name: '', areaId: '', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO });
+      setFormData({ name: '', tag: '', areaId: '', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO });
       setNewCheckItemName('');
       
       if (result.queued) {
@@ -7505,6 +7515,16 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                     onChange={e => setFormData({...formData, name: e.target.value})} 
                     placeholder="Ej: Motor Principal 45KW" 
                     className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all" 
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest ml-1">TAG / Código de Equipo</label>
+                  <input 
+                    value={formData.tag} 
+                    onChange={e => setFormData({...formData, tag: e.target.value})} 
+                    placeholder="Ej: TAG-MTR-101" 
+                    className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all uppercase font-mono text-sm" 
                   />
                 </div>
 
@@ -7703,7 +7723,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
           </select>
           <button onClick={() => { 
             setEditingEquip(null); 
-            setFormData({name:'', areaId:'', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO}); 
+            setFormData({name:'', tag: '', areaId:'', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO}); 
             setShowForm(true); 
           }} className="p-2 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100 dark:shadow-none">
             <Plus className="w-4 h-4" />
@@ -7817,11 +7837,16 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                               <GripVertical className="w-4 h-4" />
                             </div>
                             <div>
-                              <p className="font-bold text-zinc-900 dark:text-white text-sm flex items-center gap-2">
+                              <p className="font-bold text-zinc-900 dark:text-white text-sm flex items-center gap-2 flex-wrap">
                                 <span className="text-[10px] font-black bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue dark:text-sky-400 px-2 py-0.5 rounded-md">
                                   #{e.inspectionOrder || (eIdx + 1)}
                                 </span>
-                                {e.name}
+                                <span>{e.name}</span>
+                                {e.tag && (
+                                  <span className="text-[10px] font-bold tracking-wider bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 rounded-md border border-zinc-200/80 dark:border-white/10 uppercase">
+                                    TAG: {e.tag}
+                                  </span>
+                                )}
                               </p>
                               <div className="flex gap-2 items-center mt-1.5">
                                 <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
@@ -7856,6 +7881,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                               setEditingEquip(e); 
                               setFormData({
                                 name: e.name, 
+                                tag: e.tag || '',
                                 areaId: e.areaId, 
                                 plantId: e.plantId || '', 
                                 inspectionOrder: e.inspectionOrder || 0,
@@ -7870,6 +7896,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                               setEditingEquip(null); 
                               setFormData({
                                 name: `${e.name} (Copia)`, 
+                                tag: e.tag ? `${e.tag}-CP` : '',
                                 areaId: e.areaId, 
                                 plantId: e.plantId || '', 
                                 inspectionOrder: (e.inspectionOrder || 0) + 1,
