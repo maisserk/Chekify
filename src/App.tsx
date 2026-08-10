@@ -89,6 +89,7 @@ import {
   FileSearch,
   Sparkles,
   Copy,
+  GripVertical,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
@@ -7332,6 +7333,51 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [draggedEquipId, setDraggedEquipId] = useState<string | null>(null);
+  const [dragOverEquipId, setDragOverEquipId] = useState<string | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
+
+  const handleReorderInArea = async (areaEquips: any[], draggedId: string, targetId: string) => {
+    if (draggedId === targetId || isReordering) return;
+    const oldIndex = areaEquips.findIndex(e => e.id === draggedId);
+    const newIndex = areaEquips.findIndex(e => e.id === targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newEquips = [...areaEquips];
+    const [moved] = newEquips.splice(oldIndex, 1);
+    newEquips.splice(newIndex, 0, moved);
+
+    setIsReordering(true);
+    try {
+      for (let idx = 0; idx < newEquips.length; idx++) {
+        const eq = newEquips[idx];
+        const newOrder = idx + 1;
+        if (Number(eq.inspectionOrder) !== newOrder) {
+          await EquipmentService.saveEquipment({
+            ...eq,
+            inspectionOrder: newOrder
+          });
+        }
+      }
+      setMessage({ text: "Orden de inspección actualizado correctamente", type: 'success' });
+    } catch (err: any) {
+      console.error("Error al reordenar equipos:", err);
+      setMessage({ text: "Error al actualizar el orden de los equipos", type: 'error' });
+    } finally {
+      setIsReordering(false);
+      setDraggedEquipId(null);
+      setDragOverEquipId(null);
+    }
+  };
+
+  const handleMoveOrder = async (areaEquips: any[], index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= areaEquips.length) return;
+    
+    const draggedId = areaEquips[index].id;
+    const targetId = areaEquips[targetIndex].id;
+    await handleReorderInArea(areaEquips, draggedId, targetId);
+  };
 
   useEffect(() => {
     if (message) {
@@ -7710,7 +7756,9 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
           return (
             <>
               {activeAreas.map((area, aIdx) => {
-                const areaEquips = filteredEquipment.filter(e => e.areaId === area.id);
+                const areaEquips = filteredEquipment
+                  .filter(e => e.areaId === area.id)
+                  .sort((a, b) => (Number(a.inspectionOrder) || 0) - (Number(b.inspectionOrder) || 0));
                 if (areaEquips.length === 0) return null;
 
                 return (
@@ -7725,29 +7773,85 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                           {plants.find(p => p.id === area.plantId)?.name || 'Sin Planta'}
                         </span>
                       </div>
-                      <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
-                        {areaEquips.length} {areaEquips.length === 1 ? 'equipo' : 'equipos'}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] text-zinc-400 font-medium hidden sm:inline">Arrastra para reordenar inspección</span>
+                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+                          {areaEquips.length} {areaEquips.length === 1 ? 'equipo' : 'equipos'}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="grid gap-3">
                       {areaEquips.map((e, eIdx) => (
-                        <div key={`equip-${e.id}-${eIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100/80 dark:border-white/10 flex justify-between items-center hover:shadow-xs dark:hover:shadow-none transition-all">
-                          <div>
-                            <p className="font-bold text-zinc-900 dark:text-white text-sm">
-                              <span className="text-zinc-400 mr-2 text-xs">#{e.inspectionOrder || '0'}</span>
-                              {e.name}
-                            </p>
-                            <div className="flex gap-2 items-center mt-1.5">
-                              <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
-                                Planta: {plants.find(p => p.id === e.plantId)?.name || 'Sin Planta'}
-                              </span>
-                              <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 text-zinc-400 dark:text-zinc-500 px-1.5 py-0.5 rounded font-bold uppercase">
-                                Área: {area.name}
-                              </span>
+                        <div 
+                          key={`equip-${e.id}-${eIdx}`} 
+                          draggable={!isReordering}
+                          onDragStart={(evt) => {
+                            evt.dataTransfer.setData('text/plain', e.id);
+                            setDraggedEquipId(e.id);
+                          }}
+                          onDragOver={(evt) => {
+                            evt.preventDefault();
+                            if (dragOverEquipId !== e.id) setDragOverEquipId(e.id);
+                          }}
+                          onDragLeave={(evt) => {
+                            evt.preventDefault();
+                            if (dragOverEquipId === e.id) setDragOverEquipId(null);
+                          }}
+                          onDrop={(evt) => {
+                            evt.preventDefault();
+                            const sourceId = evt.dataTransfer.getData('text/plain') || draggedEquipId;
+                            if (sourceId) handleReorderInArea(areaEquips, sourceId, e.id);
+                          }}
+                          className={`bg-white dark:bg-black p-4 rounded-2xl border transition-all flex justify-between items-center ${
+                            dragOverEquipId === e.id 
+                              ? 'border-brand-blue ring-2 ring-brand-blue/30 bg-sky-50/50 dark:bg-sky-500/10' 
+                              : 'border-zinc-100/80 dark:border-white/10 hover:shadow-xs'
+                          } ${draggedEquipId === e.id ? 'opacity-40 scale-[0.99]' : ''}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div 
+                              className="cursor-grab active:cursor-grabbing p-1.5 text-zinc-300 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900" 
+                              title="Arrastra para reordenar la posición de inspección"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-zinc-900 dark:text-white text-sm flex items-center gap-2">
+                                <span className="text-[10px] font-black bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue dark:text-sky-400 px-2 py-0.5 rounded-md">
+                                  #{e.inspectionOrder || (eIdx + 1)}
+                                </span>
+                                {e.name}
+                              </p>
+                              <div className="flex gap-2 items-center mt-1.5">
+                                <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                                  Planta: {plants.find(p => p.id === e.plantId)?.name || 'Sin Planta'}
+                                </span>
+                                <span className="text-[9px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-white/5 text-zinc-400 dark:text-zinc-500 px-1.5 py-0.5 rounded font-bold uppercase">
+                                  Área: {area.name}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex gap-2">
+
+                          <div className="flex gap-1 items-center">
+                            <button 
+                              disabled={eIdx === 0 || isReordering} 
+                              onClick={() => handleMoveOrder(areaEquips, eIdx, 'up')}
+                              title="Subir orden de inspección"
+                              className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white disabled:opacity-20 disabled:cursor-not-allowed transition-colors rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button 
+                              disabled={eIdx === areaEquips.length - 1 || isReordering} 
+                              onClick={() => handleMoveOrder(areaEquips, eIdx, 'down')}
+                              title="Bajar orden de inspección"
+                              className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white disabled:opacity-20 disabled:cursor-not-allowed transition-colors rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                            <div className="w-[1px] h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
                             <button onClick={() => { 
                               setEditingEquip(e); 
                               setFormData({
