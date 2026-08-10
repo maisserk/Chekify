@@ -116,7 +116,7 @@ export class FindingService {
             if (finding.equipmentId && finding.equipmentId !== 'general') {
               const cachedEquip = getCachedEquipment();
               const equip = cachedEquip.find(e => e.id === finding.equipmentId);
-              if (equip) finding.equipmentName = equip.name;
+              if (equip) finding.equipmentName = equip.tag ? `${equip.name} (${equip.tag})` : equip.name;
             }
             if (!finding.equipmentName) {
               finding.equipmentName = 'Puntos Generales de Inspección';
@@ -323,7 +323,7 @@ export class FindingService {
     if (!resolvedEquipmentName && findingData.equipmentId && findingData.equipmentId !== 'general') {
       const cachedEquip = getCachedEquipment();
       const equip = cachedEquip.find(e => e.id === findingData.equipmentId);
-      if (equip) resolvedEquipmentName = equip.name;
+      if (equip) resolvedEquipmentName = equip.tag ? `${equip.name} (${equip.tag})` : equip.name;
     } else if (!resolvedEquipmentName && (findingData.equipmentId === 'general' || !findingData.equipmentId)) {
       resolvedEquipmentName = 'Puntos Generales de Inspección';
     }

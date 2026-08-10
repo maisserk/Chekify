@@ -203,7 +203,7 @@ class OfflineQueueService {
 
           if (!cleanPayload.equipmentName && cleanPayload.equipmentId && cleanPayload.equipmentId !== 'general') {
             const equip = cachedEquip.find(e => e.id === cleanPayload.equipmentId);
-            if (equip) cleanPayload.equipmentName = equip.name;
+            if (equip) cleanPayload.equipmentName = equip.tag ? `${equip.name} (${equip.tag})` : equip.name;
           }
           if (!cleanPayload.equipmentName) {
             cleanPayload.equipmentName = 'Puntos Generales de Inspección';

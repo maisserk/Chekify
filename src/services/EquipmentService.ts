@@ -90,6 +90,7 @@ export class EquipmentService {
 
       const cleanPayload: Partial<Equipment> = {
         name: equipment.name,
+        tag: equipment.tag || '',
         plantId: equipment.plantId,
         areaId: equipment.areaId,
         inspectionOrder: Number(equipment.inspectionOrder) || 0,
