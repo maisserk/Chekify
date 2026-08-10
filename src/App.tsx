@@ -7843,7 +7843,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                                 </span>
                                 <span>{e.name}</span>
                                 {e.tag && (
-                                  <span className="text-[10px] font-bold tracking-wider bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 rounded-md border border-zinc-200/80 dark:border-white/10 uppercase">
+                                  <span className="text-[10px] font-bold tracking-wider bg-[#2a2728] text-zinc-100 px-2 py-0.5 rounded-md border border-[#3d393a] dark:border-white/10 uppercase shadow-2xs">
                                     TAG: {e.tag}
                                   </span>
                                 )}
