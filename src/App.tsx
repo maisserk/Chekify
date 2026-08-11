@@ -6606,7 +6606,7 @@ const BulkUpload = ({
   plants, 
   areas 
 }: { 
-  entityType: 'Users' | 'Plants' | 'Areas' | 'Equipment' | 'Findings',
+  entityType: 'Users' | 'Plants' | 'Areas' | 'Equipment',
   onComplete: (count: number) => void,
   onError: (err: string) => void,
   plants?: {id: string, name: string}[],
@@ -6743,85 +6743,6 @@ const BulkUpload = ({
               }, { merge: true });
               count++;
             }
-            else if (entityType === 'Findings') {
-              const desc = item.descripcion || item.hallazgo || item.description || item.observacion;
-              if (!desc) continue;
-
-              const plantInput = item.planta_id || item.planta || item.plantid;
-              let plantId = plantInput || 'PLANTA-01';
-              if (plants && plantInput) {
-                const found = plants.find(p => p.id === plantInput || (p.name || '').toLowerCase() === (plantInput || '').toLowerCase());
-                if (found) plantId = found.id;
-              }
-
-              const areaInput = item.area_id || item.area || item.nombre_area;
-              let areaId = areaInput || '';
-              let areaName = item.area_nombre || item.area || item.nombre_area || 'Área General';
-              if (areas && areaInput) {
-                const found = areas.find(a => a.id === areaInput || (a.name || '').toLowerCase() === (areaInput || '').toLowerCase());
-                if (found) {
-                  areaId = found.id;
-                  areaName = found.name;
-                }
-              }
-
-              const equipNameInput = item.equipo || item.nombre_equipo || item.equipment || 'Puntos Generales de Inspección';
-              const operatorName = item.operador || item.operador_nombre || item.operator || 'Operador Carga Masiva';
-              
-              const id = item.id || `FIND-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-              
-              const rawDate = item.fecha_reporte || item.fecha || item.createdat;
-              const parsedDate = parseAnyDate(rawDate) || new Date();
-              const tsDate = Timestamp.fromDate(parsedDate);
-
-              const rawClosedDate = item.fecha_cierre || item.closedat;
-              let closedTs: Timestamp | null = null;
-              if (rawClosedDate) {
-                const pClosed = parseAnyDate(rawClosedDate);
-                if (pClosed) closedTs = Timestamp.fromDate(pClosed);
-              }
-
-              const statusInput = (item.estado || item.status || 'Abierto').toLowerCase();
-              let status: 'Open' | 'InReview' | 'Closed' = 'Open';
-              if (statusInput.includes('cerrad') || statusInput === 'closed') status = 'Closed';
-              else if (statusInput.includes('revis') || statusInput === 'inreview') status = 'InReview';
-
-              const priorityInput = (item.prioridad || item.priority || 'Media').toLowerCase();
-              let priority = 'Media';
-              if (priorityInput.includes('alta') || priorityInput.includes('high')) priority = 'Alta';
-              else if (priorityInput.includes('critica') || priorityInput.includes('critical')) priority = 'Crítica';
-              else if (priorityInput.includes('baja') || priorityInput.includes('low')) priority = 'Baja';
-
-              const inspDuration = item.duracion_area_seg ? parseInt(item.duracion_area_seg) : 0;
-              const equipDuration = item.duracion_equipo_seg ? parseInt(item.duracion_equipo_seg) : 0;
-
-              const payload: any = {
-                id,
-                plantId,
-                areaId,
-                areaName,
-                equipmentId: item.equipo_id || 'general',
-                equipmentName: equipNameInput,
-                operatorName,
-                description: desc,
-                priority,
-                status,
-                createdAt: tsDate,
-                date: tsDate,
-                inspectionStartedAt: tsDate,
-                inspectionCompletedAt: tsDate,
-                inspectionDurationSeconds: inspDuration,
-                equipmentStartedAt: tsDate,
-                equipmentCompletedAt: tsDate,
-                equipmentDurationSeconds: equipDuration,
-                supervisorComments: item.comentarios_supervisor || item.solucion || '',
-                photoUrl: item.foto_url || '',
-                closedAt: closedTs
-              };
-
-              await setDoc(doc(db, 'findings', id), payload, { merge: true });
-              count++;
-            }
           } catch (err: any) {
             console.error(`Error processing item:`, item, err);
           }
@@ -6844,7 +6765,6 @@ const BulkUpload = ({
     if (entityType === 'Areas') return "id,planta_id,nombre,qr\nAREA-01,PLANTA-01,Zona de Carga,QR001";
     if (entityType === 'Equipment') return "id,planta,area,nombre,orden,check_items\nEQ-01,Planta Norte,Zona de Carga,Motor Principal,1,Cableado;Aceite;Temperatura";
     if (entityType === 'Users') return "nombre,usuario,rol,planta\nJuan Perez,juan.perez,Operador,Planta Norte";
-    if (entityType === 'Findings') return "id,planta_id,area,equipo,operador,descripcion,prioridad,estado,fecha_reporte,duracion_area_seg,duracion_equipo_seg,fecha_cierre,comentarios_supervisor\nHALL-01,PLANTA-01,Zona de Carga,Motor Principal,Juan Perez,Falta orden y limpieza en la base del equipo,Alta,Abierto,2026-08-10 08:00:00,120,45,,";
     return "";
   };
 
@@ -6858,8 +6778,7 @@ const BulkUpload = ({
           <p className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">Carga Masiva de {
             entityType === 'Users' ? 'Usuarios' :
             entityType === 'Plants' ? 'Plantas' :
-            entityType === 'Areas' ? 'Áreas' :
-            entityType === 'Equipment' ? 'Equipos' : 'Registros / Hallazgos'
+            entityType === 'Areas' ? 'Áreas' : 'Equipos'
           }</p>
           <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold tracking-tight uppercase">Sube un archivo CSV con los datos</p>
         </div>
@@ -6907,7 +6826,7 @@ const BulkUpload = ({
 };
 
 const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'Users' | 'Plants' | 'Areas' | 'Equipment' | 'Findings'>('Users');
+  const [activeSubTab, setActiveSubTab] = useState<'Users' | 'Plants' | 'Areas' | 'Equipment'>('Users');
   const [areas, setAreas] = useState<Area[]>([]);
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
 
@@ -6928,7 +6847,7 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
   return (
     <div className="space-y-6">
       <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl overflow-x-auto no-scrollbar border border-transparent dark:border-white/5">
-        {(['Users', 'Plants', 'Areas', 'Equipment', 'Findings'] as const).map((tab, tIdx) => (
+        {(['Users', 'Plants', 'Areas', 'Equipment'] as const).map((tab, tIdx) => (
           <button
             key={`admin-tab-${tab}-${tIdx}`}
             onClick={() => setActiveSubTab(tab)}
@@ -6938,8 +6857,7 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
           >
             {tab === 'Users' ? 'Usuarios' : 
              tab === 'Plants' ? 'Plantas' : 
-             tab === 'Areas' ? 'Áreas' : 
-             tab === 'Equipment' ? 'Equipos' : 'Carga Masiva Registros'}
+             tab === 'Areas' ? 'Áreas' : 'Equipos'}
           </button>
         ))}
       </div>
@@ -6948,17 +6866,6 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
       {activeSubTab === 'Plants' && <AdminPlantManagement plants={plants} />}
       {activeSubTab === 'Areas' && <AdminAreaManagement plants={plants} areas={areas} />}
       {activeSubTab === 'Equipment' && <AdminEquipmentManagement plants={plants} areas={areas} equipment={equipmentList} />}
-      {activeSubTab === 'Findings' && (
-        <div className="space-y-4">
-          <BulkUpload 
-            entityType="Findings" 
-            plants={plants} 
-            areas={areas} 
-            onComplete={(c) => alert(`Se cargaron ${c} hallazgos/registros exitosamente.`)} 
-            onError={(err) => alert(err)} 
-          />
-        </div>
-      )}
     </div>
   );
 };
