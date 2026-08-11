@@ -190,6 +190,20 @@ class OfflineQueueService {
         const cleanPayload = this.sanitizePayload(item.payload);
 
         if (item.collection === 'findings' && cleanPayload && typeof cleanPayload === 'object') {
+          const desc = (cleanPayload.description || '').toLowerCase();
+          const isSyntheticClean = desc.includes('inspección voso / ruta conforme') ||
+            desc.includes('sin hallazgos') ||
+            desc.includes('inspección conforme') ||
+            desc.includes('todos los puntos evaluados se encuentran en condición normal') ||
+            (Array.isArray(cleanPayload.history) && cleanPayload.history.some((h: any) => h?.action === 'Inspección Conforme (Sin hallazgos)'));
+
+          if (isSyntheticClean) {
+            console.log(`[OfflineQueue] Dropping synthetic clean finding ${item.docId} from queue.`);
+            this.queue = this.queue.filter(i => i.id !== item.id);
+            this.saveQueueToStorage();
+            continue;
+          }
+
           const cachedAreas = getCachedAreas();
           const cachedEquip = getCachedEquipment();
 

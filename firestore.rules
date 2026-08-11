@@ -55,14 +55,12 @@ service cloud.firestore {
 
     match /inspections/{inspectionId} {
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isAdmin() || isSupervisor();
+      allow create, update, delete: if isAuthenticated();
     }
 
     match /findings/{findingId} {
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isSupervisor() || isAdmin();
+      allow create, update, delete: if isAuthenticated();
     }
 
     match /notifications/{notificationId} {

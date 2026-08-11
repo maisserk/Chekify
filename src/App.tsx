@@ -1555,7 +1555,7 @@ const OperatorDashboard = ({
                     userId: user.uid,
                     userName: user.name || user.email,
                     timestamp: new Date().toISOString(),
-                    action: 'Hallazgo autogenerado (Inspección VOSO)',
+                    action: 'Hallazgo detectado (Inspección VOSO)',
                     comment: 'Hallazgo detectado durante la inspección de ruta.'
                   } as any
                 ]
@@ -1646,7 +1646,7 @@ const OperatorDashboard = ({
                     userId: user.uid,
                     userName: user.name || user.email,
                     timestamp: new Date().toISOString(),
-                    action: 'Hallazgo autogenerado (Orden & Limpieza)',
+                    action: 'Hallazgo detectado (Orden & Limpieza)',
                     comment: 'Desviación de 5S detectada durante la inspección.'
                   } as any
                 ]
@@ -1657,53 +1657,6 @@ const OperatorDashboard = ({
               }
             } catch (ordenErr) {
               console.warn('[Inspections] Failed creating Orden finding for equip:', equipId, ordenErr);
-            }
-          }
-
-          // 3. Create a Compliant (Sin Hallazgos) record if equipment was inspected with 0 issues
-          if (pureVosoIssues.length === 0 && tradIssues.length === 0 && pureOrdenIssues.length === 0) {
-            try {
-              const opStatusLabel = res?.operatingStatus === 'Detenido' ? 'Detenido' : 'En Funcionamiento';
-              const cleanDesc = `Inspección VOSO / Ruta Conforme en ${equip?.name || equipId}. Condición operativa: ${opStatusLabel}.\n• Todos los puntos evaluados se encuentran en condición normal (Bueno/Conforme).`;
-
-              const cleanResultObj = await FindingService.createFinding({
-                areaId: selectedArea!.id,
-                areaName: selectedArea!.name,
-                plantId: currentPlantId,
-                equipmentId: equipId,
-                equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
-                description: cleanDesc,
-                status: 'Closed',
-                priority: 'Baja',
-                date: new Date(),
-                closedAt: Timestamp.now(),
-                closedBy: user.uid,
-                inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
-                inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
-                inspectionDurationSeconds: totalDurationSeconds,
-                equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
-                equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
-                equipmentDurationSeconds: equipDuration,
-                operatorId: user.uid,
-                operatorName: user.name || user.email,
-                operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
-                source: 'VOSO',
-                clima: climaPayload,
-                history: [
-                  {
-                    status: 'Closed' as any,
-                    userId: user.uid,
-                    userName: user.name || user.email,
-                    timestamp: new Date().toISOString(),
-                    action: 'Inspección Conforme (Sin hallazgos)',
-                    comment: 'Inspección de equipo completada satisfactoriamente sin desviaciones.'
-                  } as any
-                ]
-              }, null);
-
-              setLastSavedFindingForPdf(cleanResultObj as unknown as Finding);
-            } catch (cleanErr) {
-              console.warn('[Inspections] Failed creating compliant record for equip:', equipId, cleanErr);
             }
           }
         }
