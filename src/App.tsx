@@ -138,6 +138,15 @@ import { useAppUsers } from './hooks/useAppUsers';
 import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText, parseAnyDate } from './utils/dateUtils';
 import { getCachedAreas, cacheAreas, getCachedEquipment, cacheEquipment } from './utils/offlineCache';
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg = 'Operation timed out'): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMsg)), timeoutMs)
+    )
+  ]);
+}
+
 const generateSafeId = (name: string): string => {
   return name
     .toLowerCase()
@@ -1434,9 +1443,9 @@ const OperatorDashboard = ({
 
         if (isOnline) {
           try {
-            await setDoc(doc(db, 'inspections', inspectionId), inspectionPayload);
+            await withTimeout(setDoc(doc(db, 'inspections', inspectionId), inspectionPayload), 5000, 'Inspection setDoc timeout');
           } catch (err) {
-            console.warn('[Inspections] Direct save failed, queuing offline:', err);
+            console.warn('[Inspections] Direct save failed or timed out, queuing offline:', err);
             await offlineQueueService.enqueue('inspections', inspectionId, inspectionPayload, 'create');
           }
         } else {
@@ -1464,180 +1473,188 @@ const OperatorDashboard = ({
 
           // 1. Create VOSO Finding if pure VOSO or traditional issues exist
           if (pureVosoIssues.length > 0 || tradIssues.length > 0) {
-            const opStatusLabel = res?.operatingStatus === 'Detenido' ? 'Detenido' : 'En Funcionamiento';
-            let description = `Inspección VOSO en ${equip?.name || equipId}. Condición operativa: ${opStatusLabel}.\n\n`;
-            
-            if (pureVosoIssues.length > 0) {
-              description += "HALLAZGOS VOSO:\n";
-              pureVosoIssues.forEach(([id, v]) => {
-                const ver = equip?.inspeccionVOSO?.ver || [];
-                const oir = equip?.inspeccionVOSO?.oir || [];
-                const sentir = equip?.inspeccionVOSO?.sentir || [];
-                const oler = equip?.inspeccionVOSO?.oler || [];
+            try {
+              const opStatusLabel = res?.operatingStatus === 'Detenido' ? 'Detenido' : 'En Funcionamiento';
+              let description = `Inspección VOSO en ${equip?.name || equipId}. Condición operativa: ${opStatusLabel}.\n\n`;
+              
+              if (pureVosoIssues.length > 0) {
+                description += "HALLAZGOS VOSO:\n";
+                pureVosoIssues.forEach(([id, v]) => {
+                  const ver = equip?.inspeccionVOSO?.ver || [];
+                  const oir = equip?.inspeccionVOSO?.oir || [];
+                  const sentir = equip?.inspeccionVOSO?.sentir || [];
+                  const oler = equip?.inspeccionVOSO?.oler || [];
 
-                let categoryName = "GENERAL";
-                if (ver.some(i => i.id === id)) { categoryName = "VER"; }
-                else if (oir.some(i => i.id === id)) { categoryName = "OÍR"; }
-                else if (sentir.some(i => i.id === id)) { categoryName = "SENTIR"; }
-                else if (oler.some(i => i.id === id)) { categoryName = "OLER"; }
+                  let categoryName = "GENERAL";
+                  if (ver.some(i => i.id === id)) { categoryName = "VER"; }
+                  else if (oir.some(i => i.id === id)) { categoryName = "OÍR"; }
+                  else if (sentir.some(i => i.id === id)) { categoryName = "SENTIR"; }
+                  else if (oler.some(i => i.id === id)) { categoryName = "OLER"; }
 
-                const allVOSO = [...ver, ...oir, ...sentir, ...oler];
-                const item = allVOSO.find(i => i.id === id);
-                const itemName = item?.name || id;
-                const commentText = v.comment ? ` - ${v.comment}` : '';
-                const solvedText = v.solvedByOperator ? ' - Solucionado por operador' : '';
-                description += `• ${categoryName} - ${itemName}: ${v.status}${commentText}${solvedText}\n`;
-              });
-            }
-
-            if (tradIssues.length > 0) {
-              description += "\nOTRAS EVALUACIONES DE INSPECCIÓN:\n";
-              tradIssues.forEach(([id, s]) => {
-                const item = equip?.checkItems?.find(i => id === id);
-                description += `• ${item?.name || id}: ${s}\n`;
-              });
-            }
-
-            const priority = pureVosoIssues.some(v => v[1]?.status === 'Crítico') ? 'Alta' : 'Media';
-            const allPhotos: string[] = [];
-            pureVosoIssues.forEach(v => {
-              const resp = v[1];
-              if (Array.isArray(resp?.photoUrls) && resp.photoUrls.length > 0) {
-                resp.photoUrls.forEach((p: string) => {
-                  if (p && typeof p === 'string' && p.trim() && !allPhotos.includes(p.trim())) {
-                    allPhotos.push(p.trim());
-                  }
+                  const allVOSO = [...ver, ...oir, ...sentir, ...oler];
+                  const item = allVOSO.find(i => i.id === id);
+                  const itemName = item?.name || id;
+                  const commentText = v.comment ? ` - ${v.comment}` : '';
+                  const solvedText = v.solvedByOperator ? ' - Solucionado por operador' : '';
+                  description += `• ${categoryName} - ${itemName}: ${v.status}${commentText}${solvedText}\n`;
                 });
-              } else if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim() && !allPhotos.includes(resp.photoUrl.trim())) {
-                allPhotos.push(resp.photoUrl.trim());
               }
-            });
-            const firstPhoto = allPhotos[0] || null;
 
-            const resultObj = await FindingService.createFinding({
-              areaId: selectedArea!.id,
-              areaName: selectedArea!.name,
-              plantId: selectedArea!.plantId || user.plantId || 'default-plant',
-              equipmentId: equipId,
-              equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
-              description: description,
-              photoUrl: firstPhoto || undefined,
-              photoUrls: allPhotos,
-              status: pureVosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
-              priority,
-              date: new Date(),
-              inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
-              inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
-              inspectionDurationSeconds: totalDurationSeconds,
-              equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
-              equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
-              equipmentDurationSeconds: equipDuration,
-              operatorId: user.uid,
-              operatorName: user.name || user.email,
-              operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
-              source: 'VOSO',
-              clima: climaPayload,
-              history: [
-                {
-                  status: (pureVosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
-                  userId: user.uid,
-                  userName: user.name || user.email,
-                  timestamp: new Date().toISOString(),
-                  action: 'Hallazgo autogenerado (Inspección VOSO)',
-                  comment: 'Hallazgo detectado durante la inspección de ruta.'
-                } as any
-              ]
-            }, firstPhoto);
-
-            setLastSavedFindingForPdf(resultObj as unknown as Finding);
-
-            const notificationId = doc(collection(db, 'notifications')).id;
-            const notificationPayload = {
-              id: notificationId,
-              title: 'Nuevo Hallazgo VOSO',
-              message: `${user.name || user.email} ha reportado hallazgos VOSO en ${equip?.name || equipId}`,
-              type: 'Finding',
-              targetRole: 'Supervisor',
-              scheduledAt: isOnline ? serverTimestamp() : new Date(),
-              status: 'Sent',
-              createdBy: user.uid,
-              createdAt: isOnline ? serverTimestamp() : new Date(),
-              referenceId: resultObj.id,
-              plantId: selectedArea!.plantId || user.plantId || 'default-plant'
-            };
-
-            if (isOnline) {
-              try {
-                await setDoc(doc(db, 'notifications', notificationId), notificationPayload);
-              } catch (err) {
-                console.warn('Notification setDoc error:', err);
+              if (tradIssues.length > 0) {
+                description += "\nOTRAS EVALUACIONES DE INSPECCIÓN:\n";
+                tradIssues.forEach(([id, s]) => {
+                  const item = equip?.checkItems?.find(i => id === id);
+                  description += `• ${item?.name || id}: ${s}\n`;
+                });
               }
+
+              const priority = pureVosoIssues.some(v => v[1]?.status === 'Crítico') ? 'Alta' : 'Media';
+              const allPhotos: string[] = [];
+              pureVosoIssues.forEach(v => {
+                const resp = v[1];
+                if (Array.isArray(resp?.photoUrls) && resp.photoUrls.length > 0) {
+                  resp.photoUrls.forEach((p: string) => {
+                    if (p && typeof p === 'string' && p.trim() && !allPhotos.includes(p.trim())) {
+                      allPhotos.push(p.trim());
+                    }
+                  });
+                } else if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim() && !allPhotos.includes(resp.photoUrl.trim())) {
+                  allPhotos.push(resp.photoUrl.trim());
+                }
+              });
+              const firstPhoto = allPhotos[0] || null;
+
+              const resultObj = await FindingService.createFinding({
+                areaId: selectedArea!.id,
+                areaName: selectedArea!.name,
+                plantId: selectedArea!.plantId || user.plantId || 'default-plant',
+                equipmentId: equipId,
+                equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
+                description: description,
+                photoUrl: firstPhoto || undefined,
+                photoUrls: allPhotos,
+                status: pureVosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
+                priority,
+                date: new Date(),
+                inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
+                inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
+                inspectionDurationSeconds: totalDurationSeconds,
+                equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
+                equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
+                equipmentDurationSeconds: equipDuration,
+                operatorId: user.uid,
+                operatorName: user.name || user.email,
+                operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
+                source: 'VOSO',
+                clima: climaPayload,
+                history: [
+                  {
+                    status: (pureVosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
+                    userId: user.uid,
+                    userName: user.name || user.email,
+                    timestamp: new Date().toISOString(),
+                    action: 'Hallazgo autogenerado (Inspección VOSO)',
+                    comment: 'Hallazgo detectado durante la inspección de ruta.'
+                  } as any
+                ]
+              }, firstPhoto);
+
+              setLastSavedFindingForPdf(resultObj as unknown as Finding);
+
+              const notificationId = doc(collection(db, 'notifications')).id;
+              const notificationPayload = {
+                id: notificationId,
+                title: 'Nuevo Hallazgo VOSO',
+                message: `${user.name || user.email} ha reportado hallazgos VOSO en ${equip?.name || equipId}`,
+                type: 'Finding',
+                targetRole: 'Supervisor',
+                scheduledAt: isOnline ? serverTimestamp() : new Date(),
+                status: 'Sent',
+                createdBy: user.uid,
+                createdAt: isOnline ? serverTimestamp() : new Date(),
+                referenceId: resultObj.id,
+                plantId: selectedArea!.plantId || user.plantId || 'default-plant'
+              };
+
+              if (isOnline) {
+                try {
+                  await withTimeout(setDoc(doc(db, 'notifications', notificationId), notificationPayload), 3000, 'Notification setDoc timeout');
+                } catch (err) {
+                  console.warn('Notification setDoc error:', err);
+                }
+              }
+            } catch (vosoErr) {
+              console.warn('[Inspections] Failed creating VOSO finding for equip:', equipId, vosoErr);
             }
           }
 
           // 2. Create Orden y Limpieza Finding if Orden issues exist
           if (pureOrdenIssues.length > 0) {
-            let ordenDesc = `[ORDEN] Programa 5S / Aseo en ${equip?.name || equipId}.\n\n`;
-            pureOrdenIssues.forEach(([id, v]) => {
-              const item = ordenList.find(i => i.id === id);
-              const itemName = item?.name || id;
-              const commentText = v.comment ? ` - ${v.comment}` : '';
-              const solvedText = v.solvedByOperator ? ' - Solucionado por operador' : '';
-              ordenDesc += `• [ORDEN] ${itemName}: ${v.status}${commentText}${solvedText}\n`;
-            });
+            try {
+              let ordenDesc = `[ORDEN] Programa 5S / Aseo en ${equip?.name || equipId}.\n\n`;
+              pureOrdenIssues.forEach(([id, v]) => {
+                const item = ordenList.find(i => i.id === id);
+                const itemName = item?.name || id;
+                const commentText = v.comment ? ` - ${v.comment}` : '';
+                const solvedText = v.solvedByOperator ? ' - Solucionado por operador' : '';
+                ordenDesc += `• [ORDEN] ${itemName}: ${v.status}${commentText}${solvedText}\n`;
+              });
 
-            const ordenPhotos: string[] = [];
-            pureOrdenIssues.forEach(v => {
-              const resp = v[1];
-              if (Array.isArray(resp?.photoUrls) && resp.photoUrls.length > 0) {
-                resp.photoUrls.forEach((p: string) => {
-                  if (p && typeof p === 'string' && p.trim() && !ordenPhotos.includes(p.trim())) {
-                    ordenPhotos.push(p.trim());
-                  }
-                });
-              } else if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim() && !ordenPhotos.includes(resp.photoUrl.trim())) {
-                ordenPhotos.push(resp.photoUrl.trim());
+              const ordenPhotos: string[] = [];
+              pureOrdenIssues.forEach(v => {
+                const resp = v[1];
+                if (Array.isArray(resp?.photoUrls) && resp.photoUrls.length > 0) {
+                  resp.photoUrls.forEach((p: string) => {
+                    if (p && typeof p === 'string' && p.trim() && !ordenPhotos.includes(p.trim())) {
+                      ordenPhotos.push(p.trim());
+                    }
+                  });
+                } else if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim() && !ordenPhotos.includes(resp.photoUrl.trim())) {
+                  ordenPhotos.push(resp.photoUrl.trim());
+                }
+              });
+              const firstOrdenPhoto = ordenPhotos[0] || null;
+
+              const ordenResultObj = await FindingService.createFinding({
+                areaId: selectedArea!.id,
+                areaName: selectedArea!.name,
+                plantId: selectedArea!.plantId || user.plantId || 'default-plant',
+                equipmentId: equipId,
+                equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
+                description: ordenDesc,
+                photoUrl: firstOrdenPhoto || undefined,
+                photoUrls: ordenPhotos,
+                status: pureOrdenIssues.every(v => v[1]?.solvedByOperator) ? 'Closed' : 'Open',
+                priority: 'Media',
+                date: new Date(),
+                inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
+                inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
+                inspectionDurationSeconds: totalDurationSeconds,
+                equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
+                equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
+                equipmentDurationSeconds: equipDuration,
+                operatorId: user.uid,
+                operatorName: user.name || user.email,
+                operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
+                source: 'OrdenYLimpieza',
+                clima: climaPayload,
+                history: [
+                  {
+                    status: (pureOrdenIssues.every(v => v[1]?.solvedByOperator) ? 'Closed' : 'Open') as any,
+                    userId: user.uid,
+                    userName: user.name || user.email,
+                    timestamp: new Date().toISOString(),
+                    action: 'Hallazgo autogenerado (Orden & Limpieza)',
+                    comment: 'Desviación de 5S detectada durante la inspección.'
+                  } as any
+                ]
+              }, firstOrdenPhoto);
+
+              if (pureVosoIssues.length === 0 && tradIssues.length === 0) {
+                setLastSavedFindingForPdf(ordenResultObj as unknown as Finding);
               }
-            });
-            const firstOrdenPhoto = ordenPhotos[0] || null;
-
-            const ordenResultObj = await FindingService.createFinding({
-              areaId: selectedArea!.id,
-              areaName: selectedArea!.name,
-              plantId: selectedArea!.plantId || user.plantId || 'default-plant',
-              equipmentId: equipId,
-              equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
-              description: ordenDesc,
-              photoUrl: firstOrdenPhoto || undefined,
-              photoUrls: ordenPhotos,
-              status: pureOrdenIssues.every(v => v[1]?.solvedByOperator) ? 'Closed' : 'Open',
-              priority: 'Media',
-              date: new Date(),
-              inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
-              inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
-              inspectionDurationSeconds: totalDurationSeconds,
-              equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
-              equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
-              equipmentDurationSeconds: equipDuration,
-              operatorId: user.uid,
-              operatorName: user.name || user.email,
-              operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
-              source: 'OrdenYLimpieza',
-              clima: climaPayload,
-              history: [
-                {
-                  status: (pureOrdenIssues.every(v => v[1]?.solvedByOperator) ? 'Closed' : 'Open') as any,
-                  userId: user.uid,
-                  userName: user.name || user.email,
-                  timestamp: new Date().toISOString(),
-                  action: 'Hallazgo autogenerado (Orden & Limpieza)',
-                  comment: 'Desviación de 5S detectada durante la inspección.'
-                } as any
-              ]
-            }, firstOrdenPhoto);
-
-            if (pureVosoIssues.length === 0 && tradIssues.length === 0) {
-              setLastSavedFindingForPdf(ordenResultObj as unknown as Finding);
+            } catch (ordenErr) {
+              console.warn('[Inspections] Failed creating Orden finding for equip:', equipId, ordenErr);
             }
           }
         }
