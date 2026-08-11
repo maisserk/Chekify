@@ -2898,7 +2898,7 @@ const OperatorDashboard = ({
 
                 {findingPhotos.map((photo, pIdx) => (
                   <div key={`finding-preview-${pIdx}`} className="relative group w-20 h-20">
-                    <img src={photo} className="w-20 h-20 object-cover rounded-2xl border border-zinc-200 dark:border-white/10" alt={`Preview ${pIdx + 1}`} />
+                    <OfflineImage src={photo} className="w-20 h-20 object-cover rounded-2xl border border-zinc-200 dark:border-white/10" alt={`Preview ${pIdx + 1}`} />
                     <button 
                       type="button"
                       onClick={() => setFindingPhotos(prev => prev.filter((_, i) => i !== pIdx))}

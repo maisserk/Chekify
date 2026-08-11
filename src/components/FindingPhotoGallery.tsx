@@ -12,101 +12,96 @@ export const extractFindingPhotos = (finding: Finding | null | undefined): strin
   if (!finding) return [];
   const rawList: string[] = [];
 
-  if (Array.isArray(finding.photoUrls) && finding.photoUrls.length > 0) {
-    finding.photoUrls.forEach(p => {
-      if (p && typeof p === 'string' && p.trim()) {
-        rawList.push(p.trim());
+  const addPhoto = (val: any) => {
+    if (!val) return;
+    if (typeof val === 'string' && val.trim().length > 0) {
+      let str = val.trim();
+      if (!str.startsWith('http://') && !str.startsWith('https://') && !str.startsWith('data:') && !str.startsWith('offline-cached://') && !str.startsWith('blob:')) {
+        if (str.length > 50) {
+          str = `data:image/jpeg;base64,${str}`;
+        }
       }
-    });
-  }
+      if (!rawList.includes(str)) {
+        rawList.push(str);
+      }
+    } else if (Array.isArray(val)) {
+      val.forEach(addPhoto);
+    }
+  };
 
-  if (finding.photoUrl && typeof finding.photoUrl === 'string' && finding.photoUrl.trim()) {
-    rawList.push(finding.photoUrl.trim());
-  }
+  // 1. Primary photo fields
+  addPhoto(finding.photoUrls);
+  addPhoto(finding.photoUrl);
 
+  // 2. Additional potential photo fields
+  addPhoto((finding as any).photos);
+  addPhoto((finding as any).photo);
+  addPhoto((finding as any).images);
+  addPhoto((finding as any).imageUrl);
+  addPhoto((finding as any).evidenceUrl);
+  addPhoto((finding as any).evidenceUrls);
+  addPhoto((finding as any).evidence);
+  addPhoto((finding as any).solutionPhoto);
+  addPhoto((finding as any).solutionPhotoUrl);
+  addPhoto((finding as any).closingPhoto);
+  addPhoto((finding as any).closingPhotoUrl);
+  addPhoto((finding as any).resolutionPhoto);
+  addPhoto((finding as any).actionPhoto);
+  addPhoto((finding as any).actionPhotoUrl);
+
+  // 3. VOSO & Inspection checklist responses
   if ((finding as any).vosoResponses && typeof (finding as any).vosoResponses === 'object') {
     Object.values((finding as any).vosoResponses).forEach((resp: any) => {
-      if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim()) {
-        rawList.push(resp.photoUrl.trim());
-      }
-      if (Array.isArray(resp?.photoUrls)) {
-        resp.photoUrls.forEach((p: string) => {
-          if (p && typeof p === 'string' && p.trim()) rawList.push(p.trim());
-        });
-      }
+      addPhoto(resp?.photoUrl);
+      addPhoto(resp?.photoUrls);
+      addPhoto(resp?.photos);
     });
   }
 
   if ((finding as any).voso && typeof (finding as any).voso === 'object') {
     Object.values((finding as any).voso).forEach((resp: any) => {
-      if (resp?.photoUrl && typeof resp.photoUrl === 'string' && resp.photoUrl.trim()) {
-        rawList.push(resp.photoUrl.trim());
-      }
-      if (Array.isArray(resp?.photoUrls)) {
-        resp.photoUrls.forEach((p: string) => {
-          if (p && typeof p === 'string' && p.trim()) rawList.push(p.trim());
-        });
-      }
+      addPhoto(resp?.photoUrl);
+      addPhoto(resp?.photoUrls);
+      addPhoto(resp?.photos);
+    });
+  }
+
+  if ((finding as any).responses && typeof (finding as any).responses === 'object') {
+    Object.values((finding as any).responses).forEach((resp: any) => {
+      addPhoto(resp?.photoUrl);
+      addPhoto(resp?.photoUrls);
+      addPhoto(resp?.photos);
+    });
+  }
+
+  if ((finding as any).items && typeof (finding as any).items === 'object') {
+    Object.values((finding as any).items).forEach((resp: any) => {
+      addPhoto(resp?.photoUrl);
+      addPhoto(resp?.photoUrls);
+      addPhoto(resp?.photos);
     });
   }
 
   if (rawList.length === 0) return [];
 
-  // Separate cloud / HTTP(S) / blob URLs from local temporary placeholders (offline-cached:// or data:)
+  // Deduplicate while preserving online URLs first, followed by offline/cached/data URLs.
+  // We keep ALL URLs so OfflineImage can fall back to local/cached copy if online copy fails to load.
   const onlineUrls = rawList.filter(p => p.startsWith('http://') || p.startsWith('https://') || p.startsWith('blob:'));
   const localUrls = rawList.filter(p => p.startsWith('offline-cached://') || p.startsWith('data:'));
 
-  // If online uploaded URLs exist, prioritize them completely to avoid showing stale offline/data placeholders
-  if (onlineUrls.length > 0) {
-    const uniqueOnline: string[] = [];
-    onlineUrls.forEach(url => {
-      if (!uniqueOnline.includes(url)) {
-        uniqueOnline.push(url);
-      }
-    });
-
-    if (uniqueOnline.length >= localUrls.length) {
-      return uniqueOnline;
-    }
-
-    const result: string[] = [...uniqueOnline];
-    localUrls.forEach((local, idx) => {
-      if (idx >= uniqueOnline.length && !result.includes(local)) {
-        result.push(local);
-      }
-    });
-    return result;
-  }
-
-  // If no online URLs exist yet, return deduplicated local temporary URLs
   const result: string[] = [];
-  const seenSignatures = new Set<string>();
 
-  const getSignature = (str: string): string => {
-    if (str.startsWith('offline-cached://')) return str;
-    if (str.startsWith('data:image/')) {
-      const commaIdx = str.indexOf(',');
-      const payload = commaIdx !== -1 ? str.substring(commaIdx + 1) : str;
-      if (payload.length > 100) {
-        return `b64_${payload.length}_${payload.substring(0, 50)}_${payload.substring(payload.length - 50)}`;
-      }
-      return `b64_${payload}`;
-    }
-    return str;
-  };
+  onlineUrls.forEach(url => {
+    if (!result.includes(url)) result.push(url);
+  });
 
-  const hasDataUrl = localUrls.some(p => p.startsWith('data:'));
+  localUrls.forEach(url => {
+    if (!result.includes(url)) result.push(url);
+  });
 
-  for (const item of localUrls) {
-    if (item.startsWith('offline-cached://') && hasDataUrl) {
-      continue;
-    }
-    const sig = getSignature(item);
-    if (!seenSignatures.has(sig)) {
-      seenSignatures.add(sig);
-      result.push(item);
-    }
-  }
+  rawList.forEach(url => {
+    if (!result.includes(url)) result.push(url);
+  });
 
   return result;
 };
@@ -214,6 +209,7 @@ export const FindingPhotoGallery: React.FC<FindingPhotoGalleryProps> = ({
           >
             <OfflineImage
               src={currentPhoto}
+              fallbackSrcs={validPhotos.filter(p => p !== currentPhoto)}
               alt={`${altPrefix} ${currentIndex + 1}`}
               className={`w-full h-full ${isZoomed ? 'object-cover' : 'object-contain'} rounded-xl transition-all duration-300`}
               referrerPolicy="no-referrer"
@@ -318,6 +314,7 @@ export const FindingPhotoThumbnails: React.FC<FindingPhotoThumbnailsProps> = ({
         >
           <OfflineImage
             src={validPhotos[0]}
+            fallbackSrcs={validPhotos.slice(1)}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             alt="Foto hallazgo"
           />

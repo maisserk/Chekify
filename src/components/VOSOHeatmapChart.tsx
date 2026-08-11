@@ -25,6 +25,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { Finding } from '../types';
+import { FindingPhotoThumbnails, extractFindingPhotos } from './FindingPhotoGallery';
 
 interface VOSOHeatmapChartProps {
   findings: Finding[];
@@ -471,6 +472,15 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
                         </span>
                       )}
                     </div>
+
+                    {extractFindingPhotos(finding).length > 0 && (
+                      <div className="pt-1">
+                        <FindingPhotoThumbnails
+                          photos={extractFindingPhotos(finding)}
+                          size="sm"
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}
