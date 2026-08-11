@@ -5,6 +5,7 @@ import { Finding } from '../types';
 import { parseFindingDescription } from '../components/FindingDescriptionRenderer';
 import { extractFindingPhotos } from '../components/FindingPhotoGallery';
 import { parseAnyDate } from './dateUtils';
+import { offlineMediaService } from '../services/OfflineMediaService';
 
 export interface OperatorProfile {
   name?: string;
@@ -113,32 +114,76 @@ export const getWhiteChekifyLogoBase64 = async (): Promise<{ dataUrl: string; as
 /**
  * Loads an image URL safely into a base64 Data URL for jsPDF embedding
  */
-const loadImageAsBase64 = async (url: string): Promise<string | null> => {
+const loadImageAsBase64 = async (rawUrl?: string | null): Promise<string | null> => {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const url = rawUrl.trim();
   if (!url) return null;
+
+  // 1. Direct Data URL
   if (url.startsWith('data:image')) return url;
 
+  // 2. Raw Base64 string without data: prefix
+  if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:') && !url.startsWith('offline-cached://') && !url.startsWith('blob:')) {
+    if (url.length > 50) {
+      return `data:image/jpeg;base64,${url}`;
+    }
+  }
+
+  // 3. Offline-cached pseudo protocol
+  if (url.startsWith('offline-cached://')) {
+    const mediaId = url.replace('offline-cached://', '');
+    try {
+      const data = await offlineMediaService.retrieveMedia(mediaId);
+      if (data instanceof Blob) {
+        return await new Promise<string | null>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(data);
+        });
+      } else if (typeof data === 'string' && data.length > 0) {
+        if (data.startsWith('data:image')) return data;
+        return `data:image/jpeg;base64,${data}`;
+      }
+      if (mediaId.includes('_idx_')) {
+        const baseMediaId = mediaId.split('_idx_')[0];
+        const baseData = await offlineMediaService.retrieveMedia(baseMediaId);
+        if (baseData instanceof Blob) {
+          return await new Promise<string | null>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(baseData);
+          });
+        } else if (typeof baseData === 'string' && baseData.length > 0) {
+          if (baseData.startsWith('data:image')) return baseData;
+          return `data:image/jpeg;base64,${baseData}`;
+        }
+      }
+    } catch (e) {
+      console.warn('[PDF] Error retrieving offline media for PDF:', e);
+    }
+    return null;
+  }
+
+  // 4. HTTP(S) or Blob URL fetch
   try {
     const response = await fetch(url);
     if (response.ok) {
       const blob = await response.blob();
       const base64 = await new Promise<string | null>((resolve) => {
         const reader = new FileReader();
-        reader.onloadend = () => {
-          if (typeof reader.result === 'string') {
-            resolve(reader.result);
-          } else {
-            resolve(null);
-          }
-        };
+        reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
         reader.onerror = () => resolve(null);
         reader.readAsDataURL(blob);
       });
       if (base64) return base64;
     }
   } catch (err) {
-    // Fallback below
+    // Fall through to canvas
   }
 
+  // 5. HTMLImageElement + Canvas Fallback
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
@@ -152,20 +197,35 @@ const loadImageAsBase64 = async (url: string): Promise<string | null> => {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          resolve(dataUrl);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
         } else {
           resolve(null);
         }
       } catch (err) {
-        console.warn('Could not convert image to base64 for PDF:', err);
+        console.warn('[PDF] Could not convert image to base64 via canvas:', err);
         resolve(null);
       }
     };
 
     img.onerror = () => {
-      console.warn('Failed to load image for PDF embedding:', url);
-      resolve(null);
+      // Final attempt without crossOrigin
+      const imgNoCors = new Image();
+      imgNoCors.src = url;
+      imgNoCors.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = imgNoCors.naturalWidth || imgNoCors.width || 300;
+          canvas.height = imgNoCors.naturalHeight || imgNoCors.height || 300;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(imgNoCors, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
+            return;
+          }
+        } catch (e) {}
+        resolve(null);
+      };
+      imgNoCors.onerror = () => resolve(null);
     };
   });
 };
@@ -650,7 +710,15 @@ export const generateOperatorInspectionPDF = async (
 
     for (let i = 0; i < photos.length; i++) {
       const pUrl = photos[i];
-      const pBase64 = await loadImageAsBase64(pUrl);
+      let pBase64 = await loadImageAsBase64(pUrl);
+      if (!pBase64) {
+        for (const candidate of photos) {
+          if (candidate !== pUrl) {
+            pBase64 = await loadImageAsBase64(candidate);
+            if (pBase64) break;
+          }
+        }
+      }
       const photoInfo = getPhotoCaptionInfo(i, pUrl);
 
       const isSecondCol = (i % 2) === 1;

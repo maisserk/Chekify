@@ -34,6 +34,7 @@ import { compressImage, blobToBase64, base64ToBlob } from '../utils/imageCompres
 import { PushNotificationService } from './PushNotificationService';
 import { getCachedAreas, getCachedEquipment } from '../utils/offlineCache';
 import { parseAnyDate } from '../utils/dateUtils';
+import { extractFindingPhotos } from '../components/FindingPhotoGallery';
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
@@ -241,6 +242,7 @@ export class FindingService {
           const tB = parseAnyDate(b.createdAt || b.date)?.getTime() || Date.now();
           return tB - tA; // Newest first
         });
+        this.syncPendingOfflinePhotos(cleanedList).catch(() => {});
         callback(cleanedList);
       },
       (error) => {
@@ -369,7 +371,7 @@ export class FindingService {
         } catch (err) {
           console.warn(`[FindingService] Failed storing offline media for index ${idx}:`, err);
         }
-        finalUrl = `offline-cached://${mediaId}`;
+        finalUrl = base64Photo || (typeof pItem === 'string' && pItem.startsWith('data:') ? pItem : `offline-cached://${mediaId}`);
       }
 
       processedPhotoUrls.push(finalUrl);
@@ -535,8 +537,100 @@ export class FindingService {
     const unsubscribe = offlineQueueService.subscribeToNetwork((online) => {
       if (online) {
         checkAndSync();
+        FindingService.syncPendingOfflinePhotos().catch(() => {});
       }
     });
+  }
+
+  /**
+   * Scans findings to automatically resolve/upload any pending offline photos 
+   * (replacing device-local offline-cached:// pseudo-protocols with Base64 or Storage URLs).
+   */
+  public static async syncPendingOfflinePhotos(findingsList?: Finding[]): Promise<void> {
+    const isOnline = offlineQueueService.getConnectivityStatus();
+    if (!isOnline) return;
+
+    try {
+      let list = findingsList;
+      if (!list) {
+        const snap = await getDocs(collection(db, this.COLLECTION_NAME));
+        list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
+      }
+      for (const finding of list) {
+        if (!finding || !finding.id) continue;
+        const photos = extractFindingPhotos(finding);
+        let updated = false;
+        const newPhotoUrls = Array.isArray(finding.photoUrls) ? [...finding.photoUrls] : [];
+
+        for (let idx = 0; idx < photos.length; idx++) {
+          const pUrl = photos[idx];
+          if (!pUrl || (!pUrl.startsWith('offline-cached://') && !pUrl.startsWith('data:'))) continue;
+
+          let mediaId = pUrl.startsWith('offline-cached://') ? pUrl.replace('offline-cached://', '') : `media_fnd_${finding.id}_idx_${idx}`;
+          let cachedData = await offlineMediaService.retrieveMedia(mediaId);
+          if (!cachedData && idx === 0) {
+            cachedData = await offlineMediaService.retrieveMedia(`media_fnd_${finding.id}`);
+          }
+
+          if (cachedData) {
+            try {
+              let blobToUpload: Blob;
+              if (cachedData instanceof Blob) {
+                blobToUpload = cachedData;
+              } else if (typeof cachedData === 'string' && cachedData.startsWith('data:')) {
+                blobToUpload = base64ToBlob(cachedData);
+              } else if (typeof cachedData === 'string' && cachedData.length > 50) {
+                blobToUpload = base64ToBlob(`data:image/jpeg;base64,${cachedData}`);
+              } else {
+                blobToUpload = new Blob([cachedData], { type: 'image/jpeg' });
+              }
+
+              let onlineUrl = '';
+              try {
+                onlineUrl = await this.uploadFindingPhoto(finding.id, blobToUpload, idx);
+              } catch (uErr) {
+                onlineUrl = await blobToBase64(blobToUpload);
+              }
+
+              if (onlineUrl) {
+                if (newPhotoUrls.length <= idx) {
+                  while (newPhotoUrls.length <= idx) newPhotoUrls.push('');
+                }
+                newPhotoUrls[idx] = onlineUrl;
+                updated = true;
+              }
+            } catch (e) {
+              console.warn(`[FindingService] Could not sync offline photo for ${finding.id} idx ${idx}:`, e);
+            }
+          } else if (pUrl.startsWith('offline-cached://')) {
+            const validAlt = photos.find(p => p.startsWith('http://') || p.startsWith('https://') || p.startsWith('data:'));
+            if (validAlt) {
+              if (newPhotoUrls.length <= idx) {
+                while (newPhotoUrls.length <= idx) newPhotoUrls.push('');
+              }
+              newPhotoUrls[idx] = validAlt;
+              updated = true;
+            }
+          }
+        }
+
+        if (updated && newPhotoUrls.length > 0) {
+          const mainPhoto = newPhotoUrls[0] || '';
+          await offlineQueueService.enqueue(
+            this.COLLECTION_NAME,
+            finding.id,
+            {
+              photoUrl: mainPhoto,
+              photoUrls: newPhotoUrls,
+              updatedAt: serverTimestamp()
+            },
+            'merge'
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[FindingService] Error running syncPendingOfflinePhotos:', err);
+    }
   }
 
   /**
@@ -883,7 +977,7 @@ export class FindingService {
       } catch (e) {
         console.warn('[FindingService] IndexedDB store failed during attachPhotoToFinding:', e);
       }
-      photoUrl = `offline-cached://${mediaId}`;
+      photoUrl = base64Photo || (typeof photoFileOrBase64 === 'string' && photoFileOrBase64.startsWith('data:') ? photoFileOrBase64 : `offline-cached://${mediaId}`);
     }
 
     await offlineQueueService.enqueue(
