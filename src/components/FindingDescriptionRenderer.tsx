@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Eye, 
   Volume2, 
@@ -12,7 +12,8 @@ import {
   FileSearch, 
   ClipboardList,
   MessageSquare,
-  FileText
+  FileText,
+  X
 } from 'lucide-react';
 
 const VOSO_ICONS: Record<string, React.ElementType> = {
@@ -38,6 +39,7 @@ export interface ParsedItem {
   status: 'Crítico' | 'Observación' | 'Bueno' | null;
   isSolved: boolean;
   comment: string;
+  itemSolutionNote?: string;
 }
 
 export const parseFindingDescription = (
@@ -218,6 +220,12 @@ export const parseFindingDescription = (
       let detail = parts.slice(1).join(':').trim() || parts[0]?.trim() || '';
 
       const isSolved = detail.includes('[SOLUCIONADO]') || line.includes('Solucionado por operador');
+      let itemSolutionNote = '';
+      const solMatch = detail.match(/\[SOLUCIONADO:\s*(.*?)\]/i) || line.match(/\[SOLUCIONADO:\s*(.*?)\]/i);
+      if (solMatch) {
+        itemSolutionNote = solMatch[1].trim();
+      }
+
       const statusMatch = detail.match(/^(Crítico|Observación|Bueno|Falla)/i);
       const statusStr = statusMatch ? statusMatch[1] : null;
 
@@ -229,11 +237,19 @@ export const parseFindingDescription = (
       }
 
       let comment = statusStr ? detail.substring(statusStr.length).replace(/^[\s\-:]+/, '').trim() : detail;
-      comment = comment.replace(/\[SOLUCIONADO\]/g, '').replace(/-\s*Solucionado por operador/gi, '').trim();
+      comment = comment
+        .replace(/\[SOLUCIONADO:\s*.*?\]/gi, '')
+        .replace(/\[SOLUCIONADO\]/g, '')
+        .replace(/-\s*Solucionado por operador/gi, '')
+        .trim();
 
       if (rawTitle.toLowerCase() === comment.toLowerCase() || !comment) {
         rawTitle = `Ítem (${category})`;
-        comment = detail.replace(/\[SOLUCIONADO\]/g, '').replace(/-\s*Solucionado por operador/gi, '').trim();
+        comment = detail
+          .replace(/\[SOLUCIONADO:\s*.*?\]/gi, '')
+          .replace(/\[SOLUCIONADO\]/g, '')
+          .replace(/-\s*Solucionado por operador/gi, '')
+          .trim();
       }
 
       const item: ParsedItem = {
@@ -242,7 +258,8 @@ export const parseFindingDescription = (
         detail,
         status,
         isSolved,
-        comment: comment || (isSolved ? 'El hallazgo fue solucionado en terreno por el operador.' : 'Reportado por el operador sin detalles adicionales.')
+        comment: comment || (isSolved ? 'El hallazgo fue solucionado en terreno.' : 'Reportado por el operador sin detalles adicionales.'),
+        itemSolutionNote
       };
 
       if (category === 'ORDEN' || category === 'ORDEN Y LIMPIEZA' || category === '5S') {
@@ -289,6 +306,7 @@ interface FindingDescriptionRendererProps {
   filterModule?: 'ALL' | 'VOSO' | 'OrdenYLimpieza';
   className?: string;
   isPreview?: boolean;
+  onSolveItem?: (item: ParsedItem, solutionText: string) => Promise<void> | void;
 }
 
 export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProps> = ({
@@ -296,8 +314,13 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
   source,
   filterModule,
   className = "",
-  isPreview = false
+  isPreview = false,
+  onSolveItem
 }) => {
+  const [activeSolvingKey, setActiveSolvingKey] = useState<string | null>(null);
+  const [solutionInputText, setSolutionInputText] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
   if (!description) return <p className={className}>-</p>;
 
   const effectiveModule = filterModule || (source === 'VOSO' ? 'VOSO' : source === 'OrdenYLimpieza' ? 'OrdenYLimpieza' : 'ALL');
@@ -497,6 +520,98 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                           {item.comment || item.detail || 'Sin comentarios adicionales.'}
                         </p>
                       </div>
+
+                      {item.isSolved ? (
+                        <div className="mt-2.5 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 rounded-xl space-y-1">
+                          <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 font-bold text-xs uppercase tracking-wider">
+                            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                            <span>Solución Aplicada a este Hallazgo:</span>
+                          </div>
+                          <p className="text-emerald-950 dark:text-emerald-100 text-xs font-semibold leading-relaxed">
+                            {item.itemSolutionNote || 'Solucionado en terreno.'}
+                          </p>
+                        </div>
+                      ) : onSolveItem ? (
+                        <div className="mt-3 pt-2 border-t border-zinc-100 dark:border-white/10">
+                          {activeSolvingKey === `voso-${i}` ? (
+                            <div className="p-3 bg-emerald-50/90 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/40 rounded-xl space-y-2.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Solución para: {item.rawTitle}</span>
+                                </span>
+                                <button 
+                                  type="button" 
+                                  onClick={() => { setActiveSolvingKey(null); setSolutionInputText(''); }}
+                                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <textarea
+                                value={solutionInputText}
+                                onChange={(e) => setSolutionInputText(e.target.value)}
+                                placeholder="Describa la solución realizada para este hallazgo..."
+                                className="w-full p-2.5 bg-white dark:bg-zinc-900 border border-emerald-200 dark:border-emerald-500/30 rounded-lg text-xs font-medium text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 min-h-[60px]"
+                              />
+                              <div className="flex flex-wrap gap-1">
+                                {["Corregido en sitio", "Ajuste realizado", "Limpieza efectuada", "Repuesto cambiado"].map((pill) => (
+                                  <button
+                                    key={`pill-voso-${pill}`}
+                                    type="button"
+                                    onClick={() => setSolutionInputText(pill)}
+                                    className="px-2 py-0.5 text-[9px] font-bold bg-white dark:bg-zinc-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                  >
+                                    + {pill}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  disabled={isSubmitting || !solutionInputText.trim()}
+                                  onClick={async () => {
+                                    setIsSubmitting(true);
+                                    try {
+                                      await onSolveItem(item, solutionInputText.trim());
+                                      setActiveSolvingKey(null);
+                                      setSolutionInputText('');
+                                    } finally {
+                                      setIsSubmitting(false);
+                                    }
+                                  }}
+                                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 transition-all cursor-pointer"
+                                >
+                                  {isSubmitting ? (
+                                    <span className="animate-pulse">Guardando...</span>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>Guardar Solución del Ítem</span>
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setActiveSolvingKey(null); setSolutionInputText(''); }}
+                                  className="px-3 py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-lg hover:bg-zinc-300 transition-colors"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => { setActiveSolvingKey(`voso-${i}`); setSolutionInputText(''); }}
+                              className="w-full py-2 px-3 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs group"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+                              <span>Dar Solución Independiente a este Ítem</span>
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -573,6 +688,98 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                         {item.comment || item.detail || 'Falta de orden, aseo o disposición detectada.'}
                       </p>
                     </div>
+
+                    {item.isSolved ? (
+                      <div className="mt-2.5 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 rounded-xl space-y-1">
+                        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 font-bold text-xs uppercase tracking-wider">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                          <span>Solución Aplicada a este Hallazgo:</span>
+                        </div>
+                        <p className="text-emerald-950 dark:text-emerald-100 text-xs font-semibold leading-relaxed">
+                          {item.itemSolutionNote || 'Solucionado en terreno.'}
+                        </p>
+                      </div>
+                    ) : onSolveItem ? (
+                      <div className="mt-3 pt-2 border-t border-purple-100 dark:border-purple-500/20">
+                        {activeSolvingKey === `orden-${i}` ? (
+                          <div className="p-3 bg-emerald-50/90 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/40 rounded-xl space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Solución para: {item.rawTitle}</span>
+                              </span>
+                              <button 
+                                type="button" 
+                                onClick={() => { setActiveSolvingKey(null); setSolutionInputText(''); }}
+                                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <textarea
+                              value={solutionInputText}
+                              onChange={(e) => setSolutionInputText(e.target.value)}
+                              placeholder="Describa la solución realizada para este hallazgo 5S..."
+                              className="w-full p-2.5 bg-white dark:bg-zinc-900 border border-emerald-200 dark:border-emerald-500/30 rounded-lg text-xs font-medium text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 min-h-[60px]"
+                            />
+                            <div className="flex flex-wrap gap-1">
+                              {["Aseo realizado", "Área despejada", "Disposición correcta", "Orden ejecutado"].map((pill) => (
+                                <button
+                                  key={`pill-orden-${pill}`}
+                                  type="button"
+                                  onClick={() => setSolutionInputText(pill)}
+                                  className="px-2 py-0.5 text-[9px] font-bold bg-white dark:bg-zinc-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                >
+                                  + {pill}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                disabled={isSubmitting || !solutionInputText.trim()}
+                                onClick={async () => {
+                                  setIsSubmitting(true);
+                                  try {
+                                    await onSolveItem(item, solutionInputText.trim());
+                                    setActiveSolvingKey(null);
+                                    setSolutionInputText('');
+                                  } finally {
+                                    setIsSubmitting(false);
+                                  }
+                                }}
+                                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 transition-all cursor-pointer"
+                              >
+                                {isSubmitting ? (
+                                  <span className="animate-pulse">Guardando...</span>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Guardar Solución del Ítem</span>
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setActiveSolvingKey(null); setSolutionInputText(''); }}
+                                className="px-3 py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-lg hover:bg-zinc-300 transition-colors"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setActiveSolvingKey(`orden-${i}`); setSolutionInputText(''); }}
+                            className="w-full py-2 px-3 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs group"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+                            <span>Dar Solución Independiente a este Ítem</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

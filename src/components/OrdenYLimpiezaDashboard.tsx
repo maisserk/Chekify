@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { FindingPhotoGallery, FindingPhotoThumbnails, extractFindingPhotos } from './FindingPhotoGallery';
-import { FindingDescriptionRenderer } from './FindingDescriptionRenderer';
+import { FindingDescriptionRenderer, ParsedItem } from './FindingDescriptionRenderer';
 import { OperatingStatusBadge } from './OperatingStatusBadge';
 import { 
   Sparkles, 
@@ -489,6 +489,34 @@ export const OrdenYLimpiezaDashboard = ({
     }
   };
 
+  const handleSolveIndividualItem = async (
+    item: ParsedItem,
+    solutionText: string
+  ) => {
+    if (!selectedFinding) return;
+    try {
+      const { newDescription, isFullyClosed } = await FindingService.solveFindingItem(
+        selectedFinding.id,
+        selectedFinding.description,
+        item.category,
+        item.rawTitle,
+        solutionText,
+        user
+      );
+
+      setSelectedFinding(prev => prev ? {
+        ...prev,
+        description: newDescription,
+        status: isFullyClosed ? 'Closed' : 'InReview',
+        solution: isFullyClosed ? solutionText : prev.solution
+      } : null);
+
+      showToast("Solución Registrada", `Se registró la solución para "${item.rawTitle}"`, "success");
+    } catch (err: any) {
+      showToast("Error", `No se pudo registrar la solución: ${err.message}`, "error");
+    }
+  };
+
   const handleUpdateClosureDate = async () => {
     if (!selectedFinding) return;
     const dateToUse = customClosedDate ? new Date(customClosedDate) : new Date();
@@ -938,6 +966,7 @@ export const OrdenYLimpiezaDashboard = ({
                       description={selectedFinding.description} 
                       source="OrdenYLimpieza" 
                       filterModule="OrdenYLimpieza"
+                      onSolveItem={handleSolveIndividualItem}
                     />
                   </div>
                 </div>

@@ -578,6 +578,90 @@ export class FindingService {
   }
 
   /**
+   * Resolves an individual item within a multi-item finding description independently.
+   * If all items in the finding description are resolved, transitions finding status to 'Closed'.
+   */
+  public static async solveFindingItem(
+    findingId: string,
+    originalDescription: string,
+    itemCategory: string,
+    itemTitle: string,
+    solutionText: string,
+    user: { uid: string; name: string }
+  ): Promise<{ newDescription: string; isFullyClosed: boolean }> {
+    try {
+      const cleanSolution = solutionText.replace(/[\n\r]/g, ' ').trim();
+      const lines = originalDescription.split('\n');
+      let matched = false;
+
+      const newLines = lines.map(line => {
+        const upperLine = line.toUpperCase();
+        const upperCat = (itemCategory || '').toUpperCase();
+        const upperTitle = (itemTitle || '').toUpperCase();
+
+        const isMatch = (upperTitle && upperLine.includes(upperTitle)) || 
+                        (upperCat && upperLine.includes(`[${upperCat}]`));
+
+        if (!matched && isMatch && !line.includes('[SOLUCIONADO')) {
+          matched = true;
+          return `${line} [SOLUCIONADO: ${cleanSolution}]`;
+        }
+        return line;
+      });
+
+      let finalDescription = newLines.join('\n');
+      if (!matched) {
+        finalDescription = `${originalDescription} [SOLUCIONADO: ${cleanSolution}]`;
+      }
+
+      // Check if all items are solved
+      const hasUnsolved = finalDescription.split('\n').some(line => {
+        const isItemLine = line.includes('•') || line.match(/\[(VER|OÍR|OIR|SENTIR|OLER|ORDEN)\]/i);
+        return isItemLine && !line.includes('[SOLUCIONADO');
+      });
+
+      const isFullyClosed = !hasUnsolved;
+
+      const updateData: any = {
+        description: finalDescription,
+        updatedAt: serverTimestamp()
+      };
+
+      if (isFullyClosed) {
+        updateData.status = 'Closed';
+        updateData.closedBy = user.uid;
+        updateData.closedAt = serverTimestamp();
+        updateData.solution = `Todos los hallazgos del equipo fueron solucionados independientemente. Última solución: ${cleanSolution}`;
+      } else {
+        updateData.status = 'InReview';
+      }
+
+      const historyEntry = {
+        status: isFullyClosed ? 'Closed' : 'InReview',
+        userName: user.name || 'Supervisor/Operador',
+        userId: user.uid,
+        timestamp: new Date().toISOString(),
+        action: `Solución independiente (${itemCategory || 'Ítem'} - ${itemTitle || 'General'})`,
+        comment: `Solución aplicada: ${cleanSolution}`
+      };
+
+      await offlineQueueService.enqueue(
+        this.COLLECTION_NAME,
+        findingId,
+        {
+          ...updateData,
+          history: arrayUnion(historyEntry)
+        },
+        'merge'
+      );
+
+      return { newDescription: finalDescription, isFullyClosed };
+    } catch (err: any) {
+      throw new Error(`Failed to solve finding item: ${err.message}`);
+    }
+  }
+
+  /**
    * Deletes a finding safely (supports offline queueing and direct Firestore deletion).
    */
   public static async deleteFinding(findingId: string): Promise<void> {

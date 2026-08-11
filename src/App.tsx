@@ -1336,7 +1336,7 @@ const OperatorDashboard = ({
     return newObj;
   };
 
-  const handleNextEquipment = async () => {
+  const handleNextEquipment = async (finishEarly: boolean = false) => {
     const missingPhotos = getVosoIssuesMissingPhotos();
     if (missingPhotos.length > 0) {
       const names = missingPhotos.map(i => i.name).join(', ');
@@ -1366,7 +1366,7 @@ const OperatorDashboard = ({
 
     const updatedResults = sanitizeForFirestore(updatedRawResults);
 
-    if (currentEquipmentIndex < areaEquipment.length - 1) {
+    if (currentEquipmentIndex < areaEquipment.length - 1 && !finishEarly) {
       setInspectionResults(updatedResults);
       setSlideDirection('next');
       // Load next equipment data (or empty if new)
@@ -1382,9 +1382,10 @@ const OperatorDashboard = ({
       setEquipmentStartTime(new Date());
       setEquipmentTimerSeconds(0);
     } else {
-      // Finished all equipment
+      // Finished all equipment or exited early
       setIsSaving(true);
       try {
+        const isPartial = currentEquipmentIndex < areaEquipment.length - 1;
         const hasFindings = Object.values(updatedResults).some(resAny => {
           const res = resAny as { trad: any, voso: any };
           const trad = res?.trad || {};
@@ -1423,7 +1424,10 @@ const OperatorDashboard = ({
           startedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : (isOnline ? serverTimestamp() : new Date()),
           completedAt: Timestamp.fromDate(inspectionCompletedTime),
           durationSeconds: totalDurationSeconds,
-          status: hasFindings ? 'With Findings' : 'Completed',
+          status: isPartial ? (hasFindings ? 'Parcial con Hallazgos' : 'Parcial Completada') : (hasFindings ? 'With Findings' : 'Completed'),
+          isPartial: isPartial,
+          inspectedEquipmentCount: Object.keys(updatedResults).length,
+          totalAreaEquipmentCount: areaEquipment.length,
           results: updatedResults,
           clima: climaPayload
         };
@@ -1641,8 +1645,10 @@ const OperatorDashboard = ({
         resetInspectionState();
 
         setSuccessModalConfig({
-          title: "¡Inspección Finalizada con Éxito!",
-          message: "El hallazgo o la inspección fue finalizada con éxito. Se guardaron todos los cambios y se notificará al supervisor."
+          title: isPartial ? "¡Inspección Parcial Guardada!" : "¡Inspección Finalizada con Éxito!",
+          message: isPartial 
+            ? `Se registraron y guardaron correctamente los hallazgos de los ${Object.keys(updatedResults).length} equipo(s) inspeccionados en ${selectedArea?.name || 'el área'}. Quedan los demás equipos libres para que otro operador continúe.` 
+            : "El hallazgo o la inspección fue finalizada con éxito. Se guardaron todos los cambios y se notificará al supervisor."
         });
         setShowSuccessModal(true);
       } catch (err) {
@@ -2615,18 +2621,40 @@ const OperatorDashboard = ({
               </div>
             )}
 
-            <div className="pt-4">
+            <div className="pt-4 flex flex-col sm:flex-row items-center gap-3">
+              {currentEquipmentIndex < areaEquipment.length - 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!allItemsChecked()) {
+                      setMessage({ text: 'Debes responder todos los ítems del equipo actual antes de salir de la inspección.', type: 'error' });
+                      return;
+                    }
+                    setShowEquipmentSummary(true);
+                  }}
+                  disabled={!allItemsChecked()}
+                  className={`w-full sm:w-1/2 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all border cursor-pointer ${
+                    allItemsChecked()
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500 shadow-md shadow-amber-200/50 dark:shadow-none active:scale-[0.98]'
+                      : 'bg-zinc-100 text-zinc-300 border-zinc-200 grayscale cursor-not-allowed'
+                  }`}
+                >
+                  <LogOut className="w-4 h-4 text-white" />
+                  <span className="text-xs uppercase tracking-wider font-black">Salir de Inspección</span>
+                </button>
+              )}
               <button
+                type="button"
                 onClick={() => setShowEquipmentSummary(true)}
                 disabled={!allItemsChecked()}
-                className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 sm:gap-3 transition-all border ${
+                className={`w-full ${currentEquipmentIndex < areaEquipment.length - 1 ? 'sm:w-1/2' : 'w-full'} py-4 rounded-2xl font-bold flex items-center justify-center gap-2 sm:gap-3 transition-all border cursor-pointer ${
                   allItemsChecked() 
                     ? 'bg-zinc-900 text-white shadow-xl shadow-zinc-200 dark:shadow-none active:scale-[0.98]' 
                     : 'bg-zinc-100 text-zinc-300 border-zinc-200 grayscale cursor-not-allowed'
                 }`}
               >
                 <CheckCircle2 className={`w-5 h-5 ${allItemsChecked() ? 'text-emerald-400' : 'text-zinc-300'}`} />
-                <span className="text-sm uppercase tracking-widest font-black">
+                <span className="text-xs sm:text-sm uppercase tracking-widest font-black">
                   {currentEquipmentIndex < areaEquipment.length - 1 ? 'Siguiente Equipo' : 'Finalizar Inspección'}
                 </span>
                 <ChevronRight className={`w-5 h-5 transition-transform ${allItemsChecked() ? 'translate-x-1' : ''}`} />
@@ -3071,15 +3099,33 @@ const OperatorDashboard = ({
                 </div>
               </div>
 
-              <div className="p-8 border-t border-zinc-50 bg-zinc-50/50">
+              <div className="p-6 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col sm:flex-row items-center gap-3">
+                {currentEquipmentIndex < areaEquipment.length - 1 && (
+                  <button 
+                    type="button"
+                    onClick={async () => {
+                      setShowEquipmentSummary(false);
+                      await handleNextEquipment(true);
+                    }}
+                    disabled={isSaving}
+                    className="w-full sm:w-1/2 py-4 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-bold shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span className="text-xs sm:text-sm uppercase tracking-wider font-black">
+                      Salir de Inspección
+                    </span>
+                  </button>
+                )}
                 <button 
-                  onClick={() => {
+                  type="button"
+                  onClick={async () => {
                     setShowEquipmentSummary(false);
-                    handleNextEquipment();
+                    await handleNextEquipment(false);
                   }}
-                  className="w-full py-4 bg-zinc-900 dark:bg-white dark:text-black text-white rounded-2xl font-bold shadow-lg shadow-zinc-200 dark:shadow-none active:scale-95 transition-all flex items-center justify-center gap-3"
+                  disabled={isSaving}
+                  className={`w-full ${currentEquipmentIndex < areaEquipment.length - 1 ? 'sm:w-1/2' : 'w-full'} py-4 px-4 bg-zinc-900 dark:bg-white dark:text-black text-white rounded-2xl font-bold shadow-lg shadow-zinc-200 dark:shadow-none active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50`}
                 >
-                  <span className="uppercase tracking-widest">
+                  <span className="text-xs sm:text-sm uppercase tracking-widest font-black">
                     {currentEquipmentIndex < areaEquipment.length - 1 ? 'Siguiente Equipo' : 'Finalizar y Guardar'}
                   </span>
                   <ChevronRight className="w-5 h-5" />
@@ -4214,6 +4260,30 @@ const SupervisorDashboard = ({
                       description={selectedFinding.description} 
                       source={selectedFinding.source || selectedFinding.category} 
                       filterModule={moduleFilter === 'ALL' ? (isVOSOFinding(selectedFinding) ? 'VOSO' : 'OrdenYLimpieza') : moduleFilter}
+                      onSolveItem={async (item, solutionText) => {
+                        if (!selectedFinding) return;
+                        try {
+                          const { newDescription, isFullyClosed } = await FindingService.solveFindingItem(
+                            selectedFinding.id,
+                            selectedFinding.description,
+                            item.category,
+                            item.rawTitle,
+                            solutionText,
+                            user
+                          );
+
+                          setSelectedFinding(prev => prev ? {
+                            ...prev,
+                            description: newDescription,
+                            status: isFullyClosed ? 'Closed' : 'InReview',
+                            solution: isFullyClosed ? solutionText : prev.solution
+                          } : null);
+
+                          showToast("Solución Registrada", `Se registró la solución para "${item.rawTitle}"`, "success");
+                        } catch (err: any) {
+                          showToast("Error", `No se pudo registrar la solución: ${err.message}`, "error");
+                        }
+                      }}
                     />
 
                     {extractFindingPhotos(selectedFinding).length === 0 && (
@@ -5881,6 +5951,30 @@ const ReportsView = ({
                         source={selectedFinding.source} 
                         filterModule={isVOSOFinding(selectedFinding) ? 'VOSO' : 'OrdenYLimpieza'} 
                         className="text-zinc-800 dark:text-zinc-200" 
+                        onSolveItem={async (item, solutionText) => {
+                          if (!selectedFinding) return;
+                          try {
+                            const { newDescription, isFullyClosed } = await FindingService.solveFindingItem(
+                              selectedFinding.id,
+                              selectedFinding.description,
+                              item.category,
+                              item.rawTitle,
+                              solutionText,
+                              user
+                            );
+
+                            setSelectedFinding(prev => prev ? {
+                              ...prev,
+                              description: newDescription,
+                              status: isFullyClosed ? 'Closed' : 'InReview',
+                              solution: isFullyClosed ? solutionText : prev.solution
+                            } : null);
+
+                            showToast("Solución Registrada", `Se registró la solución para "${item.rawTitle}"`, "success");
+                          } catch (err: any) {
+                            showToast("Error", `No se pudo registrar la solución: ${err.message}`, "error");
+                          }
+                        }}
                       />
                     </div>
 
