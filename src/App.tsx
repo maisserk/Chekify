@@ -136,7 +136,7 @@ import { OperatingStatusBadge } from './components/OperatingStatusBadge';
 import { downloadOperatorInspectionPDF, shareOperatorInspectionPDF, downloadOrShareOperatorInspectionPDF, getWhiteChekifyLogoBase64 } from './utils/generateOperatorInspectionPDF';
 import { useAppUsers } from './hooks/useAppUsers';
 import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText, parseAnyDate } from './utils/dateUtils';
-import { getCachedAreas, cacheAreas, getCachedEquipment, cacheEquipment } from './utils/offlineCache';
+import { getCachedAreas, cacheAreas, getCachedEquipment, cacheEquipment, clearAllCaches } from './utils/offlineCache';
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
@@ -9702,7 +9702,7 @@ const AppLayout = ({
               </button>
             </div>
 
-            <div className="mt-auto space-y-4">
+            <div className="mt-auto space-y-2">
               {isSidebarCollapsed && (
                 <button
                   onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
@@ -9713,11 +9713,24 @@ const AppLayout = ({
                 </button>
               )}
               <button 
+                onClick={async () => {
+                  if (window.confirm('¿Deseas borrar toda la memoria caché local? Se recargará la aplicación.')) {
+                    await clearAllCaches();
+                    window.location.reload();
+                  }
+                }}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-2.5 rounded-2xl text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-all font-bold text-xs uppercase tracking-wider cursor-pointer`}
+                title={isSidebarCollapsed ? "Limpiar Caché Local" : undefined}
+              >
+                <RefreshCw className="w-4 h-4 shrink-0" />
+                {!isSidebarCollapsed && <span>Limpiar Caché</span>}
+              </button>
+              <button 
                 onClick={() => signOut(auth)}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all font-bold text-sm`}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-2.5 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all font-bold text-xs uppercase tracking-wider cursor-pointer`}
                 title={isSidebarCollapsed ? "Cerrar Sesión" : undefined}
               >
-                <LogOut className="w-5 h-5 shrink-0" />
+                <LogOut className="w-4 h-4 shrink-0" />
                 {!isSidebarCollapsed && <span>Cerrar Sesión</span>}
               </button>
               {!isSidebarCollapsed && (

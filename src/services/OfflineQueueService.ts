@@ -347,6 +347,14 @@ class OfflineQueueService {
   }
 
   /**
+   * Clears all items in the queue.
+   */
+  public clearQueue(): void {
+    this.queue = [];
+    this.saveQueueToStorage();
+  }
+
+  /**
    * Clears all failed transactions from the queue.
    */
   public clearFailed(): void {

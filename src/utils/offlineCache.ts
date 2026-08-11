@@ -1,4 +1,6 @@
 import { Area, Equipment } from '../types';
+import { offlineMediaService } from '../services/OfflineMediaService';
+import { offlineQueueService } from '../services/OfflineQueueService';
 
 export const cacheAreas = (areas: Area[]): void => {
   if (!Array.isArray(areas) || areas.length === 0) return;
@@ -35,3 +37,22 @@ export const getCachedEquipment = (): Equipment[] => {
     return [];
   }
 };
+
+export const clearAllCaches = async (): Promise<void> => {
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+    offlineQueueService.clearQueue();
+    await offlineMediaService.clearAllMedia();
+
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+    }
+
+    console.log('[OfflineCache] All browser caches successfully cleared.');
+  } catch (err) {
+    console.error('[OfflineCache] Failed clearing caches:', err);
+  }
+};
+

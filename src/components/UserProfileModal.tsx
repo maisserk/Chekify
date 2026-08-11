@@ -15,12 +15,14 @@ import {
   Sparkles, 
   ShieldCheck, 
   Upload,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { AppUser } from '../types';
 import { showToast } from '../App';
+import { clearAllCaches } from '../utils/offlineCache';
 
 interface UserProfileModalProps {
   user: AppUser;
@@ -80,9 +82,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const [saving, setSaving] = useState(false);
   const [compressing, setCompressing] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleClearCache = async () => {
+    setClearingCache(true);
+    try {
+      await clearAllCaches();
+      showToast('Caché Limpiado', 'Se han borrado los datos locales y archivos en caché. Recargando...', 'success');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err) {
+      console.error('Failed clearing cache:', err);
+      showToast('Error', 'No se pudo limpiar la memoria caché.', 'error');
+      setClearingCache(false);
+    }
+  };
 
   // Re-sync local state when user prop updates
   React.useEffect(() => {
@@ -426,6 +444,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </span>
               </div>
               <span className="text-[10px] text-zinc-400 font-semibold">ID: {user.uid.substring(0, 8)}...</span>
+            </div>
+
+            {/* Cache Clear Box */}
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="space-y-0.5 text-center sm:text-left">
+                <h5 className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider">Memoria Caché Local</h5>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-400 font-medium">
+                  Limpia la memoria del navegador, IndexedDB y cola offline para liberar espacio o resolver desincronizaciones.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearCache}
+                disabled={clearingCache}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center gap-1.5 shrink-0 active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${clearingCache ? 'animate-spin' : ''}`} />
+                <span>{clearingCache ? 'Limpiando...' : 'Limpiar Caché'}</span>
+              </button>
             </div>
 
             {/* Modal Actions */}

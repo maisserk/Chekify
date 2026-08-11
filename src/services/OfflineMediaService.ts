@@ -94,6 +94,25 @@ class OfflineMediaService {
   }
 
   /**
+   * Removes all media files from IndexedDB cache.
+   */
+  public async clearAllMedia(): Promise<void> {
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.clear();
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (e) {
+      console.error('[OfflineMedia] Clear all failed:', e);
+    }
+  }
+
+  /**
    * Removes from local disk cache once successfully flushed to Firebase Storage.
    */
   public async deleteMedia(id: string): Promise<void> {
