@@ -4861,7 +4861,7 @@ const ReportsView = ({
 
   const handleDelete = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'findings', id));
+      await FindingService.deleteFinding(id);
       setConfirmingDelete(null);
     } catch (err) {
       console.error("Error deleting finding:", err);

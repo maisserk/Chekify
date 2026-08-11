@@ -11,7 +11,7 @@
  */
 
 import { db, handleFirestoreError } from '../firebase';
-import { doc, setDoc, writeBatch, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, writeBatch, Timestamp } from 'firebase/firestore';
 import { getCachedAreas, getCachedEquipment } from '../utils/offlineCache';
 import { parseAnyDate } from '../utils/dateUtils';
 
@@ -231,6 +231,11 @@ class OfflineQueueService {
         
         if (item.operation === 'delete') {
           await setDoc(docRef, { status: 'deleted' }, { merge: true });
+          try {
+            await deleteDoc(docRef);
+          } catch (e) {
+            // Ignore error if already deleted
+          }
         } else if (item.operation === 'merge') {
           await setDoc(docRef, cleanPayload, { merge: true });
         } else {

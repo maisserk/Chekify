@@ -74,6 +74,10 @@ export class FindingService {
         
         const cleanedList: Finding[] = [];
         for (const finding of rawList) {
+          if ((finding as any).status === 'deleted') {
+            continue;
+          }
+
           if (plantId) {
             const normTarget = plantId.toLowerCase().trim();
             const fPlant = (finding.plantId || 'default-plant').toLowerCase().trim();
@@ -726,19 +730,82 @@ export class FindingService {
   }
 
   /**
-   * Deletes a finding safely (supports offline queueing and direct Firestore deletion).
+   * Deletes a finding safely (supports offline queueing, direct Firestore deletion,
+   * and clean removal of linked inspection records across operator accounts).
    */
   public static async deleteFinding(findingId: string): Promise<void> {
+    const findingRef = doc(db, this.COLLECTION_NAME, findingId);
+    let inspectionId: string | null = null;
+    let operatorId: string | null = null;
+    let equipmentId: string | null = null;
+
+    try {
+      const docSnap = await getDoc(findingRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        inspectionId = data?.inspectionId || null;
+        operatorId = data?.operatorId || null;
+        equipmentId = data?.equipmentId || null;
+      }
+    } catch (e) {
+      console.warn('[FindingService] Could not fetch finding details prior to deletion:', e);
+    }
+
     const isOnline = offlineQueueService.getConnectivityStatus();
+
     if (isOnline) {
       try {
-        await deleteDoc(doc(db, this.COLLECTION_NAME, findingId));
-        return;
+        // 1. Delete document from 'findings' collection
+        await deleteDoc(findingRef);
+
+        // 2. Delete associated document from 'inspections' collection if present
+        if (inspectionId) {
+          try {
+            await deleteDoc(doc(db, 'inspections', inspectionId));
+          } catch (err) {
+            console.warn('[FindingService] Failed to delete associated inspection doc:', err);
+          }
+        }
+
+        // 3. Fallback cleanup: search 'inspections' collection for matching operator/equipment inspection
+        if (!inspectionId && operatorId) {
+          try {
+            const inspSnap = await getDocs(
+              query(collection(db, 'inspections'), where('operatorId', '==', operatorId))
+            );
+            for (const inspDoc of inspSnap.docs) {
+              const inspData = inspDoc.data();
+              if (equipmentId && inspData.results && inspData.results[equipmentId]) {
+                await deleteDoc(doc(db, 'inspections', inspDoc.id));
+              }
+            }
+          } catch (e) {
+            // Ignore fallback lookup errors
+          }
+        }
       } catch (err) {
         console.warn('[FindingService] Direct delete failed. Enqueuing offline delete operation.');
+        await offlineQueueService.enqueue(this.COLLECTION_NAME, findingId, {}, 'delete');
+        if (inspectionId) {
+          await offlineQueueService.enqueue('inspections', inspectionId, {}, 'delete');
+        }
+      }
+    } else {
+      await offlineQueueService.enqueue(this.COLLECTION_NAME, findingId, {}, 'delete');
+      if (inspectionId) {
+        await offlineQueueService.enqueue('inspections', inspectionId, {}, 'delete');
       }
     }
-    await offlineQueueService.enqueue(this.COLLECTION_NAME, findingId, {}, 'delete');
+
+    // 4. Clean up associated offline media cache
+    try {
+      await offlineMediaService.deleteMedia(`media_fnd_${findingId}`);
+      for (let i = 0; i < 10; i++) {
+        await offlineMediaService.deleteMedia(`media_fnd_${findingId}_idx_${i}`);
+      }
+    } catch (e) {
+      // Ignore media delete errors
+    }
   }
 
   /**
@@ -952,6 +1019,7 @@ export class FindingService {
 
       for (const inspDoc of inspectionsSnap.docs) {
         const insp = inspDoc.data() as any;
+        if (insp.status === 'deleted') continue;
         const inspId = inspDoc.id;
         const results = insp.results || {};
         const areaId = insp.areaId || 'area-general';
