@@ -1169,10 +1169,10 @@ const OperatorDashboard = ({
       
       let totalResolutionMs = 0;
       closedFindings.forEach(f => {
-        const createdMs = f.createdAt.seconds ? f.createdAt.toDate().getTime() : new Date(f.createdAt).getTime();
-        const closedMs = f.closedAt.seconds ? f.closedAt.toDate().getTime() : new Date(f.closedAt).getTime();
+        const createdMs = parseAnyDate(f.createdAt)?.getTime() || 0;
+        const closedMs = parseAnyDate(f.closedAt)?.getTime() || 0;
         const resolutionTime = closedMs - createdMs;
-        totalResolutionMs += resolutionTime;
+        if (resolutionTime > 0) totalResolutionMs += resolutionTime;
       });
       
       const avgHours = closedFindings.length > 0 
@@ -1188,8 +1188,8 @@ const OperatorDashboard = ({
       inspectionsWithTime.forEach(f => {
         let areaSec = f.inspectionDurationSeconds || 0;
         if (!areaSec && f.inspectionStartedAt && f.inspectionCompletedAt) {
-          const startMs = f.inspectionStartedAt.seconds ? f.inspectionStartedAt.toDate().getTime() : new Date(f.inspectionStartedAt).getTime();
-          const compMs = f.inspectionCompletedAt.seconds ? f.inspectionCompletedAt.toDate().getTime() : new Date(f.inspectionCompletedAt).getTime();
+          const startMs = parseAnyDate(f.inspectionStartedAt)?.getTime() || 0;
+          const compMs = parseAnyDate(f.inspectionCompletedAt)?.getTime() || 0;
           areaSec = (compMs - startMs) / 1000;
         }
         totalAreaSeconds += areaSec;
@@ -1452,7 +1452,7 @@ const OperatorDashboard = ({
           await offlineQueueService.enqueue('inspections', inspectionId, inspectionPayload, 'create');
         }
 
-        // Register findings in the 'findings' collection for each equipment that has issues
+        // Register findings in the 'findings' collection for each equipment that has issues or is compliant
         for (const [equipId, resAny] of Object.entries(updatedResults)) {
           const res = resAny as { trad: any, voso: any, operatingStatus?: string, timing?: { startedAt: any, completedAt: any } };
           const equip = equipment.find(e => e.id === equipId);
@@ -1470,6 +1470,8 @@ const OperatorDashboard = ({
           const ordenList = equip?.inspeccionVOSO?.orden || [];
           const pureVosoIssues = vosoIssues.filter(([id]) => !ordenList.some(o => o.id === id));
           const pureOrdenIssues = vosoIssues.filter(([id]) => ordenList.some(o => o.id === id));
+
+          const currentPlantId = user.plantId || selectedArea?.plantId || 'default-plant';
 
           // 1. Create VOSO Finding if pure VOSO or traditional issues exist
           if (pureVosoIssues.length > 0 || tradIssues.length > 0) {
@@ -1527,7 +1529,7 @@ const OperatorDashboard = ({
               const resultObj = await FindingService.createFinding({
                 areaId: selectedArea!.id,
                 areaName: selectedArea!.name,
-                plantId: selectedArea!.plantId || user.plantId || 'default-plant',
+                plantId: currentPlantId,
                 equipmentId: equipId,
                 equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
                 description: description,
@@ -1573,7 +1575,7 @@ const OperatorDashboard = ({
                 createdBy: user.uid,
                 createdAt: isOnline ? serverTimestamp() : new Date(),
                 referenceId: resultObj.id,
-                plantId: selectedArea!.plantId || user.plantId || 'default-plant'
+                plantId: currentPlantId
               };
 
               if (isOnline) {
@@ -1618,7 +1620,7 @@ const OperatorDashboard = ({
               const ordenResultObj = await FindingService.createFinding({
                 areaId: selectedArea!.id,
                 areaName: selectedArea!.name,
-                plantId: selectedArea!.plantId || user.plantId || 'default-plant',
+                plantId: currentPlantId,
                 equipmentId: equipId,
                 equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
                 description: ordenDesc,
@@ -1655,6 +1657,53 @@ const OperatorDashboard = ({
               }
             } catch (ordenErr) {
               console.warn('[Inspections] Failed creating Orden finding for equip:', equipId, ordenErr);
+            }
+          }
+
+          // 3. Create a Compliant (Sin Hallazgos) record if equipment was inspected with 0 issues
+          if (pureVosoIssues.length === 0 && tradIssues.length === 0 && pureOrdenIssues.length === 0) {
+            try {
+              const opStatusLabel = res?.operatingStatus === 'Detenido' ? 'Detenido' : 'En Funcionamiento';
+              const cleanDesc = `Inspección VOSO / Ruta Conforme en ${equip?.name || equipId}. Condición operativa: ${opStatusLabel}.\n• Todos los puntos evaluados se encuentran en condición normal (Bueno/Conforme).`;
+
+              const cleanResultObj = await FindingService.createFinding({
+                areaId: selectedArea!.id,
+                areaName: selectedArea!.name,
+                plantId: currentPlantId,
+                equipmentId: equipId,
+                equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
+                description: cleanDesc,
+                status: 'Closed',
+                priority: 'Baja',
+                date: new Date(),
+                closedAt: Timestamp.now(),
+                closedBy: user.uid,
+                inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
+                inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
+                inspectionDurationSeconds: totalDurationSeconds,
+                equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
+                equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
+                equipmentDurationSeconds: equipDuration,
+                operatorId: user.uid,
+                operatorName: user.name || user.email,
+                operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
+                source: 'VOSO',
+                clima: climaPayload,
+                history: [
+                  {
+                    status: 'Closed' as any,
+                    userId: user.uid,
+                    userName: user.name || user.email,
+                    timestamp: new Date().toISOString(),
+                    action: 'Inspección Conforme (Sin hallazgos)',
+                    comment: 'Inspección de equipo completada satisfactoriamente sin desviaciones.'
+                  } as any
+                ]
+              }, null);
+
+              setLastSavedFindingForPdf(cleanResultObj as unknown as Finding);
+            } catch (cleanErr) {
+              console.warn('[Inspections] Failed creating compliant record for equip:', equipId, cleanErr);
             }
           }
         }
@@ -4766,8 +4815,8 @@ const ReportsView = ({
 
         // Handle timestamps
         if (sortConfig.key === 'createdAt' || sortConfig.key === 'closedAt') {
-          const aTime = aValue?.toDate ? aValue.toDate().getTime() : 0;
-          const bTime = bValue?.toDate ? bValue.toDate().getTime() : 0;
+          const aTime = parseAnyDate(aValue)?.getTime() || 0;
+          const bTime = parseAnyDate(bValue)?.getTime() || 0;
           return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
         }
 
@@ -5774,7 +5823,8 @@ const ReportsView = ({
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fadeIn">
                 {closedFindingsList.map((f, index) => {
                   const fDate = getFindingDate(f);
-                  const resolutionTime = fDate && f.closedAt ? Math.round((f.closedAt.toDate().getTime() - fDate.getTime()) / (1000 * 60 * 60) * 10) / 10 : null;
+                  const closedDate = parseAnyDate(f.closedAt);
+                  const resolutionTime = fDate && closedDate ? Math.round((closedDate.getTime() - fDate.getTime()) / (1000 * 60 * 60) * 10) / 10 : null;
 
                   return (
                     <div 
@@ -5794,7 +5844,7 @@ const ReportsView = ({
                                 Cerrado
                               </span>
                               <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
-                                {f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy') : '-'}
+                                {closedDate ? format(closedDate, 'dd/MM/yy') : '-'}
                               </span>
                             </div>
                             <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight leading-tight mt-1 group-hover:text-brand-blue dark:group-hover:text-emerald-400 transition-colors">
@@ -6057,7 +6107,7 @@ const ReportsView = ({
                            {(selectedFinding.inspectionDurationSeconds || (selectedFinding.inspectionStartedAt && selectedFinding.inspectionCompletedAt)) && (
                               <div className="text-right">
                                  <p className="text-lg font-black text-zinc-900 dark:text-white leading-none">
-                                    {Math.floor((selectedFinding.inspectionDurationSeconds || (selectedFinding.inspectionCompletedAt.toDate().getTime() - selectedFinding.inspectionStartedAt.toDate().getTime()) / 1000) / 60)} min
+                                    {Math.floor((selectedFinding.inspectionDurationSeconds || (((parseAnyDate(selectedFinding.inspectionCompletedAt)?.getTime() || 0) - (parseAnyDate(selectedFinding.inspectionStartedAt)?.getTime() || 0)) / 1000)) / 60)} min
                                  </p>
                                  <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-tighter">Duración Total</p>
                               </div>
@@ -6079,7 +6129,7 @@ const ReportsView = ({
                            {(selectedFinding.equipmentDurationSeconds || (selectedFinding.equipmentStartedAt && selectedFinding.equipmentCompletedAt)) && (
                               <div className="text-right">
                                  <p className="text-lg font-black text-sky-600 dark:text-sky-450 leading-none">
-                                    {(selectedFinding.equipmentDurationSeconds || Math.round((selectedFinding.equipmentCompletedAt.toDate().getTime() - selectedFinding.equipmentStartedAt.toDate().getTime()) / 1000))}s
+                                    {(selectedFinding.equipmentDurationSeconds || Math.round(((parseAnyDate(selectedFinding.equipmentCompletedAt)?.getTime() || 0) - (parseAnyDate(selectedFinding.equipmentStartedAt)?.getTime() || 0)) / 1000))}s
                                  </p>
                                  <p className="text-[10px] font-bold text-sky-400 dark:text-sky-500 uppercase tracking-tighter">Tiempo Equipo</p>
                               </div>
@@ -6100,10 +6150,10 @@ const ReportsView = ({
                             <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50 dark:border-white/5">
                               <span className="text-xs text-emerald-600 dark:text-emerald-450 font-medium font-medium">Resolución</span>
                               <div className="text-right">
-                                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">{format(selectedFinding.closedAt.toDate(), 'dd MMM, HH:mm')}</p>
-                                {getFindingDate(selectedFinding) && (
+                                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">{parseAnyDate(selectedFinding.closedAt) ? format(parseAnyDate(selectedFinding.closedAt)!, 'dd MMM, HH:mm') : '--:--'}</p>
+                                {getFindingDate(selectedFinding) && parseAnyDate(selectedFinding.closedAt) && (
                                   <p className="text-[9px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-tighter">
-                                    En {Math.round((selectedFinding.closedAt.toDate().getTime() - getFindingDate(selectedFinding)!.getTime()) / (1000 * 60 * 60) * 10) / 10} horas
+                                    En {Math.round(((parseAnyDate(selectedFinding.closedAt)!.getTime() - getFindingDate(selectedFinding)!.getTime()) / (1000 * 60 * 60)) * 10) / 10} horas
                                   </p>
                                 )}
                               </div>

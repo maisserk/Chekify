@@ -1,24 +1,33 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from '../firebase';
 import { AppUser } from '../types';
 
 let globalAppUsersCache: AppUser[] = [];
 let globalAppUsersListeners: Array<() => void> = [];
 let isSubscribedToGlobalUsers = false;
+let globalUnsub: (() => void) | null = null;
 
 const subscribeGlobalUsers = () => {
   if (isSubscribedToGlobalUsers) return;
+  if (!auth.currentUser) return; // Wait until authenticated user is present
   isSubscribedToGlobalUsers = true;
   try {
-    onSnapshot(collection(db, 'users'), (snapshot) => {
+    globalUnsub = onSnapshot(collection(db, 'users'), (snapshot) => {
       globalAppUsersCache = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as AppUser));
       globalAppUsersListeners.forEach(cb => cb());
     }, (err) => {
-      console.error("Error listening to global users:", err);
+      isSubscribedToGlobalUsers = false;
+      if (globalUnsub) {
+        try { globalUnsub(); } catch {}
+        globalUnsub = null;
+      }
+      console.warn("Global users listener warning:", err?.message || err);
     });
   } catch (e) {
-    console.error("Global users listener init error:", e);
+    isSubscribedToGlobalUsers = false;
+    console.warn("Global users listener init error:", e);
   }
 };
 
@@ -26,11 +35,27 @@ export const useAppUsers = () => {
   const [users, setUsers] = useState<AppUser[]>(globalAppUsersCache);
 
   useEffect(() => {
-    subscribeGlobalUsers();
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        subscribeGlobalUsers();
+      } else {
+        isSubscribedToGlobalUsers = false;
+        if (globalUnsub) {
+          try { globalUnsub(); } catch {}
+          globalUnsub = null;
+        }
+      }
+    });
+
+    if (auth.currentUser) {
+      subscribeGlobalUsers();
+    }
+
     const listener = () => setUsers([...globalAppUsersCache]);
     globalAppUsersListeners.push(listener);
     return () => {
       globalAppUsersListeners = globalAppUsersListeners.filter(l => l !== listener);
+      unsubAuth();
     };
   }, []);
 

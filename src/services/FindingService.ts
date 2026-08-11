@@ -47,6 +47,8 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg 
 export class FindingService {
   private static readonly COLLECTION_NAME = 'findings';
 
+  private static hasRunBackfill = false;
+
   /**
    * Subscribes to real-time findings with multi-tenant plant scoping.
    */
@@ -54,20 +56,32 @@ export class FindingService {
     callback: (findings: Finding[]) => void,
     plantId?: string
   ): () => void {
-    const findingsRef = collection(db, this.COLLECTION_NAME);
-    let q = query(findingsRef);
-
-    if (plantId) {
-      q = query(findingsRef, where('plantId', '==', plantId));
+    if (!this.hasRunBackfill) {
+      this.hasRunBackfill = true;
+      setTimeout(() => {
+        this.backfillPastInspections().catch(err => {
+          console.warn('[FindingService] Async backfill failed:', err);
+        });
+      }, 1000);
     }
 
+    const findingsRef = collection(db, this.COLLECTION_NAME);
+
     return onSnapshot(
-      q,
+      findingsRef,
       (snapshot) => {
         const rawList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
         
         const cleanedList: Finding[] = [];
         for (const finding of rawList) {
+          if (plantId) {
+            const normTarget = plantId.toLowerCase().trim();
+            const fPlant = (finding.plantId || 'default-plant').toLowerCase().trim();
+            if (fPlant !== 'default-plant' && normTarget !== 'default-plant' && fPlant !== normTarget) {
+              continue;
+            }
+          }
+
           const desc = (finding.description || '').trim();
           const normDesc = desc.toLowerCase().replace(/[^a-z0-9]/g, '');
           const upperCategory = ((finding as any).category || '').toUpperCase();
@@ -169,6 +183,45 @@ export class FindingService {
           if (finding.equipmentDurationSeconds === undefined || finding.equipmentDurationSeconds === null) {
             finding.equipmentDurationSeconds = calcSecs;
             if (rawDoc.equipmentDurationSeconds === undefined) updatesToPersist.equipmentDurationSeconds = calcSecs;
+          }
+
+          // Auto-enrich history array if missing or empty
+          if (!finding.history || !Array.isArray(finding.history) || finding.history.length === 0) {
+            const createdDate = parseAnyDate(finding.createdAt || finding.date) || new Date();
+            const createdStr = createdDate.toISOString();
+            const opName = finding.operatorName || 'Operador';
+            const opId = finding.operatorId || 'sistema';
+
+            const generatedHistory: HistoryEntry[] = [];
+            const isClean = finding.status === 'Closed' && (!finding.description || finding.description.includes('Conforme') || finding.description.includes('Sin hallazgos'));
+
+            generatedHistory.push({
+              status: isClean ? 'Closed' : (finding.status || 'Open'),
+              userId: opId,
+              userName: opName,
+              timestamp: createdStr,
+              action: (finding as any).source === 'OrdenYLimpieza'
+                ? 'Hallazgo autogenerado (Orden & Limpieza)'
+                : ((finding as any).source === 'VOSO'
+                  ? (isClean ? 'Inspección Conforme (Sin hallazgos)' : 'Hallazgo autogenerado (Inspección VOSO)')
+                  : 'Hallazgo reportado'),
+              comment: finding.description ? (finding.description.length > 120 ? finding.description.substring(0, 117) + '...' : finding.description) : 'Registro de inspección / hallazgo'
+            } as any);
+
+            if (finding.status === 'Closed' && !isClean) {
+              const closedDate = parseAnyDate(finding.closedAt) || createdDate;
+              generatedHistory.push({
+                status: 'Closed',
+                userId: finding.closedBy || opId,
+                userName: finding.closedBy ? 'Supervisor / Operador' : opName,
+                timestamp: closedDate.toISOString(),
+                action: 'Cierre de hallazgo / Solución registrada',
+                comment: finding.solution || (finding as any).resolutionNote || 'Resolución completada'
+              } as any);
+            }
+
+            finding.history = generatedHistory;
+            updatesToPersist.history = generatedHistory;
           }
 
           if (Object.keys(updatesToPersist).length > 0) {
@@ -882,6 +935,113 @@ export class FindingService {
     } catch (err: any) {
       console.error('[FindingService] Failed cleanup of duplicates:', err);
       throw err;
+    }
+  }
+
+  /**
+   * Backfills past inspection documents from 'inspections' collection into 'findings'
+   * if they haven't already been created, guaranteeing full historical reports and retroactivity.
+   */
+  public static async backfillPastInspections(): Promise<number> {
+    try {
+      const inspectionsSnap = await getDocs(collection(db, 'inspections'));
+      const findingsSnap = await getDocs(collection(db, this.COLLECTION_NAME));
+
+      const existingFindings = findingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
+      let backfilledCount = 0;
+
+      for (const inspDoc of inspectionsSnap.docs) {
+        const insp = inspDoc.data() as any;
+        const inspId = inspDoc.id;
+        const results = insp.results || {};
+        const areaId = insp.areaId || 'area-general';
+        const areaName = insp.areaName || 'Área General';
+        const plantId = insp.plantId || 'default-plant';
+        const inspectorName = insp.inspector || insp.inspectorName || 'Operador';
+        const inspectorId = insp.completedBy || insp.createdBy || 'sistema';
+
+        const inspStartedAt = insp.startedAt || insp.createdAt || Timestamp.now();
+        const inspCompletedAt = insp.completedAt || insp.createdAt || Timestamp.now();
+        const durationSec = insp.durationSeconds || 0;
+
+        for (const [equipId, resAny] of Object.entries(results)) {
+          const res = resAny as any;
+
+          // Check if a finding already references this inspectionId or equipment + timestamp
+          const alreadyExists = existingFindings.some(f => {
+            if ((f as any).inspectionId === inspId) return true;
+            if (f.equipmentId === equipId) {
+              const fTime = parseAnyDate(f.createdAt || f.date)?.getTime() || 0;
+              const iTime = parseAnyDate(inspCompletedAt)?.getTime() || 0;
+              if (Math.abs(fTime - iTime) < 60000) return true;
+            }
+            return false;
+          });
+
+          if (alreadyExists) continue;
+
+          // Process issues
+          const tradIssues = Object.entries(res?.trad || {}).filter(([_, status]) => status !== 'Bueno');
+          const vosoIssues = Object.entries(res?.voso || {}).filter(([_, v]: [string, any]) => v?.status === 'Observación' || v?.status === 'Crítico');
+
+          const hasIssues = tradIssues.length > 0 || vosoIssues.length > 0;
+          const status = hasIssues ? 'Open' : 'Closed';
+          const priority = vosoIssues.some(([_, v]: [string, any]) => v?.status === 'Crítico') ? 'Alta' : (hasIssues ? 'Media' : 'Baja');
+
+          const desc = hasIssues
+            ? `Inspección Histórica en ${equipId}. Desviaciones detectadas.`
+            : `Inspección VOSO / Ruta Conforme en ${equipId}.\n• Todos los puntos evaluados se encuentran en condición normal (Bueno/Conforme).`;
+
+          const createdDate = parseAnyDate(inspCompletedAt) || new Date();
+          const createdStr = createdDate.toISOString();
+
+          const historyEntry = {
+            status: status as any,
+            userId: inspectorId,
+            userName: inspectorName,
+            timestamp: createdStr,
+            action: hasIssues ? 'Hallazgo autogenerado (Inspección Registrada)' : 'Inspección Conforme (Sin hallazgos)',
+            comment: desc
+          };
+
+          const newFindingId = doc(collection(db, this.COLLECTION_NAME)).id;
+          const newPayload: any = {
+            id: newFindingId,
+            inspectionId: inspId,
+            areaId,
+            areaName,
+            plantId,
+            equipmentId: equipId,
+            equipmentName: equipId,
+            description: desc,
+            status,
+            priority,
+            date: createdDate,
+            createdAt: inspCompletedAt,
+            closedAt: status === 'Closed' ? inspCompletedAt : null,
+            closedBy: status === 'Closed' ? inspectorId : null,
+            inspectionStartedAt: inspStartedAt,
+            inspectionCompletedAt: inspCompletedAt,
+            inspectionDurationSeconds: durationSec,
+            equipmentStartedAt: inspStartedAt,
+            equipmentCompletedAt: inspCompletedAt,
+            equipmentDurationSeconds: durationSec,
+            operatorId: inspectorId,
+            operatorName: inspectorName,
+            source: 'VOSO',
+            history: [historyEntry]
+          };
+
+          await setDoc(doc(db, this.COLLECTION_NAME, newFindingId), newPayload);
+          existingFindings.push(newPayload as Finding);
+          backfilledCount++;
+        }
+      }
+
+      return backfilledCount;
+    } catch (err) {
+      console.warn('[FindingService] Failed during backfillPastInspections:', err);
+      return 0;
     }
   }
 }

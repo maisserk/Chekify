@@ -228,7 +228,7 @@ export const exportFindingsToPDF = async (findingsList: Finding[], title: string
         sanitizeForPDF(f.operatorName),
         sanitizeForPDF(f.description, 0),
         f.status === 'Open' ? 'Pendiente' : f.status === 'InReview' ? 'En Revisión' : 'Cerrado',
-        f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy HH:mm') : '-'
+        parseAnyDate(f.closedAt) ? format(parseAnyDate(f.closedAt)!, 'dd/MM/yy HH:mm') : '-'
       ];
     });
 
@@ -351,7 +351,7 @@ export const OrdenYLimpiezaDashboard = ({
     ordenFindings.forEach(f => {
       if (f.status === 'Closed' && f.closedAt && (f.date || f.createdAt)) {
         const start = getFindingDate(f)?.getTime() || 0;
-        const end = f.closedAt.toDate ? f.closedAt.toDate().getTime() : new Date(f.closedAt).getTime();
+        const end = parseAnyDate(f.closedAt)?.getTime() || 0;
         if (end > start && start > 0) {
           totalResMs += (end - start);
           resCount++;

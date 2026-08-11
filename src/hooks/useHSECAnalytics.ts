@@ -11,6 +11,7 @@
 
 import { useMemo } from 'react';
 import { Finding } from '../types';
+import { parseAnyDate } from '../utils/dateUtils';
 
 export interface FindingStats {
   totalFindings: number;
@@ -111,17 +112,15 @@ export function useFindingAnalytics(findings: Finding[]): FindingStats {
       // 6. MTTR computing
       if (finding.status === 'Closed' && finding.closedAt && finding.createdAt) {
         // Handle firestore Timestamp vs Date types
-        const createdMs = finding.createdAt.seconds 
-          ? finding.createdAt.toMillis() 
-          : new Date(finding.createdAt).getTime();
-        const closedMs = finding.closedAt.seconds 
-          ? finding.closedAt.toMillis() 
-          : new Date(finding.closedAt).getTime();
+        const createdDate = parseAnyDate(finding.createdAt);
+        const closedDate = parseAnyDate(finding.closedAt);
         
-        const diff = closedMs - createdMs;
-        if (diff > 0) {
-          totalResolutionTimeMs += diff;
-          resolutionCount++;
+        if (createdDate && closedDate) {
+          const diff = closedDate.getTime() - createdDate.getTime();
+          if (diff > 0) {
+            totalResolutionTimeMs += diff;
+            resolutionCount++;
+          }
         }
       }
 
@@ -129,10 +128,10 @@ export function useFindingAnalytics(findings: Finding[]): FindingStats {
       let dateStr = 'Otro';
       if (finding.createdAt) {
         try {
-          const rawDate = finding.createdAt.seconds 
-            ? finding.createdAt.toDate() 
-            : new Date(finding.createdAt);
-          dateStr = rawDate.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
+          const rawDate = parseAnyDate(finding.createdAt);
+          if (rawDate) {
+            dateStr = rawDate.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
+          }
         } catch (e) {
           dateStr = 'Reciente';
         }

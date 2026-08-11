@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { parseAnyDate } from '../utils/dateUtils';
 import { 
   Flame, 
   Eye, 
@@ -425,7 +426,7 @@ export const VOSOHeatmapChart: React.FC<VOSOHeatmapChartProps> = ({ findings }) 
             {/* Modal List Body */}
             <div className="p-5 overflow-y-auto space-y-3 divide-y divide-zinc-100 dark:divide-white/5">
               {selectedCell.list.map((finding, idx) => {
-                const dateObj = finding.createdAt?.toDate ? finding.createdAt.toDate() : new Date(finding.createdAt || Date.now());
+                const dateObj = parseAnyDate(finding.createdAt) || new Date();
                 const formattedDate = dateObj ? dateObj.toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
 
                 return (
