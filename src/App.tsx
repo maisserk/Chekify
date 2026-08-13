@@ -119,7 +119,8 @@ import {
 import { EquipmentService } from './services/EquipmentService';
 import { FindingService } from './services/FindingService';
 import { offlineQueueService } from './services/OfflineQueueService';
-import { meteoredService, WeatherData } from './services/meteoredService';
+import { weatherService, WeatherData } from './services/weatherService';
+import { Plant } from './types';
 import { WeatherModule } from './components/WeatherModule';
 import { UserProfileModal } from './components/UserProfileModal';
 import { QuickHelpModal } from './components/QuickHelpModal';
@@ -1413,13 +1414,28 @@ const OperatorDashboard = ({
 
         const climaPayload = weather ? {
           temperature: weather.temperature,
+          apparentTemperature: weather.apparentTemperature,
           humidity: weather.humidity,
           windSpeed: weather.windSpeed,
           windDirection: weather.windDirection ?? 'N/A',
+          windGusts: weather.windGusts,
           precipitation: weather.precipitation,
+          rain: weather.rain,
           uvIndex: weather.uvIndex ?? 'N/A',
+          uvIndexClearSky: weather.uvIndexClearSky,
+          weatherCode: weather.weatherCode,
+          cloudCover: weather.cloudCover,
+          pressure: weather.pressure,
+          visibility: weather.visibility,
+          solarRadiation: weather.solarRadiation,
+          sunrise: weather.sunrise,
+          sunset: weather.sunset,
           symbol: weather.symbol ?? 'N/A',
-          forecastDate: weather.forecastDate
+          forecastDate: weather.forecastDate,
+          latitude: weather.latitude,
+          longitude: weather.longitude,
+          timezone: weather.timezone,
+          capturedAt: weather.capturedAt || new Date().toISOString()
         } : null;
 
         const inspectionPayload = {
@@ -1721,13 +1737,28 @@ const OperatorDashboard = ({
 
     const climaPayload = weather ? {
       temperature: weather.temperature,
+      apparentTemperature: weather.apparentTemperature,
       humidity: weather.humidity,
       windSpeed: weather.windSpeed,
       windDirection: weather.windDirection ?? 'N/A',
+      windGusts: weather.windGusts,
       precipitation: weather.precipitation,
+      rain: weather.rain,
       uvIndex: weather.uvIndex ?? 'N/A',
+      uvIndexClearSky: weather.uvIndexClearSky,
+      weatherCode: weather.weatherCode,
+      cloudCover: weather.cloudCover,
+      pressure: weather.pressure,
+      visibility: weather.visibility,
+      solarRadiation: weather.solarRadiation,
+      sunrise: weather.sunrise,
+      sunset: weather.sunset,
       symbol: weather.symbol ?? 'N/A',
-      forecastDate: weather.forecastDate
+      forecastDate: weather.forecastDate,
+      latitude: weather.latitude,
+      longitude: weather.longitude,
+      timezone: weather.timezone,
+      capturedAt: weather.capturedAt || new Date().toISOString()
     } : null;
 
     const primaryPhoto = findingPhotos[0] || null;
@@ -4882,34 +4913,47 @@ const ReportsView = ({
         }
       }
 
-      const tableData = moduleFindings.map(f => [
-        getFindingDate(f) ? format(getFindingDate(f)!, 'dd/MM/yy HH:mm') : '-',
-        sanitizeForPDF(isVOSOFinding(f) ? 'VOSO' : '5S Orden'),
-        sanitizeForPDF(`${f.areaName || 'General'}${f.equipmentName ? ' - ' + f.equipmentName : ''}`),
-        sanitizeForPDF(f.operatorName || f.inspector || 'Operador'),
-        sanitizeForPDF(f.priority || 'Media'),
-        sanitizeForPDF(f.description, 0),
-        f.status === 'Open' ? 'Pendiente' : f.status === 'InReview' ? 'En Revisión' : 'Cerrado',
-        f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy HH:mm') : '-'
-      ]);
+      const tableData = moduleFindings.map(f => {
+        let tag = (f as any).equipmentTag || (f as any).tag || '';
+        if (!tag && f.equipmentName) {
+          const match = f.equipmentName.match(/\(([^)]+)\)$/);
+          if (match && match[1]) tag = match[1].trim();
+        }
+        const cleanEquip = f.equipmentName ? f.equipmentName.replace(/\s*\([^)]+\)$/, '') : '';
+
+        return [
+          getFindingDate(f) ? format(getFindingDate(f)!, 'dd/MM/yy HH:mm') : '-',
+          sanitizeForPDF(isVOSOFinding(f) ? 'VOSO' : '5S Orden'),
+          sanitizeForPDF(f.areaName || 'General'),
+          sanitizeForPDF(cleanEquip || 'General'),
+          sanitizeForPDF(tag || 'S/N'),
+          sanitizeForPDF(f.operatorName || f.inspector || 'Operador'),
+          sanitizeForPDF(f.priority || 'Media'),
+          sanitizeForPDF(f.description, 0),
+          f.status === 'Open' ? 'Pendiente' : f.status === 'InReview' ? 'En Revisión' : 'Cerrado',
+          f.closedAt?.toDate ? format(f.closedAt.toDate(), 'dd/MM/yy HH:mm') : '-'
+        ];
+      });
 
       autoTable(docPDF, {
         startY: 35,
-        head: [['Fecha', 'Módulo', 'Área / Equipo', 'Operador', 'Prioridad', 'Descripción y Detalle', 'Estado', 'Cierre']],
+        head: [['Fecha', 'Módulo', 'Área', 'Equipo', 'TAG', 'Operador', 'Prioridad', 'Descripción y Detalle', 'Estado', 'Cierre']],
         body: tableData,
         theme: 'grid',
-        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5, cellPadding: 2.5 },
         alternateRowStyles: { fillColor: [240, 249, 255] },
-        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak', lineColor: [226, 232, 240] },
+        styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak', lineColor: [226, 232, 240] },
         columnStyles: {
-          0: { cellWidth: 20 },
-          1: { cellWidth: 18 },
-          2: { cellWidth: 26 },
+          0: { cellWidth: 18 },
+          1: { cellWidth: 14 },
+          2: { cellWidth: 18 },
           3: { cellWidth: 20 },
           4: { cellWidth: 15 },
-          5: { cellWidth: 'auto' },
-          6: { cellWidth: 18 },
-          7: { cellWidth: 20 }
+          5: { cellWidth: 18 },
+          6: { cellWidth: 14 },
+          7: { cellWidth: 'auto' },
+          8: { cellWidth: 15 },
+          9: { cellWidth: 18 }
         },
         margin: { top: 35, left: 14, right: 14 }
       });
@@ -6993,10 +7037,17 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
   );
 };
 
-const AdminPlantManagement = ({ plants }: { plants: {id: string, name: string}[] }) => {
+const AdminPlantManagement = ({ plants }: { plants: Plant[] }) => {
   const [showForm, setShowForm] = useState(false);
-  const [editingPlant, setEditingPlant] = useState<{id: string, name: string} | null>(null);
-  const [name, setName] = useState('');
+  const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
+  const [plantData, setPlantData] = useState({
+    name: '',
+    city: '',
+    country: '',
+    latitude: '',
+    longitude: '',
+    timezone: 'auto'
+  });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
@@ -7007,23 +7058,70 @@ const AdminPlantManagement = ({ plants }: { plants: {id: string, name: string}[]
     }
   }, [message]);
 
+  const handleOpenForm = (p?: Plant) => {
+    if (p) {
+      setEditingPlant(p);
+      setPlantData({
+        name: p.name || '',
+        city: p.city || '',
+        country: p.country || '',
+        latitude: p.latitude !== undefined ? String(p.latitude) : '',
+        longitude: p.longitude !== undefined ? String(p.longitude) : '',
+        timezone: p.timezone || 'auto'
+      });
+    } else {
+      setEditingPlant(null);
+      setPlantData({ name: '', city: '', country: '', latitude: '', longitude: '', timezone: 'auto' });
+    }
+    setShowForm(true);
+  };
+
+  const handleGetLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setPlantData(prev => ({
+            ...prev,
+            latitude: position.coords.latitude.toFixed(4),
+            longitude: position.coords.longitude.toFixed(4)
+          }));
+          setMessage({ text: "Coordenadas GPS capturadas con éxito", type: 'success' });
+        },
+        (err) => {
+          console.error("Error GPS:", err);
+          setMessage({ text: "No se pudo obtener el GPS actual: " + err.message, type: 'error' });
+        }
+      );
+    } else {
+      setMessage({ text: "Geolocalización no soportada por el navegador", type: 'error' });
+    }
+  };
+
   const handleSave = async () => {
-    console.log("Iniciando handleSave Planta, name:", name);
-    if (!name) {
-      console.warn("Nombre de planta vacío");
+    if (!plantData.name) {
+      setMessage({ text: "Ingresa el nombre de la planta", type: 'error' });
       return;
     }
     
     try {
-      const baseSlug = generateSafeId(name) || 'plant';
+      const baseSlug = generateSafeId(plantData.name) || 'plant';
       const id = editingPlant ? editingPlant.id : `plant-${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
-      console.log("Guardando planta con ID:", id);
-      await setDoc(doc(db, 'plants', id), { id, name });
-      console.log("Planta guardada correctamente");
-      setName('');
-      setEditingPlant(null);
+      
+      const payload: any = {
+        id,
+        name: plantData.name,
+        city: plantData.city,
+        country: plantData.country,
+        timezone: plantData.timezone || 'auto'
+      };
+
+      if (plantData.latitude) payload.latitude = parseFloat(plantData.latitude);
+      if (plantData.longitude) payload.longitude = parseFloat(plantData.longitude);
+
+      await setDoc(doc(db, 'plants', id), payload, { merge: true });
       setShowForm(false);
-      setMessage({ text: "Planta guardada correctamente", type: 'success' });
+      setEditingPlant(null);
+      setMessage({ text: "Planta guardada correctamente con datos Open-Meteo", type: 'success' });
     } catch (err: any) {
       console.error("Error al guardar planta:", err);
       setMessage({ text: "Error al guardar planta", type: 'error' });
@@ -7045,7 +7143,7 @@ const AdminPlantManagement = ({ plants }: { plants: {id: string, name: string}[]
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Plantas Industriales</h3>
-        <button onClick={() => { setEditingPlant(null); setName(''); setShowForm(true); }} className="p-2 bg-brand-blue text-white rounded-xl hover:opacity-90 transition-all shadow-md shadow-sky-100 dark:shadow-none"><Plus className="w-4 h-4" /></button>
+        <button onClick={() => handleOpenForm()} className="p-2 bg-brand-blue text-white rounded-xl hover:opacity-90 transition-all shadow-md shadow-sky-100 dark:shadow-none"><Plus className="w-4 h-4" /></button>
       </div>
 
       <BulkUpload 
@@ -7058,11 +7156,20 @@ const AdminPlantManagement = ({ plants }: { plants: {id: string, name: string}[]
         {plants.filter(p => (p as any).status !== 'deleted').map((p, pIdx) => (
           <div key={`pl-${p.id}-${pIdx}`} className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex justify-between items-center hover:shadow-sm dark:hover:shadow-none transition-all">
             <div>
-              <span className="font-bold text-zinc-900 dark:text-white">{p.name}</span>
-              <p className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-black tracking-widest">{p.id}</p>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-zinc-900 dark:text-white">{p.name}</span>
+                {p.latitude && p.longitude && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 text-[10px] font-bold">
+                    GPS Open-Meteo OK
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-black tracking-widest">
+                ID: {p.id} {p.city ? `• ${p.city}` : ''} {p.latitude ? `(${p.latitude}, ${p.longitude})` : ''}
+              </p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { setEditingPlant(p); setName(p.name); setShowForm(true); }} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white transition-colors"><FileText className="w-4 h-4" /></button>
+              <button onClick={() => handleOpenForm(p)} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white transition-colors"><FileText className="w-4 h-4" /></button>
               <button onClick={() => setConfirmDeleteId(p.id)} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
             </div>
           </div>
@@ -7109,9 +7216,46 @@ const AdminPlantManagement = ({ plants }: { plants: {id: string, name: string}[]
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-md bg-white dark:bg-black rounded-[2.5rem] shadow-2xl dark:shadow-none flex flex-col max-h-[90vh] overflow-hidden border border-zinc-100 dark:border-white/10">
               <div className="p-8 border-b border-zinc-50 dark:border-white/5">
                 <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{editingPlant ? 'Editar Planta' : 'Nueva Planta'}</h3>
+                <p className="text-xs text-zinc-500 mt-1">Configura las coordenadas para el módulo Open-Meteo</p>
               </div>
-              <div className="flex-1 overflow-y-auto p-8 pt-4 custom-scrollbar">
-                <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la planta" className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl mb-4 outline-none focus:ring-2 focus:ring-brand-blue" />
+              <div className="flex-1 overflow-y-auto p-8 pt-4 custom-scrollbar space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Nombre de la Planta</label>
+                  <input value={plantData.name} onChange={e => setPlantData({...plantData, name: e.target.value})} placeholder="Ej: Planta Minera Norte" className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Ciudad</label>
+                    <input value={plantData.city} onChange={e => setPlantData({...plantData, city: e.target.value})} placeholder="Ej: Antofagasta" className="w-full p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl outline-none text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">País</label>
+                    <input value={plantData.country} onChange={e => setPlantData({...plantData, country: e.target.value})} placeholder="Ej: Chile" className="w-full p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl outline-none text-sm" />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-sky-50/50 dark:bg-sky-500/5 rounded-2xl border border-sky-100 dark:border-sky-500/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-brand-blue dark:text-sky-400 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5" /> Ubicación GPS (Open-Meteo)
+                    </span>
+                    <button type="button" onClick={handleGetLocation} className="text-[10px] font-bold bg-brand-blue text-white px-2.5 py-1 rounded-lg hover:opacity-90 transition-opacity">
+                      Usar GPS Actual
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Latitud</label>
+                      <input value={plantData.latitude} onChange={e => setPlantData({...plantData, latitude: e.target.value})} placeholder="Ej: -23.6500" className="w-full p-2.5 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl outline-none text-xs font-mono" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Longitud</label>
+                      <input value={plantData.longitude} onChange={e => setPlantData({...plantData, longitude: e.target.value})} placeholder="Ej: -70.4000" className="w-full p-2.5 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl outline-none text-xs font-mono" />
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="p-8 border-t border-zinc-50 dark:border-white/5 bg-zinc-50 dark:bg-zinc-900/20">
                 <div className="flex gap-3">
@@ -7385,7 +7529,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
   const [batchMode, setBatchMode] = useState<'range' | 'lines'>('range');
   const [batchPrefix, setBatchPrefix] = useState<string>('Equipo ');
   const [batchStart, setBatchStart] = useState<number>(1);
-  const [batchEnd, setBatchEnd] = useState<number>(50);
+  const [batchEnd, setBatchEnd] = useState<number>(100);
   const [batchLinesText, setBatchLinesText] = useState<string>('');
   const [batchIsGenerating, setBatchIsGenerating] = useState(false);
   const [batchProgress, setBatchProgress] = useState<string>('');
@@ -8157,7 +8301,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Generador Masivo de Equipos</h3>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Crea múltiples equipos para un área sin límite de cantidad</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Crea hasta 100 o más equipos por área sin límite de capacidad</p>
                   </div>
                 </div>
                 {!batchIsGenerating && (
@@ -8212,7 +8356,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                       batchMode === 'range' ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-zinc-500 dark:text-zinc-400'
                     }`}
                   >
-                    Por Rango Numérico (p.ej. 1 al 50)
+                    Por Rango Numérico (p.ej. 1 al 100)
                   </button>
                   <button
                     type="button"
@@ -9536,7 +9680,7 @@ const AppLayout = ({
   const [showProfileModal, setShowProfileModal] = useState(false);
   
   // Single, cache-reliable global plants list for the app
-  const [plants, setPlants] = useState<{ id: string; name: string }[]>([]);
+  const [plants, setPlants] = useState<Plant[]>([]);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
@@ -9548,7 +9692,7 @@ const AppLayout = ({
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
-  // Meteored Weather state for global Header
+  // Open-Meteo Weather state for global Header
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
   const [weatherError, setWeatherError] = useState<boolean>(false);
@@ -9560,7 +9704,12 @@ const AppLayout = ({
       setLoadingWeather(true);
       setWeatherError(false);
       try {
-        const data = await meteoredService.getHourlyForecast();
+        const userPlant = plants.find(p => p.id === user.plantId);
+        const data = await weatherService.getCurrentWeather(
+          userPlant?.latitude,
+          userPlant?.longitude,
+          userPlant?.timezone
+        );
         if (isMounted) {
           if (data) {
             setWeather(data);
@@ -9569,7 +9718,7 @@ const AppLayout = ({
           }
         }
       } catch (err) {
-        console.error("Error fetching Meteored weather:", err);
+        console.error("Error fetching Open-Meteo weather:", err);
         if (isMounted) {
           setWeatherError(true);
         }
@@ -9585,7 +9734,7 @@ const AppLayout = ({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user.plantId, plants]);
 
   useEffect(() => {
     // 1. Detect if already in standalone mode (installed)
@@ -10150,7 +10299,7 @@ const AppLayout = ({
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden pt-2 pb-1 border-t border-sky-500/15"
                     >
-                      <WeatherModule onClose={() => setIsWeatherExpanded(false)} />
+                      <WeatherModule plant={plants.find(p => p.id === user.plantId)} onClose={() => setIsWeatherExpanded(false)} />
                     </motion.div>
                   )}
                 </AnimatePresence>

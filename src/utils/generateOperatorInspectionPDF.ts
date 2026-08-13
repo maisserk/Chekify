@@ -253,6 +253,25 @@ function drawAvatarPlaceholder(docPDF: jsPDF, x: number, y: number, size: number
   docPDF.text(initials, x + (size / 2) - 4, y + (size / 2) + 3);
 }
 
+export const extractEquipmentTag = (finding: Finding): string => {
+  if (finding.equipmentTag && finding.equipmentTag.trim()) {
+    return finding.equipmentTag.trim();
+  }
+  if (finding.tag && finding.tag.trim()) {
+    return finding.tag.trim();
+  }
+  if ((finding as any).tag && String((finding as any).tag).trim()) {
+    return String((finding as any).tag).trim();
+  }
+  if (finding.equipmentName) {
+    const match = finding.equipmentName.match(/\(([^)]+)\)$/);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  return 'S/N';
+};
+
 /**
  * Generates an independent, highly structured Operator Inspection Summary PDF Report
  */
@@ -275,6 +294,8 @@ export const generateOperatorInspectionPDF = async (
   const areaName = finding.areaName || 'Área General';
   const equipmentName = finding.equipmentName || 'Ítems Generales de Inspección';
   const plantId = finding.plantId || 'Planta Principal';
+  const rawTag = extractEquipmentTag(finding);
+  const equipmentTag = rawTag || 'S/N';
 
   // Duration calculation
   const durationSecs = finding.equipmentDurationSeconds || finding.inspectionDurationSeconds || (finding as any).durationSeconds || 0;
@@ -298,9 +319,11 @@ export const generateOperatorInspectionPDF = async (
   docPDF.setFillColor(14, 165, 233); // Chekify Sky-500 accent (#0EA5E9)
   docPDF.rect(0, 28, pageWidth, 1.5, 'F');
 
-  // Dynamic Equipment / Area Title for Header
-  const targetEquipmentName = (finding.equipmentName && finding.equipmentName.trim() && finding.equipmentName !== 'Puntos Generales de Inspección' && finding.equipmentName !== 'Ítems Generales de Inspección')
-    ? finding.equipmentName.trim().toUpperCase()
+  // Dynamic Equipment / Area Title for Header (clean without TAG suffix)
+  const rawEquipName = finding.equipmentName || '';
+  const cleanEquipHeaderName = rawEquipName.replace(/\s*\([^)]+\)$/, '').trim().toUpperCase();
+  const targetEquipmentName = (cleanEquipHeaderName && cleanEquipHeaderName !== 'PUNTOS GENERALES DE INSPECCIÓN' && cleanEquipHeaderName !== 'ÍTEMS GENERALES DE INSPECCIÓN')
+    ? cleanEquipHeaderName
     : (finding.areaName && finding.areaName.trim() ? finding.areaName.trim().toUpperCase() : 'ÁREA COMPLETA');
 
   const mainInspectionTitle = `INFORME DE INSPECCIÓN DE ${targetEquipmentName}`;
@@ -359,7 +382,7 @@ export const generateOperatorInspectionPDF = async (
   }
 
   let currentY = 35;
-  const cardHeight = 44;
+  const cardHeight = 46;
 
   // --- OPERATOR & INSPECTION METADATA CARD ---
   docPDF.setFillColor(240, 249, 255); // Chekify Sky-50 (#F0F9FF)
@@ -396,50 +419,61 @@ export const generateOperatorInspectionPDF = async (
 
   // Middle Column Text
   const infoX = avatarX + avatarSize + 5; // ~51 mm
-  let infoY = currentY + 7;
+  let infoY = currentY + 6;
 
-  docPDF.setFontSize(7.5);
+  docPDF.setFontSize(7);
   docPDF.setFont('helvetica', 'bold');
   docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('OPERADOR / INSPECTOR:', infoX, infoY);
-  docPDF.setFontSize(9.5);
+  docPDF.setFontSize(9);
   docPDF.setFont('helvetica', 'bold');
   docPDF.setTextColor(15, 23, 42); // Chekify Navy Slate
   docPDF.text(sanitizeForPDF(operatorName, 26), infoX + 37, infoY);
 
-  infoY += 6;
-  docPDF.setFontSize(7.5);
+  infoY += 5.2;
+  docPDF.setFontSize(7);
   docPDF.setFont('helvetica', 'bold');
   docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('ÁREA DE INSPECCIÓN:', infoX, infoY);
-  docPDF.setFontSize(8.5);
+  docPDF.setFontSize(8);
   docPDF.setFont('helvetica', 'bold');
   docPDF.setTextColor(2, 132, 199); // Chekify Sky-600
   docPDF.text(sanitizeForPDF(`${areaName} (${plantId})`, 28), infoX + 37, infoY);
 
-  infoY += 6;
-  docPDF.setFontSize(7.5);
+  infoY += 5.2;
+  docPDF.setFontSize(7);
   docPDF.setFont('helvetica', 'bold');
   docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('EQUIPO / COMPONENTE:', infoX, infoY);
-  docPDF.setFontSize(8.5);
+  docPDF.setFontSize(8);
   docPDF.setFont('helvetica', 'normal');
   docPDF.setTextColor(51, 65, 85);
-  docPDF.text(sanitizeForPDF(equipmentName || 'Área Completa', 28), infoX + 37, infoY);
+  const cleanEquipName = (equipmentName || 'Área Completa').replace(/\s*\([^)]+\)$/, '');
+  docPDF.text(sanitizeForPDF(cleanEquipName, 28), infoX + 37, infoY);
 
-  infoY += 6;
-  docPDF.setFontSize(7.5);
+  infoY += 5.2;
+  docPDF.setFontSize(7);
+  docPDF.setFont('helvetica', 'bold');
+  docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
+  docPDF.text('TAG DEL EQUIPO:', infoX, infoY);
+  docPDF.setFontSize(8.5);
+  docPDF.setFont('helvetica', 'bold');
+  docPDF.setTextColor(16, 185, 129); // Emerald-600 font for high visibility
+  docPDF.text(sanitizeForPDF(equipmentTag, 28), infoX + 37, infoY);
+
+  infoY += 5.2;
+  docPDF.setFontSize(7);
   docPDF.setFont('helvetica', 'bold');
   docPDF.setTextColor(3, 105, 161); // Chekify Sky-700
   docPDF.text('TIEMPO INSPECCIÓN:', infoX, infoY);
-  docPDF.setFontSize(8.5);
+  docPDF.setFontSize(8);
   docPDF.setFont('helvetica', 'bold');
   docPDF.setTextColor(2, 132, 199); // Chekify Sky-600
   docPDF.text(durationFormatted, infoX + 37, infoY);
 
   if (operatorRutCargo) {
-    infoY += 5;
-    docPDF.setFontSize(7);
+    infoY += 4.5;
+    docPDF.setFontSize(6.5);
     docPDF.setFont('helvetica', 'italic');
     docPDF.setTextColor(100, 116, 139);
     docPDF.text(sanitizeForPDF(operatorRutCargo, 40), infoX, infoY);

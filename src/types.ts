@@ -3,7 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { WeatherData } from './services/meteoredService';
+import { WeatherData } from './services/weatherService';
+
+export interface Plant {
+  id: string;
+  name: string;
+  city?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  status?: string;
+}
 
 export type UserRole = 'Administrador' | 'Supervisor' | 'Operador';
 
@@ -87,6 +98,8 @@ export interface Finding {
   plantId?: string;
   equipmentId?: string | null;
   equipmentName?: string | null;
+  equipmentTag?: string | null;
+  tag?: string | null;
   priority?: 'Alta' | 'Media' | 'Baja' | string;
   date?: any;
   source?: string;

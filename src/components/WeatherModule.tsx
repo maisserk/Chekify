@@ -5,7 +5,7 @@ import {
   CloudDrizzle, CloudLightning, Wind, CloudFog, Snowflake,
   Droplets, Thermometer, ThermometerSun, ThermometerSnowflake,
   Clock, Calendar, RefreshCw, X, ShieldAlert, ChevronRight,
-  TrendingUp, Umbrella, Navigation
+  TrendingUp, Umbrella, Navigation, Compass, Gauge, Eye, Sunrise, Sunset, Radio
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -17,11 +17,16 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { meteoredService, FullWeatherData, WeatherData, DailyWeatherData, HourlyForecastItem, getUVLevelInfo } from '../services/meteoredService';
+import { weatherService, FullWeatherData, WeatherData, DailyWeatherData, HourlyForecastItem, getUVLevelInfo } from '../services/weatherService';
+import { Plant } from '../types';
 
 interface WeatherModuleProps {
   onClose?: () => void;
   isEmbedded?: boolean;
+  plant?: Plant | null;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
 }
 
 // Background Animation Component for Weather Cards
@@ -31,7 +36,7 @@ const WeatherAnimatedBackground: React.FC<{ symbol?: string; isNight?: boolean }
   const isClear = sym.includes('despejado') || sym.includes('soleado');
   const isPartial = sym.includes('parcialmente') || sym.includes('algo');
   const isCloudy = sym.includes('cubierto') || sym.includes('nublado');
-  const isRain = sym.includes('lluvia') || sym.includes('chubasco') || sym.includes('precipitac');
+  const isRain = sym.includes('lluvia') || sym.includes('chubasco') || sym.includes('precipitac') || sym.includes('llovizna');
   const isStorm = sym.includes('tormenta') || sym.includes('eléctrica');
   const isFog = sym.includes('niebla') || sym.includes('bruma');
   const isSnow = sym.includes('nieve') || sym.includes('granizo');
@@ -190,17 +195,28 @@ const getWeatherCardGradient = (symbol?: string, isNight?: boolean) => {
   return 'bg-gradient-to-br from-sky-500 via-sky-600 to-blue-700';
 };
 
-export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedded = false }) => {
+export const WeatherModule: React.FC<WeatherModuleProps> = ({ 
+  onClose, 
+  isEmbedded = false,
+  plant,
+  latitude,
+  longitude,
+  timezone
+}) => {
   const [activeTab, setActiveTab] = useState<'ahora' | 'hoy' | 'porHora'>('ahora');
   const [weatherData, setWeatherData] = useState<FullWeatherData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<boolean>(false);
 
+  const lat = plant?.latitude ?? latitude;
+  const lon = plant?.longitude ?? longitude;
+  const tz = plant?.timezone ?? timezone;
+
   const fetchWeather = async () => {
     setLoading(true);
     setError(false);
     try {
-      const data = await meteoredService.getFullWeather();
+      const data = await weatherService.getFullWeather(lat, lon, tz);
       setWeatherData(data);
     } catch (err) {
       console.error('Error fetching weather module data:', err);
@@ -212,7 +228,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
 
   useEffect(() => {
     fetchWeather();
-  }, []);
+  }, [lat, lon, tz]);
 
   // Icon selector based on symbol string and night flag
   const renderWeatherIcon = (symbol?: string, isNight?: boolean, className: string = "w-6 h-6") => {
@@ -230,7 +246,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
     if (sym.includes('chubasco')) {
       return <CloudDrizzle className={`${className} text-sky-400`} />;
     }
-    if (sym.includes('lluvia') || sym.includes('precipitac')) {
+    if (sym.includes('lluvia') || sym.includes('precipitac') || sym.includes('llovizna')) {
       return <CloudRain className={`${className} text-blue-500`} />;
     }
     if (sym.includes('tormenta') || sym.includes('eléctrica')) {
@@ -264,9 +280,24 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight">Condiciones Meteorológicas</h3>
+              <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+                {weatherData?.current?.cityName
+                  ? `Condiciones Meteorológicas - ${weatherData.current.cityName}`
+                  : plant?.name 
+                  ? `Condiciones Meteorológicas - ${plant.name}` 
+                  : 'Condiciones Meteorológicas'}
+              </h3>
             </div>
-            <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">Datos obtenidos de meteored.cl</p>
+            <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5 flex-wrap mt-0.5">
+              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                <Radio className="w-3 h-3 animate-pulse" /> {weatherData?.current?.cityName ? `Ubicación Automática: ${weatherData.current.cityName}` : 'Geolocalización Automática (Dispositivo)'}
+              </span>
+              {weatherData?.latitude !== undefined && weatherData?.longitude !== undefined && (
+                <span className="text-[10px] text-zinc-400 font-mono">
+                  ({weatherData.latitude.toFixed(4)}°, {weatherData.longitude.toFixed(4)}°)
+                </span>
+              )}
+            </p>
           </div>
         </div>
 
@@ -334,12 +365,31 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
       {loading && !weatherData && (
         <div className="py-12 flex flex-col items-center justify-center gap-3 text-zinc-400">
           <RefreshCw className="w-8 h-8 animate-spin text-sky-500" />
-          <p className="text-xs font-bold uppercase tracking-widest">Obteniendo pronóstico meteorológico...</p>
+          <p className="text-xs font-bold uppercase tracking-widest">Obteniendo pronóstico desde Open-Meteo...</p>
+        </div>
+      )}
+
+      {/* Error or No Data Banner */}
+      {!loading && (error || !weatherData || !weatherData.current) && (
+        <div className="py-8 px-4 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-200 flex flex-col items-center justify-center text-center gap-3">
+          <ShieldAlert className="w-8 h-8 text-amber-500" />
+          <div>
+            <h4 className="font-bold text-sm">Información meteorológica no disponible</h4>
+            <p className="text-xs opacity-80 mt-1">
+              {error ? 'Ocurrió un error al conectar con la API de Open-Meteo. Revisa tu conexión a internet.' : 'Coordenadas de planta no configuradas y no se pudo obtener GPS.'}
+            </p>
+          </div>
+          <button
+            onClick={fetchWeather}
+            className="px-4 py-2 bg-amber-500 text-white font-bold text-xs rounded-xl hover:bg-amber-600 transition-all shadow-sm"
+          >
+            Reintentar Consulta
+          </button>
         </div>
       )}
 
       {/* Main Content Area */}
-      {!loading && weatherData && (
+      {!loading && weatherData && weatherData.current && (
         <AnimatePresence mode="wait">
           
           {/* TAB 1: AHORA */}
@@ -357,14 +407,19 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                 <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
                   <div>
                     <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-black uppercase tracking-widest text-white border border-white/25 shadow-sm">
-                      Condición Actual
+                      Condición Actual (Open-Meteo)
                     </span>
                     <div className="flex items-baseline gap-2 mt-3">
-                      <h1 className="text-5xl font-black tracking-tight drop-shadow-sm">{current?.temperature || '21°C'}</h1>
+                      <h1 className="text-5xl font-black tracking-tight drop-shadow-sm">{current?.temperature || '--°C'}</h1>
                       <span className="text-lg font-bold text-white/95 drop-shadow-sm">{current?.symbol || 'Despejado'}</span>
                     </div>
-                    <p className="text-xs text-white/80 font-medium mt-1">
-                      Último registro de la hora: <strong className="text-white">{current?.forecastDate || 'Actual'}</strong>
+                    {current?.apparentTemperature && (
+                      <p className="text-xs text-white/90 font-medium mt-1">
+                        Sensación Térmica: <strong className="text-white">{current.apparentTemperature}</strong>
+                      </p>
+                    )}
+                    <p className="text-[11px] text-white/80 font-medium mt-1">
+                      Registro de la hora: <strong className="text-white">{current?.forecastDate || 'Actual'}</strong>
                     </p>
                   </div>
 
@@ -378,14 +433,17 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                 </div>
               </div>
 
-              {/* 6 Grid Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {/* Extended Metrics Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
                     <Thermometer className="w-4 h-4 text-rose-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Temperatura</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Temp / Sensación</span>
                   </div>
-                  <p className="text-lg font-black text-zinc-900 dark:text-white">{current?.temperature || 'N/A'}</p>
+                  <p className="text-base font-black text-zinc-900 dark:text-white">
+                    {current?.temperature || 'N/A'}
+                    {current?.apparentTemperature ? ` (${current.apparentTemperature})` : ''}
+                  </p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
@@ -393,15 +451,15 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                     <Droplets className="w-4 h-4 text-sky-500" />
                     <span className="text-[10px] font-bold uppercase tracking-wider">Humedad</span>
                   </div>
-                  <p className="text-lg font-black text-zinc-900 dark:text-white">{current?.humidity || 'N/A'}</p>
+                  <p className="text-base font-black text-zinc-900 dark:text-white">{current?.humidity || 'N/A'}</p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
                     <Wind className="w-4 h-4 text-teal-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Viento</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Viento / Dirección</span>
                   </div>
-                  <p className="text-lg font-black text-zinc-900 dark:text-white">
+                  <p className="text-base font-black text-zinc-900 dark:text-white">
                     {current?.windSpeed || 'N/A'} {current?.windDirection ? `(${current.windDirection})` : ''}
                   </p>
                 </div>
@@ -409,21 +467,21 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
                     <Umbrella className="w-4 h-4 text-indigo-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Precipitación</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Precipitación / Lluvia</span>
                   </div>
-                  <p className="text-lg font-black text-zinc-900 dark:text-white">{current?.precipitation || '0 mm'}</p>
+                  <p className="text-base font-black text-zinc-900 dark:text-white">{current?.precipitation || '0 mm'}</p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
                     <Sun className="w-4 h-4 text-amber-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Radiación UV</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Índice UV Actual</span>
                   </div>
                   <div className="flex items-baseline gap-1.5">
-                    <p className={`text-lg font-black ${getUVLevelInfo(current?.uvIndex).color}`}>
+                    <p className={`text-base font-black ${getUVLevelInfo(current?.uvIndex).color}`}>
                       {current?.uvIndex !== undefined ? current.uvIndex : 'N/A'}
                     </p>
-                    <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                    <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
                       ({getUVLevelInfo(current?.uvIndex).category})
                     </span>
                   </div>
@@ -431,18 +489,44 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
 
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
-                    <CloudSun className="w-4 h-4 text-amber-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Estado</span>
+                    <Cloud className="w-4 h-4 text-zinc-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Nubosidad</span>
                   </div>
-                  <p className="text-base font-bold text-zinc-900 dark:text-white truncate">{current?.symbol || 'Despejado'}</p>
+                  <p className="text-base font-black text-zinc-900 dark:text-white">{current?.cloudCover || 'N/A'}</p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
-                    <Clock className="w-4 h-4 text-emerald-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Hora Pronóstico</span>
+                    <Gauge className="w-4 h-4 text-purple-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Presión Atmosférica</span>
                   </div>
-                  <p className="text-base font-bold text-zinc-900 dark:text-white">{current?.forecastDate || 'Actual'}</p>
+                  <p className="text-base font-black text-zinc-900 dark:text-white">{current?.pressure || 'N/A'}</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
+                  <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
+                    <Eye className="w-4 h-4 text-cyan-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Visibilidad</span>
+                  </div>
+                  <p className="text-base font-black text-zinc-900 dark:text-white">{current?.visibility || 'N/A'}</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
+                  <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
+                    <Radio className="w-4 h-4 text-orange-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Radiación Solar</span>
+                  </div>
+                  <p className="text-base font-black text-zinc-900 dark:text-white">{current?.solarRadiation || 'N/A'}</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
+                  <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
+                    <Sunrise className="w-4 h-4 text-amber-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Amanecer / Atardecer</span>
+                  </div>
+                  <p className="text-base font-black text-zinc-900 dark:text-white">
+                    {current?.sunrise || 'N/A'} / {current?.sunset || 'N/A'}
+                  </p>
                 </div>
               </div>
             </motion.div>
@@ -463,7 +547,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                 <div className="relative z-10">
                   <div className="flex items-center gap-2 mb-1">
                     <Calendar className="w-4 h-4 text-sky-200" />
-                    <span className="text-xs font-black uppercase text-sky-200 tracking-wider">Resumen del Día</span>
+                    <span className="text-xs font-black uppercase text-sky-200 tracking-wider">Resumen Diario (Open-Meteo)</span>
                   </div>
                   <h4 className="text-xl font-black uppercase tracking-tight">{today?.date || 'Hoy'}</h4>
                 </div>
@@ -480,7 +564,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                 </div>
               </div>
 
-              {/* Required 6 Daily Metrics */}
+              {/* Required Daily Metrics */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
@@ -537,7 +621,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
                   </div>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1">
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-white/5 space-y-1 col-span-2 sm:col-span-1">
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
                     <CloudSun className="w-4 h-4 text-emerald-500" />
                     <span className="text-[10px] font-bold uppercase tracking-wider">Estado Predominante</span>
@@ -649,7 +733,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({ onClose, isEmbedde
               {/* Responsive Hourly Table */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold uppercase text-zinc-900 dark:text-white tracking-wider px-1">
-                  Tabla Detallada por Hora
+                  Tabla Detallada por Hora (Open-Meteo)
                 </h4>
 
                 <div className="overflow-x-auto rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-sm custom-scrollbar">
