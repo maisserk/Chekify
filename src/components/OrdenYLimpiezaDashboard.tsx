@@ -491,24 +491,28 @@ export const OrdenYLimpiezaDashboard = ({
 
   const handleSolveIndividualItem = async (
     item: ParsedItem,
-    solutionText: string
+    solutionText: string,
+    solutionDate?: Date
   ) => {
     if (!selectedFinding) return;
     try {
+      const solDate = solutionDate || new Date();
       const { newDescription, isFullyClosed } = await FindingService.solveFindingItem(
         selectedFinding.id,
         selectedFinding.description,
         item.category,
         item.rawTitle,
         solutionText,
-        user
+        user,
+        solDate
       );
 
       setSelectedFinding(prev => prev ? {
         ...prev,
         description: newDescription,
         status: isFullyClosed ? 'Closed' : 'InReview',
-        solution: isFullyClosed ? solutionText : prev.solution
+        solution: isFullyClosed ? solutionText : prev.solution,
+        closedAt: isFullyClosed ? solDate : prev.closedAt
       } : null);
 
       showToast("Solución Registrada", `Se registró la solución para "${item.rawTitle}"`, "success");

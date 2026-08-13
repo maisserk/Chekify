@@ -13,8 +13,10 @@ import {
   ClipboardList,
   MessageSquare,
   FileText,
+  Clock,
   X
 } from 'lucide-react';
+import { formatToDatetimeLocal } from '../utils/dateUtils';
 
 const VOSO_ICONS: Record<string, React.ElementType> = {
   'VER': Eye,
@@ -219,11 +221,19 @@ export const parseFindingDescription = (
       let rawTitle = parts[0]?.replace(/^-\s*/, '').trim() || 'Punto Inspeccionado';
       let detail = parts.slice(1).join(':').trim() || parts[0]?.trim() || '';
 
-      const isSolved = detail.includes('[SOLUCIONADO]') || line.includes('Solucionado por operador');
+      const isSolved = detail.includes('[SOLUCIONADO') || line.includes('[SOLUCIONADO') || line.includes('Solucionado por operador');
       let itemSolutionNote = '';
-      const solMatch = detail.match(/\[SOLUCIONADO:\s*(.*?)\]/i) || line.match(/\[SOLUCIONADO:\s*(.*?)\]/i);
+      const solMatch = detail.match(/\[SOLUCIONADO(?:\s*\((.*?)\))?:\s*(.*?)\]/i) || line.match(/\[SOLUCIONADO(?:\s*\((.*?)\))?:\s*(.*?)\]/i);
       if (solMatch) {
-        itemSolutionNote = solMatch[1].trim();
+        const datePart = solMatch[1] ? solMatch[1].trim() : '';
+        const solText = solMatch[2] ? solMatch[2].trim() : '';
+        if (datePart && solText) {
+          itemSolutionNote = `${solText} (Fecha de Solución: ${datePart})`;
+        } else {
+          itemSolutionNote = solText || datePart || 'Solucionado en terreno.';
+        }
+      } else if (isSolved) {
+        itemSolutionNote = 'Solucionado en terreno.';
       }
 
       const statusMatch = detail.match(/^(Crítico|Observación|Bueno|Falla)/i);
@@ -238,16 +248,14 @@ export const parseFindingDescription = (
 
       let comment = statusStr ? detail.substring(statusStr.length).replace(/^[\s\-:]+/, '').trim() : detail;
       comment = comment
-        .replace(/\[SOLUCIONADO:\s*.*?\]/gi, '')
-        .replace(/\[SOLUCIONADO\]/g, '')
+        .replace(/\[SOLUCIONADO.*?\\]/gi, '')
         .replace(/-\s*Solucionado por operador/gi, '')
         .trim();
 
       if (rawTitle.toLowerCase() === comment.toLowerCase() || !comment) {
         rawTitle = `Ítem (${category})`;
         comment = detail
-          .replace(/\[SOLUCIONADO:\s*.*?\]/gi, '')
-          .replace(/\[SOLUCIONADO\]/g, '')
+          .replace(/\[SOLUCIONADO.*?\\]/gi, '')
           .replace(/-\s*Solucionado por operador/gi, '')
           .trim();
       }
@@ -306,7 +314,7 @@ interface FindingDescriptionRendererProps {
   filterModule?: 'ALL' | 'VOSO' | 'OrdenYLimpieza';
   className?: string;
   isPreview?: boolean;
-  onSolveItem?: (item: ParsedItem, solutionText: string) => Promise<void> | void;
+  onSolveItem?: (item: ParsedItem, solutionText: string, solutionDate?: Date) => Promise<void> | void;
 }
 
 export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProps> = ({
@@ -319,6 +327,7 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
 }) => {
   const [activeSolvingKey, setActiveSolvingKey] = useState<string | null>(null);
   const [solutionInputText, setSolutionInputText] = useState<string>('');
+  const [solutionDateTime, setSolutionDateTime] = useState<string>(formatToDatetimeLocal(new Date()));
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   if (!description) return <p className={className}>-</p>;
@@ -566,6 +575,52 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                                   </button>
                                 ))}
                               </div>
+
+                              {/* Date and Time Selector for Solution */}
+                              <div className="p-2.5 bg-white dark:bg-zinc-900/80 border border-emerald-200 dark:border-emerald-500/30 rounded-xl space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                  <span>Fecha y Hora Real de Solución:</span>
+                                </label>
+                                <input
+                                  type="datetime-local"
+                                  value={solutionDateTime}
+                                  onChange={(e) => setSolutionDateTime(e.target.value)}
+                                  max={formatToDatetimeLocal(new Date())}
+                                  className="w-full p-2 bg-emerald-50/50 dark:bg-zinc-950 border border-emerald-300 dark:border-emerald-500/40 rounded-lg text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                                <div className="flex flex-wrap gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSolutionDateTime(formatToDatetimeLocal(new Date()))}
+                                    className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 dark:bg-zinc-800 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                  >
+                                    ⚡ Ahora mismo
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSolutionDateTime(formatToDatetimeLocal(new Date(Date.now() - 3600 * 1000)))}
+                                    className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 dark:bg-zinc-800 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                  >
+                                    ⏱️ Hace 1 hr
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSolutionDateTime(formatToDatetimeLocal(new Date(Date.now() - 4 * 3600 * 1000)))}
+                                    className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 dark:bg-zinc-800 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                  >
+                                    🕒 Hace 4 hrs
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSolutionDateTime(formatToDatetimeLocal(new Date(Date.now() - 24 * 3600 * 1000)))}
+                                    className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 dark:bg-zinc-800 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                  >
+                                    📅 Ayer
+                                  </button>
+                                </div>
+                              </div>
+
                               <div className="flex items-center gap-2 pt-1">
                                 <button
                                   type="button"
@@ -573,7 +628,8 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                                   onClick={async () => {
                                     setIsSubmitting(true);
                                     try {
-                                      await onSolveItem(item, solutionInputText.trim());
+                                      const solDate = solutionDateTime ? new Date(solutionDateTime) : new Date();
+                                      await onSolveItem(item, solutionInputText.trim(), solDate);
                                       setActiveSolvingKey(null);
                                       setSolutionInputText('');
                                     } finally {
@@ -603,7 +659,11 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                           ) : (
                             <button
                               type="button"
-                              onClick={() => { setActiveSolvingKey(`voso-${i}`); setSolutionInputText(''); }}
+                              onClick={() => { 
+                                setActiveSolvingKey(`voso-${i}`); 
+                                setSolutionInputText(''); 
+                                setSolutionDateTime(formatToDatetimeLocal(new Date()));
+                              }}
                               className="w-full py-2 px-3 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs group"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
@@ -734,6 +794,52 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                                 </button>
                               ))}
                             </div>
+
+                            {/* Date and Time Selector for Solution */}
+                            <div className="p-2.5 bg-white dark:bg-zinc-900/80 border border-emerald-200 dark:border-emerald-500/30 rounded-xl space-y-1.5">
+                              <label className="text-[10px] font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                <span>Fecha y Hora Real de Solución:</span>
+                              </label>
+                              <input
+                                type="datetime-local"
+                                value={solutionDateTime}
+                                onChange={(e) => setSolutionDateTime(e.target.value)}
+                                max={formatToDatetimeLocal(new Date())}
+                                className="w-full p-2 bg-emerald-50/50 dark:bg-zinc-950 border border-emerald-300 dark:border-emerald-500/40 rounded-lg text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                              />
+                              <div className="flex flex-wrap gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setSolutionDateTime(formatToDatetimeLocal(new Date()))}
+                                  className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 dark:bg-zinc-800 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                >
+                                  ⚡ Ahora mismo
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSolutionDateTime(formatToDatetimeLocal(new Date(Date.now() - 3600 * 1000)))}
+                                  className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 dark:bg-zinc-800 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                >
+                                  ⏱️ Hace 1 hr
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSolutionDateTime(formatToDatetimeLocal(new Date(Date.now() - 4 * 3600 * 1000)))}
+                                  className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 dark:bg-zinc-800 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                >
+                                  🕒 Hace 4 hrs
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSolutionDateTime(formatToDatetimeLocal(new Date(Date.now() - 24 * 3600 * 1000)))}
+                                  className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 dark:bg-zinc-800 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/50 rounded-md transition-colors"
+                                >
+                                  📅 Ayer
+                                </button>
+                              </div>
+                            </div>
+
                             <div className="flex items-center gap-2 pt-1">
                               <button
                                 type="button"
@@ -741,7 +847,8 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                                 onClick={async () => {
                                   setIsSubmitting(true);
                                   try {
-                                    await onSolveItem(item, solutionInputText.trim());
+                                    const solDate = solutionDateTime ? new Date(solutionDateTime) : new Date();
+                                    await onSolveItem(item, solutionInputText.trim(), solDate);
                                     setActiveSolvingKey(null);
                                     setSolutionInputText('');
                                   } finally {
@@ -771,7 +878,11 @@ export const FindingDescriptionRenderer: React.FC<FindingDescriptionRendererProp
                         ) : (
                           <button
                             type="button"
-                            onClick={() => { setActiveSolvingKey(`orden-${i}`); setSolutionInputText(''); }}
+                            onClick={() => { 
+                              setActiveSolvingKey(`orden-${i}`); 
+                              setSolutionInputText(''); 
+                              setSolutionDateTime(formatToDatetimeLocal(new Date()));
+                            }}
                             className="w-full py-2 px-3 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs group"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />

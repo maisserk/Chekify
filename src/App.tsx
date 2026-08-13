@@ -4279,23 +4279,26 @@ const SupervisorDashboard = ({
                       description={selectedFinding.description} 
                       source={selectedFinding.source || selectedFinding.category} 
                       filterModule={moduleFilter === 'ALL' ? (isVOSOFinding(selectedFinding) ? 'VOSO' : 'OrdenYLimpieza') : moduleFilter}
-                      onSolveItem={async (item, solutionText) => {
+                      onSolveItem={async (item, solutionText, solutionDate) => {
                         if (!selectedFinding) return;
                         try {
+                          const solDate = solutionDate || new Date();
                           const { newDescription, isFullyClosed } = await FindingService.solveFindingItem(
                             selectedFinding.id,
                             selectedFinding.description,
                             item.category,
                             item.rawTitle,
                             solutionText,
-                            user
+                            user,
+                            solDate
                           );
 
                           setSelectedFinding(prev => prev ? {
                             ...prev,
                             description: newDescription,
                             status: isFullyClosed ? 'Closed' : 'InReview',
-                            solution: isFullyClosed ? solutionText : prev.solution
+                            solution: isFullyClosed ? solutionText : prev.solution,
+                            closedAt: isFullyClosed ? solDate : prev.closedAt
                           } : null);
 
                           showToast("Solución Registrada", `Se registró la solución para "${item.rawTitle}"`, "success");
@@ -5971,23 +5974,26 @@ const ReportsView = ({
                         source={selectedFinding.source} 
                         filterModule={isVOSOFinding(selectedFinding) ? 'VOSO' : 'OrdenYLimpieza'} 
                         className="text-zinc-800 dark:text-zinc-200" 
-                        onSolveItem={async (item, solutionText) => {
+                        onSolveItem={async (item, solutionText, solutionDate) => {
                           if (!selectedFinding) return;
                           try {
+                            const solDate = solutionDate || new Date();
                             const { newDescription, isFullyClosed } = await FindingService.solveFindingItem(
                               selectedFinding.id,
                               selectedFinding.description,
                               item.category,
                               item.rawTitle,
                               solutionText,
-                              user
+                              user,
+                              solDate
                             );
 
                             setSelectedFinding(prev => prev ? {
                               ...prev,
                               description: newDescription,
                               status: isFullyClosed ? 'Closed' : 'InReview',
-                              solution: isFullyClosed ? solutionText : prev.solution
+                              solution: isFullyClosed ? solutionText : prev.solution,
+                              closedAt: isFullyClosed ? solDate : prev.closedAt
                             } : null);
 
                             showToast("Solución Registrada", `Se registró la solución para "${item.rawTitle}"`, "success");
@@ -6756,7 +6762,8 @@ const BulkUpload = ({
             if (entityType === 'Plants') {
               const name = item.nombre || item.name;
               if (!name) continue;
-              const id = item.id || generateSafeId(name);
+              const baseSlug = generateSafeId(name) || 'plant';
+              const id = item.id || `plant-${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
               await setDoc(doc(db, 'plants', id), { id, name });
               count++;
             } 
@@ -6772,7 +6779,8 @@ const BulkUpload = ({
                 if (found) plantId = found.id;
               }
 
-              const id = item.id || generateSafeId(name);
+              const baseSlug = generateSafeId(name) || 'area';
+              const id = item.id || `area-${plantId}-${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
               await setDoc(doc(db, 'areas', id), { 
                 id, 
                 name, 
@@ -6802,7 +6810,8 @@ const BulkUpload = ({
                 if (found) areaId = found.id;
               }
 
-              const id = item.id || item.tag || item.etiqueta_tag || generateSafeId(name);
+              const baseSlug = generateSafeId(name) || 'equipo';
+              const id = item.id || (item.tag ? `eq-${areaId}-${generateSafeId(item.tag)}-${Math.random().toString(36).substring(2, 6)}` : `eq-${areaId}-${baseSlug}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`);
               const checkItemsStr = item.tipo_de_equipo || item.items || item.check_items || "";
               const checkItems = checkItemsStr.split(';').map((s: string) => s.trim()).filter((s: string) => s).map((s: string) => ({
                 id: Math.random().toString(36).substr(2, 9),
@@ -7006,7 +7015,8 @@ const AdminPlantManagement = ({ plants }: { plants: {id: string, name: string}[]
     }
     
     try {
-      const id = editingPlant ? editingPlant.id : generateSafeId(name);
+      const baseSlug = generateSafeId(name) || 'plant';
+      const id = editingPlant ? editingPlant.id : `plant-${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
       console.log("Guardando planta con ID:", id);
       await setDoc(doc(db, 'plants', id), { id, name });
       console.log("Planta guardada correctamente");
@@ -7134,7 +7144,8 @@ const AdminAreaManagement = ({ plants, areas }: { plants: {id: string, name: str
   const handleSave = async () => {
     if (!formData.name || !formData.plantId) return;
     try {
-      const id = editingArea ? editingArea.id : generateSafeId(formData.name);
+      const baseSlug = generateSafeId(formData.name) || 'area';
+      const id = editingArea ? editingArea.id : `area-${formData.plantId}-${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
       await setDoc(doc(db, 'areas', id), { ...formData, id, qrCode: formData.qrCode || id.toUpperCase() });
       setShowForm(false);
       setEditingArea(null);
@@ -7367,6 +7378,80 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
   const [dragOverEquipId, setDragOverEquipId] = useState<string | null>(null);
   const [isReordering, setIsReordering] = useState(false);
 
+  // Batch Equipment Generator States
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchPlantId, setBatchPlantId] = useState<string>('');
+  const [batchAreaId, setBatchAreaId] = useState<string>('');
+  const [batchMode, setBatchMode] = useState<'range' | 'lines'>('range');
+  const [batchPrefix, setBatchPrefix] = useState<string>('Equipo ');
+  const [batchStart, setBatchStart] = useState<number>(1);
+  const [batchEnd, setBatchEnd] = useState<number>(50);
+  const [batchLinesText, setBatchLinesText] = useState<string>('');
+  const [batchIsGenerating, setBatchIsGenerating] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<string>('');
+
+  const handleGenerateBatch = async () => {
+    if (!batchPlantId || !batchAreaId) {
+      setMessage({ text: "Selecciona Planta y Área destino", type: 'error' });
+      return;
+    }
+    let namesToCreate: string[] = [];
+    if (batchMode === 'range') {
+      const start = Math.max(1, Number(batchStart) || 1);
+      const end = Math.max(start, Number(batchEnd) || start);
+      for (let i = start; i <= end; i++) {
+        namesToCreate.push(`${batchPrefix.trim()} ${i}`.trim());
+      }
+    } else {
+      namesToCreate = batchLinesText
+        .split('\n')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    }
+
+    if (namesToCreate.length === 0) {
+      setMessage({ text: "No ingresaste ningún equipo para generar", type: 'error' });
+      return;
+    }
+
+    setBatchIsGenerating(true);
+    try {
+      let createdCount = 0;
+      const currentAreaEquips = equipment.filter(e => e.areaId === batchAreaId && (e as any).status !== 'deleted');
+      const startOrder = currentAreaEquips.length + 1;
+
+      for (let idx = 0; idx < namesToCreate.length; idx++) {
+        const equipName = namesToCreate[idx];
+        const baseSlug = generateSafeId(equipName) || 'equipo';
+        const uniqueId = `eq-${batchAreaId}-${baseSlug}-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`;
+        
+        await EquipmentService.saveEquipment({
+          id: uniqueId,
+          name: equipName,
+          tag: `EQ-${String(startOrder + idx).padStart(3, '0')}`,
+          plantId: batchPlantId,
+          areaId: batchAreaId,
+          inspectionOrder: startOrder + idx,
+          checkItems: [],
+          inspeccionVOSO: DEFAULT_VOSO,
+          status: 'active'
+        });
+        createdCount++;
+        setBatchProgress(`Generando equipo ${createdCount} de ${namesToCreate.length}...`);
+      }
+
+      setMessage({ text: `¡Se generaron e instalaron ${createdCount} equipos exitosamente!`, type: 'success' });
+      setShowBatchModal(false);
+      setBatchLinesText('');
+    } catch (err: any) {
+      console.error("Error en generación masiva:", err);
+      setMessage({ text: "Error en generación masiva: " + (err.message || String(err)), type: 'error' });
+    } finally {
+      setBatchIsGenerating(false);
+      setBatchProgress('');
+    }
+  };
+
   const handleReorderInArea = async (areaEquips: any[], draggedId: string, targetId: string) => {
     if (draggedId === targetId || isReordering) return;
     const oldIndex = areaEquips.findIndex(e => e.id === draggedId);
@@ -7424,7 +7509,8 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
     }
     setIsSaving(true);
     try {
-      const id = editingEquip ? editingEquip.id : generateSafeId(formData.name);
+      const baseSlug = generateSafeId(formData.name) || 'equipo';
+      const id = editingEquip ? editingEquip.id : `eq-${formData.areaId}-${baseSlug}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
       
       // Save data utilizing the transaction-reliable queue mechanism
       const result = await EquipmentService.saveEquipment({
@@ -7742,11 +7828,24 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
             <option value="All" className="bg-white dark:bg-black text-zinc-900 dark:text-white">Todas las Plantas</option>
             {plants.map((p, idx) => <option key={`pl-opt-select-1-${p.id}-${idx}`} value={p.id} className="bg-white dark:bg-black text-zinc-900 dark:text-white">{p.name}</option>)}
           </select>
+          <button 
+            type="button"
+            onClick={() => {
+              setBatchPlantId(selectedPlantFilter !== 'All' ? selectedPlantFilter : (plants[0]?.id || ''));
+              setBatchAreaId('');
+              setShowBatchModal(true);
+            }}
+            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+            title="Generación masiva de equipos para un área"
+          >
+            <Zap className="w-4 h-4" />
+            <span className="hidden sm:inline">Generador Masivo</span>
+          </button>
           <button onClick={() => { 
             setEditingEquip(null); 
             setFormData({name:'', tag: '', areaId:'', plantId: '', inspectionOrder: 0, checkItems: [], inspeccionVOSO: DEFAULT_VOSO}); 
             setShowForm(true); 
-          }} className="p-2 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100 dark:shadow-none">
+          }} className="p-2 bg-brand-blue text-white rounded-xl shadow-md shadow-sky-100 dark:shadow-none" title="Nuevo Equipo">
             <Plus className="w-4 h-4" />
           </button>
         </div>
@@ -8042,6 +8141,173 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-3 rounded-2xl bg-zinc-100 text-zinc-600 font-bold text-sm hover:bg-zinc-200 transition-all">Cancelar</button>
                 <button onClick={() => handleDelete(confirmDeleteId)} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-200 dark:shadow-none">Eliminar</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showBatchModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !batchIsGenerating && setShowBatchModal(false)} className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-lg bg-white dark:bg-black rounded-[2.5rem] shadow-2xl dark:shadow-none flex flex-col max-h-[90vh] overflow-hidden border border-zinc-100 dark:border-white/10">
+              <div className="p-6 border-b border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                    <Zap className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Generador Masivo de Equipos</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Crea múltiples equipos para un área sin límite de cantidad</p>
+                  </div>
+                </div>
+                {!batchIsGenerating && (
+                  <button onClick={() => setShowBatchModal(false)} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1">Planta Target</label>
+                    <select
+                      value={batchPlantId}
+                      onChange={(e) => {
+                        setBatchPlantId(e.target.value);
+                        setBatchAreaId('');
+                      }}
+                      disabled={batchIsGenerating}
+                      className="w-full p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Selecciona Planta</option>
+                      {plants.map(p => (
+                        <option key={`batch-p-${p.id}`} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1">Área Target</label>
+                    <select
+                      value={batchAreaId}
+                      onChange={(e) => setBatchAreaId(e.target.value)}
+                      disabled={batchIsGenerating || !batchPlantId}
+                      className="w-full p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Selecciona Área</option>
+                      {areas.filter(a => a.plantId === batchPlantId && (a as any).status !== 'deleted').map(a => (
+                        <option key={`batch-a-${a.id}`} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setBatchMode('range')}
+                    disabled={batchIsGenerating}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                      batchMode === 'range' ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-zinc-500 dark:text-zinc-400'
+                    }`}
+                  >
+                    Por Rango Numérico (p.ej. 1 al 50)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchMode('lines')}
+                    disabled={batchIsGenerating}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                      batchMode === 'lines' ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-zinc-500 dark:text-zinc-400'
+                    }`}
+                  >
+                    Pegar Lista (un equipo x línea)
+                  </button>
+                </div>
+
+                {batchMode === 'range' ? (
+                  <div className="space-y-3 bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-2xl border border-zinc-100 dark:border-white/5">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1">Prefijo del Equipo</label>
+                      <input
+                        type="text"
+                        value={batchPrefix}
+                        onChange={(e) => setBatchPrefix(e.target.value)}
+                        placeholder="Ej: Motor "
+                        disabled={batchIsGenerating}
+                        className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1">Número Inicial</label>
+                        <input
+                          type="number"
+                          value={batchStart}
+                          onChange={(e) => setBatchStart(Number(e.target.value))}
+                          disabled={batchIsGenerating}
+                          className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1">Número Final</label>
+                        <input
+                          type="number"
+                          value={batchEnd}
+                          onChange={(e) => setBatchEnd(Number(e.target.value))}
+                          disabled={batchIsGenerating}
+                          className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
+                      Se generarán: <span className="font-bold text-emerald-600 dark:text-emerald-400">{Math.max(0, batchEnd - batchStart + 1)}</span> equipos (`{batchPrefix}{batchStart}` hasta `{batchPrefix}{batchEnd}`).
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400">Nombres de Equipos (un equipo por línea)</label>
+                    <textarea
+                      value={batchLinesText}
+                      onChange={(e) => setBatchLinesText(e.target.value)}
+                      placeholder={`Bomba de Agua 1\nBomba de Agua 2\nCompresor Principal\nEstructura A1`}
+                      rows={6}
+                      disabled={batchIsGenerating}
+                      className="w-full p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500 custom-scrollbar font-mono"
+                    />
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Total detectado: <span className="font-bold text-emerald-600 dark:text-emerald-400">{batchLinesText.split('\n').filter(s => s.trim().length > 0).length}</span> equipos.
+                    </p>
+                  </div>
+                )}
+
+                {batchIsGenerating && (
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 animate-spin" />
+                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{batchProgress || 'Procesando equipos...'}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t border-zinc-100 dark:border-white/5 bg-zinc-50 dark:bg-zinc-900/20 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchModal(false)}
+                  disabled={batchIsGenerating}
+                  className="flex-1 py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-xl font-bold text-xs hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGenerateBatch}
+                  disabled={batchIsGenerating || !batchPlantId || !batchAreaId}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-md shadow-emerald-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {batchIsGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                  <span>{batchIsGenerating ? 'Generando...' : 'Generar Equipos'}</span>
+                </button>
               </div>
             </motion.div>
           </div>

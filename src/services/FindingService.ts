@@ -787,10 +787,21 @@ export class FindingService {
     itemCategory: string,
     itemTitle: string,
     solutionText: string,
-    user: { uid: string; name: string }
+    user: { uid: string; name: string },
+    solutionDate?: Date | null
   ): Promise<{ newDescription: string; isFullyClosed: boolean }> {
     try {
       const cleanSolution = solutionText.replace(/[\n\r]/g, ' ').trim();
+      const solDate = solutionDate ? (parseAnyDate(solutionDate) || new Date()) : new Date();
+
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const dd = pad(solDate.getDate());
+      const mm = pad(solDate.getMonth() + 1);
+      const yyyy = solDate.getFullYear();
+      const hh = pad(solDate.getHours());
+      const min = pad(solDate.getMinutes());
+      const formattedDateStr = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+
       const lines = originalDescription.split('\n');
       let matched = false;
 
@@ -804,14 +815,14 @@ export class FindingService {
 
         if (!matched && isMatch && !line.includes('[SOLUCIONADO')) {
           matched = true;
-          return `${line} [SOLUCIONADO: ${cleanSolution}]`;
+          return `${line} [SOLUCIONADO (${formattedDateStr}): ${cleanSolution}]`;
         }
         return line;
       });
 
       let finalDescription = newLines.join('\n');
       if (!matched) {
-        finalDescription = `${originalDescription} [SOLUCIONADO: ${cleanSolution}]`;
+        finalDescription = `${originalDescription} [SOLUCIONADO (${formattedDateStr}): ${cleanSolution}]`;
       }
 
       // Check if all items are solved
@@ -830,8 +841,8 @@ export class FindingService {
       if (isFullyClosed) {
         updateData.status = 'Closed';
         updateData.closedBy = user.uid;
-        updateData.closedAt = serverTimestamp();
-        updateData.solution = `Todos los hallazgos del equipo fueron solucionados independientemente. Última solución: ${cleanSolution}`;
+        updateData.closedAt = Timestamp.fromDate(solDate);
+        updateData.solution = `Todos los hallazgos del equipo fueron solucionados independientemente. Última solución (${formattedDateStr}): ${cleanSolution}`;
       } else {
         updateData.status = 'InReview';
       }
@@ -840,9 +851,9 @@ export class FindingService {
         status: isFullyClosed ? 'Closed' : 'InReview',
         userName: user.name || 'Supervisor/Operador',
         userId: user.uid,
-        timestamp: new Date().toISOString(),
+        timestamp: solDate.toISOString(),
         action: `Solución independiente (${itemCategory || 'Ítem'} - ${itemTitle || 'General'})`,
-        comment: `Solución aplicada: ${cleanSolution}`
+        comment: `Solución aplicada (${formattedDateStr}): ${cleanSolution}`
       };
 
       await offlineQueueService.enqueue(
