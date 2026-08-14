@@ -270,7 +270,7 @@ export const WeatherModule: React.FC<WeatherModuleProps> = ({
   const hourly: HourlyForecastItem[] = weatherData?.hourly || [];
 
   return (
-    <div className={`w-full bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 ${isEmbedded ? 'rounded-2xl p-4' : 'rounded-3xl p-6 shadow-2xl dark:shadow-none'}`}>
+    <div className={`w-full bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/10 max-h-[60vh] sm:max-h-[70vh] md:max-h-[75vh] overflow-y-auto overscroll-contain scrollbar-thin ${isEmbedded ? 'rounded-2xl p-4' : 'rounded-3xl p-4 sm:p-6 shadow-2xl dark:shadow-none'}`}>
       
       {/* Header with Title, Location, Refresh & Close */}
       <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-white/10 mb-4">

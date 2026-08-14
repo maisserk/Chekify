@@ -10327,7 +10327,7 @@ const AppLayout = ({
                       animate={{ opacity: 1, height: 'auto', y: 0 }}
                       exit={{ opacity: 0, height: 0, y: -6 }}
                       transition={{ duration: 0.2 }}
-                      className="overflow-hidden pt-2 pb-1 border-t border-sky-500/15"
+                      className="pt-2 pb-1 border-t border-sky-500/15"
                     >
                       <WeatherModule plant={plants.find(p => p.id === user.plantId)} onClose={() => setIsWeatherExpanded(false)} />
                     </motion.div>
