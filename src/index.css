@@ -15,6 +15,10 @@
   html {
     scroll-behavior: smooth;
     overflow-x: hidden;
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    height: 100%;
   }
 
   body {
@@ -22,10 +26,36 @@
     margin: 0;
     font-family: var(--font-sans);
     overflow-x: hidden;
+    min-height: 100%;
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   
   .dark body {
-    @apply bg-black text-white;
+    @apply bg-zinc-950 text-white;
+  }
+
+  /* Prevent text selection during rapid button tapping on industrial tablets */
+  button, a {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  /* Standalone PWA Safe Area insets */
+  @supports (padding-top: env(safe-area-inset-top)) {
+    .pwa-safe-top {
+      padding-top: env(safe-area-inset-top);
+    }
+    .pwa-safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .pwa-safe-left {
+      padding-left: env(safe-area-inset-left);
+    }
+    .pwa-safe-right {
+      padding-right: env(safe-area-inset-right);
+    }
   }
 }
 

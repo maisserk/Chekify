@@ -138,6 +138,8 @@ import { downloadOperatorInspectionPDF, shareOperatorInspectionPDF, downloadOrSh
 import { useAppUsers } from './hooks/useAppUsers';
 import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText, parseAnyDate } from './utils/dateUtils';
 import { getCachedAreas, cacheAreas, getCachedEquipment, cacheEquipment, clearAllCaches } from './utils/offlineCache';
+import { SplashScreen } from './components/SplashScreen';
+import { ConnectivityBar } from './components/ConnectivityBar';
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
@@ -293,8 +295,23 @@ import {
 // --- Components ---
 
 const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.ReactNode, theme: 'light' | 'dark' }) => {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUser] = useState<AppUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('chekify_cached_user');
+        return cached ? JSON.parse(cached) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
   const [loading, setLoading] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
+  const [statusMessage, setStatusMessage] = useState('Iniciando Checkify...');
+  const [isOfflineMode, setIsOfflineMode] = useState(!navigator.onLine);
+
   const [loginMode, setLoginMode] = useState<'Google' | 'Password'>('Password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -302,6 +319,45 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Progressive real startup indicators
+  useEffect(() => {
+    // 1. Connection check
+    const t1 = setTimeout(() => {
+      if (!navigator.onLine) {
+        setIsOfflineMode(true);
+        setStatusMessage('Modo offline activo');
+      } else {
+        setStatusMessage('Verificando conexión...');
+      }
+    }, 280);
+
+    // 2. Application preparation
+    const t2 = setTimeout(() => {
+      const pendingItems = offlineQueueService.getQueueItems();
+      if (pendingItems.length > 0 && navigator.onLine) {
+        setStatusMessage('Sincronizando información...');
+      } else {
+        setStatusMessage('Preparando aplicación...');
+      }
+    }, 600);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
+  // Guarantee minimum professional splash duration (1.1s) and smooth dismissal
+  useEffect(() => {
+    if (!loading) {
+      const dismissTimer = setTimeout(() => {
+        setShowSplash(false);
+      }, 950);
+      return () => clearTimeout(dismissTimer);
+    }
+  }, [loading]);
+
+  // Auth State Listener
   useEffect(() => {
     let userUnsub: (() => void) | null = null;
     
@@ -312,33 +368,34 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
       }
 
       if (firebaseUser) {
-        // Initial quick set to avoid blank screen while document is being listened to
-        setUser({
+        const baseUser: AppUser = {
           uid: firebaseUser.uid,
           email: firebaseUser.email || '',
           name: firebaseUser.displayName || 'Usuario',
           role: firebaseUser.email === 'maisserk@gmail.com' ? 'Administrador' : 'Operador',
-        });
+        };
+
+        setUser(prev => prev ? { ...prev, ...baseUser } : baseUser);
 
         // Real-time listener for user document
         userUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snapshot) => {
           if (snapshot.exists()) {
             const userData = snapshot.data() as AppUser;
-            // Normalize legacy roles
             let normalizedRole = userData.role;
             if ((userData.role as string) === 'Admin') normalizedRole = 'Administrador';
             if ((userData.role as string) === 'Operator') normalizedRole = 'Operador';
             
+            const resolvedUser = { ...userData, role: normalizedRole };
             if (normalizedRole !== userData.role) {
               try {
                 await updateDoc(doc(db, 'users', firebaseUser.uid), { role: normalizedRole });
               } catch (e) { console.warn("Failed to update role in DB:", e); }
-              setUser({ ...userData, role: normalizedRole });
-            } else {
-              setUser(userData);
             }
+            setUser(resolvedUser);
+            try {
+              localStorage.setItem('chekify_cached_user', JSON.stringify(resolvedUser));
+            } catch (e) { console.warn("Error caching user:", e); }
           } else {
-            // First time user, create doc
             const isAdmin = firebaseUser.email === 'maisserk@gmail.com';
             const newUser: AppUser = {
               uid: firebaseUser.uid,
@@ -349,18 +406,20 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
             try {
               await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
               setUser(newUser);
+              localStorage.setItem('chekify_cached_user', JSON.stringify(newUser));
             } catch (e) { 
               console.warn("Failed to create user doc in DB:", e);
-              // Fallback to minimal user if doc creation fails
               setUser(newUser);
             }
           }
           setLoading(false);
         }, (err) => {
           console.error("User doc listener error:", err);
+          // If offline error, allow cached user to proceed immediately
           setLoading(false);
         });
       } else {
+        localStorage.removeItem('chekify_cached_user');
         setUser(null);
         setLoading(false);
       }
@@ -383,8 +442,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     } catch (error: any) {
       console.error("Login failed", error);
       if (error.code === 'auth/cancelled-popup-request') {
-        // This is often a benign race condition in iframes, we can just log it
-        console.warn("Popup request was cancelled, likely a duplicate call or browser restriction.");
+        console.warn("Popup request was cancelled.");
       } else if (error.code === 'auth/popup-closed-by-user') {
         setError("Inicio de sesión cancelado o bloqueado (Ventana emergente cerrada). Como estás en un entorno embebido (iframe), te recomendamos utilizar la sección de 'Acceso Rápido Demo' de abajo o iniciar sesión con tu usuario y contraseña tradicionales.");
       } else if (error.code === 'auth/popup-blocked') {
@@ -405,7 +463,6 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     setIsLoggingIn(true);
     setError('');
     try {
-      // If user enters just a username, we append a dummy domain for Firebase Auth
       const loginEmail = email.includes('@') ? email : `${email}@chekify.local`;
       await signInWithEmailAndPassword(auth, loginEmail, password);
     } catch (err: any) {
@@ -473,116 +530,173 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 transition-colors duration-200">
-        <motion.div 
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="w-12 h-12 border-4 border-zinc-900 dark:border-zinc-100 border-t-transparent rounded-full"
+  return (
+    <AnimatePresence mode="wait">
+      {showSplash ? (
+        <SplashScreen
+          key="chekify-splash"
+          statusMessage={statusMessage}
+          isOffline={isOfflineMode}
+          onTimeoutRetry={() => window.location.reload()}
+          onForceContinue={() => setShowSplash(false)}
         />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-6 transition-colors duration-200">
-        <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl shadow-xl dark:shadow-none p-8 text-center border border-zinc-100 dark:border-zinc-800 transition-colors duration-200">
-          <div className="flex justify-center mb-6">
-            <Logo className="h-16" />
-          </div>
-          <p className="text-zinc-500 dark:text-zinc-400 mb-8 font-medium">Gestión avanzada de inspecciones industriales.</p>
-
-          {/* Unified Error Message Display */}
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900 text-red-650 dark:text-red-400 text-sm font-medium rounded-2xl text-left leading-relaxed">
-              <span className="font-bold block mb-1">⚠️ Error al iniciar sesión:</span>
-              {error}
+      ) : !user ? (
+        <motion.div
+          key="chekify-login"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-6 transition-colors duration-200"
+        >
+          <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl shadow-xl dark:shadow-none p-6 sm:p-8 text-center border border-zinc-100 dark:border-zinc-800 transition-colors duration-200">
+            <div className="flex justify-center mb-4">
+              <Logo className="h-14 sm:h-16" />
             </div>
-          )}
-          
-          {loginMode === 'Password' ? (
-            <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
-              <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1 ml-1">Usuario</label>
-                <input 
-                  type="text" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all"
-                  placeholder="nombre.usuario"
-                  required
-                />
+            <p className="text-zinc-500 dark:text-zinc-400 mb-6 font-semibold text-xs sm:text-sm tracking-wide">
+              Gestión inteligente de inspecciones
+            </p>
+
+            {/* Offline Alert on Login Screen */}
+            {!navigator.onLine && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-2xl flex items-center justify-center gap-2">
+                <WifiOff className="w-4 h-4 shrink-0" />
+                <span>Modo offline • Inicia sesión con tus credenciales previas</span>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1 ml-1">Contraseña</label>
-                <div className="relative">
+            )}
+
+            {/* Unified Error Message Display */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900 text-red-600 dark:text-red-400 text-sm font-medium rounded-2xl text-left leading-relaxed">
+                <span className="font-bold block mb-1">⚠️ Error al iniciar sesión:</span>
+                {error}
+              </div>
+            )}
+            
+            {loginMode === 'Password' ? (
+              <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1 ml-1">Usuario</label>
                   <input 
-                    type={showPassword ? "text" : "password"} 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue transition-all pr-12"
-                    placeholder="••••••••"
+                    type="text" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full p-3.5 sm:p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-sm sm:text-base transition-all"
+                    placeholder="nombre.usuario"
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-650 transition-colors p-1"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1 ml-1">Contraseña</label>
+                  <div className="relative">
+                    <input 
+                      type={showPassword ? "text" : "password"} 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full p-3.5 sm:p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-sm sm:text-base transition-all pr-12"
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors p-1 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className={`w-full py-3.5 sm:py-4 px-6 bg-gradient-to-r from-brand-blue to-brand-green text-white rounded-2xl font-bold text-sm sm:text-base transition-all shadow-lg shadow-sky-100 dark:shadow-none flex items-center justify-center gap-3 cursor-pointer ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:opacity-90 active:scale-[0.99]'}`}
+                >
+                  {isLoggingIn && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  {isLoggingIn ? "Iniciando sesión..." : "Entrar al Sistema"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginMode('Google')}
+                  className="w-full py-2 text-zinc-400 text-xs font-bold uppercase tracking-widest hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                >
+                  O usar Google
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                <button
+                  disabled={isLoggingIn}
+                  onClick={handleGoogleLogin}
+                  className={`w-full py-3.5 sm:py-4 px-6 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all shadow-sm dark:shadow-none cursor-pointer ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700 active:scale-[0.99]'}`}
+                >
+                  {isLoggingIn ? (
+                    <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+                  ) : (
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />
+                  )}
+                  {isLoggingIn ? "Autenticando..." : "Continuar con Google"}
+                </button>
+                <button
+                  onClick={() => setLoginMode('Password')}
+                  className="w-full py-2 text-zinc-400 text-xs font-bold uppercase tracking-widest hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                >
+                  Volver a Usuario/Contraseña
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className={`w-full py-4 px-6 bg-gradient-to-r from-brand-blue to-brand-green text-white rounded-2xl font-bold transition-all shadow-lg shadow-sky-100 dark:shadow-none flex items-center justify-center gap-3 ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:opacity-90'}`}
-              >
-                {isLoggingIn && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                {isLoggingIn ? "Iniciando sesión..." : "Entrar al Sistema"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setLoginMode('Google')}
-                className="w-full py-2 text-zinc-400 text-xs font-bold uppercase tracking-widest hover:text-zinc-900 transition-colors"
-              >
-                O usar Google
-              </button>
-            </form>
-          ) : (
-            <div className="space-y-4">
-              <button
-                disabled={isLoggingIn}
-                onClick={handleGoogleLogin}
-                className={`w-full py-4 px-6 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all shadow-sm dark:shadow-none ${isLoggingIn ? 'opacity-50 cursor-wait' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}
-              >
-                {isLoggingIn ? (
-                  <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
-                ) : (
-                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />
-                )}
-                {isLoggingIn ? "Autenticando..." : "Continuar con Google"}
-              </button>
-              <button
-                onClick={() => setLoginMode('Password')}
-                className="w-full py-2 text-zinc-400 text-xs font-bold uppercase tracking-widest hover:text-zinc-900 transition-colors"
-              >
-                Volver a Usuario/Contraseña
-              </button>
+            )}
+
+            {/* Quick Demo Access Section */}
+            <div className="mt-6 pt-5 border-t border-zinc-100 dark:border-zinc-800">
+              <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-3">
+                Acceso Rápido de Prueba (Demo)
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  disabled={isLoggingIn}
+                  onClick={() => handleDemoLogin('Operador')}
+                  className="p-2.5 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-sky-50 dark:hover:bg-sky-950/30 border border-zinc-200 dark:border-zinc-700 hover:border-sky-300 rounded-xl text-zinc-700 dark:text-zinc-300 font-bold text-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Operador
+                </button>
+                <button
+                  type="button"
+                  disabled={isLoggingIn}
+                  onClick={() => handleDemoLogin('Supervisor')}
+                  className="p-2.5 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-purple-50 dark:hover:bg-purple-950/30 border border-zinc-200 dark:border-zinc-700 hover:border-purple-300 rounded-xl text-zinc-700 dark:text-zinc-300 font-bold text-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Supervisor
+                </button>
+                <button
+                  type="button"
+                  disabled={isLoggingIn}
+                  onClick={() => handleDemoLogin('Administrador')}
+                  className="p-2.5 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 border border-zinc-200 dark:border-zinc-700 hover:border-emerald-300 rounded-xl text-zinc-700 dark:text-zinc-300 font-bold text-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Admin
+                </button>
+              </div>
             </div>
-          )}
 
-          <div className="mt-8 pt-6 border-t border-zinc-150/40 dark:border-white/10">
-            <p className="text-[10px] font-bold text-zinc-300 dark:text-zinc-650 uppercase tracking-widest">Developed by maisser.cl</p>
+            <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5">
+              <p className="text-[9px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Industrial Enterprise PWA • Developed by maisser.cl</p>
+            </div>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  return <>{children(user)}</>;
+        </motion.div>
+      ) : (
+        <motion.div
+          key="chekify-app-ready"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="w-full min-h-screen"
+        >
+          {children(user)}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 };
 
 const VOSOExecutionCategory = ({ 
@@ -10201,6 +10315,9 @@ const AppLayout = ({
                   {/* Header Actions & Weather Summary Pill */}
                   <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                     
+                    {/* Live Connectivity Status */}
+                    <ConnectivityBar isCompact={true} />
+
                     {/* Compact Weather Summary Pill in Header */}
                     <button
                       onClick={() => setIsWeatherExpanded(!isWeatherExpanded)}

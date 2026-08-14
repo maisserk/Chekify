@@ -1,58 +1,148 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta 
+      name="viewport" 
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" 
+    />
+    <meta name="theme-color" content="#09090b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Checkify" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
     <meta
       name="description"
-      content="Gestión avanzada de inspecciones industriales."
+      content="Gestión inteligente de inspecciones industriales y reporte de hallazgos."
     />
 
     <!-- Open Graph -->
-    <meta property="og:title" content="Checkify" />
+    <meta property="og:title" content="Checkify - Gestión Inteligente de Inspecciones" />
     <meta
       property="og:description"
-      content="Gestión avanzada de inspecciones industriales."
+      content="Gestión inteligente de inspecciones industriales y reporte de hallazgos."
     />
     <meta
       property="og:image"
-      content="https://checkify.maisser.cl/logo.png"
+      content="/logo.png"
     />
-    <meta property="og:url" content="https://checkify.maisser.cl" />
     <meta property="og:type" content="website" />
 
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Checkify" />
-    <meta
-      name="twitter:description"
-      content="Gestión avanzada de inspecciones industriales."
-    />
-    <meta
-      name="twitter:image"
-      content="https://checkify.maisser.cl/logo.png"
-    />
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/logo_small.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/logo_small.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/logo.png" />
 
-    <title>Checkify | maisser.cl</title>
+    <title>Checkify | Gestión Inteligente de Inspecciones</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="manifest" href="/manifest.json" />
+
+    <style>
+      /* Pre-splash styling: Zero white flash, high performance hardware accelerated */
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #09090b;
+        color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior-y: none;
+        height: 100%;
+        width: 100%;
+        overflow-x: hidden;
+      }
+
+      #root {
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .pwa-presplash {
+        position: fixed;
+        inset: 0;
+        background-color: #09090b;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+
+      .pwa-presplash-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        max-width: 320px;
+        width: 100%;
+        animation: pwaFadeIn 0.35s ease-out forwards;
+      }
+
+      .pwa-presplash-logo {
+        height: 56px;
+        width: auto;
+        max-width: 220px;
+        object-contain: contain;
+        filter: brightness(0) invert(1);
+        margin-bottom: 20px;
+      }
+
+      .pwa-presplash-tagline {
+        font-size: 13px;
+        font-weight: 600;
+        color: #a1a1aa;
+        letter-spacing: 0.02em;
+        margin: 0 0 28px 0;
+      }
+
+      .pwa-presplash-spinner {
+        width: 28px;
+        height: 28px;
+        border: 2.5px solid rgba(255, 255, 255, 0.1);
+        border-top-color: #0284c7;
+        border-radius: 50%;
+        animation: pwaSpin 0.75s linear infinite;
+      }
+
+      @keyframes pwaSpin {
+        to { transform: rotate(360deg); }
+      }
+
+      @keyframes pwaFadeIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
   </head>
 
-  <body>
-    <div id="root"></div>
+  <body class="bg-zinc-950 text-white">
+    <div id="root">
+      <!-- Pre-rendered splash screen before JS bundle execution (instant 0ms response) -->
+      <div id="pwa-presplash" class="pwa-presplash">
+        <div class="pwa-presplash-content">
+          <img src="/logo.png" alt="Checkify" class="pwa-presplash-logo" />
+          <p class="pwa-presplash-tagline">Gestión inteligente de inspecciones</p>
+          <div class="pwa-presplash-spinner"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then((reg) => {
-              console.log('[PWA] Service Worker registered successfully:', reg.scope);
+              console.log('[PWA] Service Worker registered:', reg.scope);
             })
             .catch((err) => {
-              console.error('[PWA] Service Worker registration failed:', err);
+              console.warn('[PWA] Service Worker registration failed:', err);
             });
         });
       }
