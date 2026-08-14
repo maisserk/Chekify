@@ -58,7 +58,7 @@ export const parseFindingDescription = (
   const desc = description.trim();
   const upperDesc = desc.toUpperCase();
 
-  // Check if it has inspection features
+  // Check if it has structured inspection features
   const isInspection = desc.includes('Inspección') || 
                        desc.includes('Reporte autogenerado') || 
                        desc.includes('HALLAZGOS') || 
@@ -77,19 +77,20 @@ export const parseFindingDescription = (
       }
       const clean = desc.replace(/^\[ORDEN\]/i, '').replace(/^\[5S\]/i, '').trim();
       const subcatMatch = clean.match(/^\[(.*?)\]/);
-      const subcat = subcatMatch ? subcatMatch[1] : '5S / Aseo';
-      const comment = subcatMatch ? clean.replace(/^\[.*?\]/, '').trim() : clean;
+      const subcat = subcatMatch ? subcatMatch[1].trim() : 'Programa 5S - Orden & Limpieza';
+      const commentRaw = subcatMatch ? clean.replace(/^\[.*?\]/, '').trim() : clean;
+      const cleanComment = commentRaw.replace(/\[SOLUCIONADO.*?\]/gi, '').replace(/-\s*Solucionado por operador/gi, '').trim();
 
       return {
         header: null,
         vosoItems: [],
         ordenItems: [{
           category: 'ORDEN',
-          rawTitle: subcat !== comment ? subcat : 'Programa 5S - Orden & Limpieza',
-          detail: comment,
+          rawTitle: subcat || 'Programa 5S - Orden & Limpieza',
+          detail: cleanComment || desc,
           status: 'Observación' as const,
-          isSolved: desc.includes('[SOLUCIONADO]'),
-          comment: comment.replace('[SOLUCIONADO]', '').replace(/-\s*Solucionado por operador/gi, '').trim()
+          isSolved: desc.includes('[SOLUCIONADO]') || desc.includes('Solucionado por operador'),
+          comment: cleanComment || desc
         }],
         tradItems: [],
         rawText: desc
@@ -103,16 +104,17 @@ export const parseFindingDescription = (
       let category = isVOSOBracket[1].toUpperCase();
       if (category === 'OIR') category = 'OÍR';
       const clean = desc.replace(/^\[(VER|OÍR|OIR|SENTIR|OLER)\]/i, '').trim();
+      const cleanComment = clean.replace(/\[SOLUCIONADO.*?\]/gi, '').replace(/-\s*Solucionado por operador/gi, '').trim();
 
       return {
         header: null,
         vosoItems: [{
           category,
-          rawTitle: `Ítem VOSO (${category})`,
-          detail: clean,
+          rawTitle: `Inspección VOSO (${category})`,
+          detail: cleanComment || desc,
           status: 'Observación' as const,
-          isSolved: desc.includes('[SOLUCIONADO]'),
-          comment: clean.replace('[SOLUCIONADO]', '').replace(/-\s*Solucionado por operador/gi, '').trim()
+          isSolved: desc.includes('[SOLUCIONADO]') || desc.includes('Solucionado por operador'),
+          comment: cleanComment || desc
         }],
         ordenItems: [],
         tradItems: [],
@@ -124,16 +126,17 @@ export const parseFindingDescription = (
       if (effectiveModule === 'VOSO') {
         return { header: null, vosoItems: [], ordenItems: [], tradItems: [], rawText: '' };
       }
+      const cleanComment = desc.replace(/\[SOLUCIONADO.*?\]/gi, '').replace(/-\s*Solucionado por operador/gi, '').trim();
       return {
         header: null,
         vosoItems: [],
         ordenItems: [{
           category: 'ORDEN',
           rawTitle: 'Programa 5S - Orden & Limpieza',
-          detail: desc,
+          detail: cleanComment || desc,
           status: 'Observación' as const,
-          isSolved: desc.includes('[SOLUCIONADO]'),
-          comment: desc.replace('[SOLUCIONADO]', '').replace(/-\s*Solucionado por operador/gi, '').trim()
+          isSolved: desc.includes('[SOLUCIONADO]') || desc.includes('Solucionado por operador'),
+          comment: cleanComment || desc
         }],
         tradItems: [],
         rawText: desc
@@ -141,15 +144,16 @@ export const parseFindingDescription = (
     }
 
     if (source === 'VOSO' || effectiveModule === 'VOSO') {
+      const cleanComment = desc.replace(/\[SOLUCIONADO.*?\]/gi, '').replace(/-\s*Solucionado por operador/gi, '').trim();
       return {
         header: null,
         vosoItems: [{
           category: 'VER',
-          rawTitle: 'Observación VOSO',
-          detail: desc,
+          rawTitle: 'Observación de Inspección VOSO',
+          detail: cleanComment || desc,
           status: 'Observación' as const,
-          isSolved: desc.includes('[SOLUCIONADO]'),
-          comment: desc.replace('[SOLUCIONADO]', '').replace(/-\s*Solucionado por operador/gi, '').trim()
+          isSolved: desc.includes('[SOLUCIONADO]') || desc.includes('Solucionado por operador'),
+          comment: cleanComment || desc
         }],
         ordenItems: [],
         tradItems: [],
@@ -166,7 +170,7 @@ export const parseFindingDescription = (
     };
   }
 
-  // Multi-item or inspection report
+  // Multi-item or structured inspection report
   const lines = desc.split('\n').map(l => l.trim()).filter(Boolean);
   const firstLine = lines[0] || '';
   const firstLower = firstLine.toLowerCase();
@@ -187,7 +191,7 @@ export const parseFindingDescription = (
       currentSection = 'VOSO';
       continue;
     }
-    if (upperLine.includes('OTROS PUNTOS') || upperLine.includes('CHECKLIST TRADICIONAL')) {
+    if (upperLine.includes('OTROS PUNTOS') || upperLine.includes('CHECKLIST TRADICIONAL') || upperLine.includes('OTRAS EVALUACIONES')) {
       currentSection = 'TRAD';
       continue;
     }
@@ -208,22 +212,12 @@ export const parseFindingDescription = (
     }
 
     if (line.startsWith('•') || line.match(/^\[?(VER|OÍR|OIR|SENTIR|OLER|ORDEN)\]?/i) || line.includes(' - ') || line.includes(': ')) {
-      const cleanLine = line.replace(/^•\s*/, '').trim();
+      let cleanLine = line.replace(/^•\s*/, '').trim();
 
-      const categoryMatch = cleanLine.match(/^\[?(VER|OÍR|OIR|SENTIR|OLER|ORDEN|ORDEN Y LIMPIEZA|5S)\]?[\s\-:]*/i);
-      
-      let category = categoryMatch ? categoryMatch[1].toUpperCase() : 'GENERAL';
-      if (category === 'OIR') category = 'OÍR';
-
-      const afterCat = categoryMatch ? cleanLine.substring(categoryMatch[0].length).trim() : cleanLine;
-      
-      const parts = afterCat.split(':');
-      let rawTitle = parts[0]?.replace(/^-\s*/, '').trim() || 'Punto Inspeccionado';
-      let detail = parts.slice(1).join(':').trim() || parts[0]?.trim() || '';
-
-      const isSolved = detail.includes('[SOLUCIONADO') || line.includes('[SOLUCIONADO') || line.includes('Solucionado por operador');
+      // Check if solved
+      const isSolved = cleanLine.includes('[SOLUCIONADO') || cleanLine.includes('Solucionado por operador');
       let itemSolutionNote = '';
-      const solMatch = detail.match(/\[SOLUCIONADO(?:\s*\((.*?)\))?:\s*(.*?)\]/i) || line.match(/\[SOLUCIONADO(?:\s*\((.*?)\))?:\s*(.*?)\]/i);
+      const solMatch = cleanLine.match(/\[SOLUCIONADO(?:\s*\((.*?)\))?:\s*(.*?)\]/i);
       if (solMatch) {
         const datePart = solMatch[1] ? solMatch[1].trim() : '';
         const solText = solMatch[2] ? solMatch[2].trim() : '';
@@ -236,37 +230,92 @@ export const parseFindingDescription = (
         itemSolutionNote = 'Solucionado en terreno.';
       }
 
-      const statusMatch = detail.match(/^(Crítico|Observación|Bueno|Falla)/i);
-      const statusStr = statusMatch ? statusMatch[1] : null;
-
-      let status: 'Crítico' | 'Observación' | 'Bueno' | null = null;
-      if (statusStr) {
-        if (statusStr.toLowerCase().startsWith('crít') || statusStr.toLowerCase().startsWith('crit')) status = 'Crítico';
-        else if (statusStr.toLowerCase().startsWith('obs')) status = 'Observación';
-        else if (statusStr.toLowerCase().startsWith('buen')) status = 'Bueno';
-      }
-
-      let comment = statusStr ? detail.substring(statusStr.length).replace(/^[\s\-:]+/, '').trim() : detail;
-      comment = comment
-        .replace(/\[SOLUCIONADO.*?\\]/gi, '')
+      // Remove solved tags from working string
+      cleanLine = cleanLine
+        .replace(/\[SOLUCIONADO.*?\]/gi, '')
         .replace(/-\s*Solucionado por operador/gi, '')
         .trim();
 
-      if (rawTitle.toLowerCase() === comment.toLowerCase() || !comment) {
-        rawTitle = `Ítem (${category})`;
-        comment = detail
-          .replace(/\[SOLUCIONADO.*?\\]/gi, '')
-          .replace(/-\s*Solucionado por operador/gi, '')
-          .trim();
+      // Extract Category prefix if present: e.g. "VER - " or "[ORDEN] " or "OÍR - "
+      const categoryMatch = cleanLine.match(/^\[?(VER|OÍR|OIR|SENTIR|OLER|ORDEN|ORDEN Y LIMPIEZA|5S)\]?[\s\-:]*/i);
+      let category = categoryMatch ? categoryMatch[1].toUpperCase() : 'GENERAL';
+      if (category === 'OIR') category = 'OÍR';
+      if (category === 'ORDEN Y LIMPIEZA' || category === '5S') category = 'ORDEN';
+
+      let afterCat = categoryMatch ? cleanLine.substring(categoryMatch[0].length).trim() : cleanLine;
+      
+      let rawTitle = 'Punto Inspeccionado';
+      let comment = '';
+      let status: 'Crítico' | 'Observación' | 'Bueno' | null = null;
+
+      // Check for colon separation: e.g. "Nivel de Aceite: Observación - Fuga visible"
+      if (afterCat.includes(':')) {
+        const colonIdx = afterCat.indexOf(':');
+        const beforeColon = afterCat.substring(0, colonIdx).replace(/^-\s*/, '').trim();
+        const afterColon = afterCat.substring(colonIdx + 1).trim();
+
+        rawTitle = beforeColon || 'Punto Inspeccionado';
+
+        // Check if afterColon starts with status keyword
+        const statusMatch = afterColon.match(/^(Crítico|Critico|Observación|Observacion|Bueno|Malo|Regular|Falla|Alerta|No Conforme)[\s\-:]*/i);
+        if (statusMatch) {
+          const statusWord = statusMatch[1].toLowerCase();
+          if (statusWord.startsWith('crít') || statusWord.startsWith('crit') || statusWord === 'malo' || statusWord === 'falla') {
+            status = 'Crítico';
+          } else if (statusWord.startsWith('obs') || statusWord === 'regular' || statusWord === 'alerta' || statusWord === 'no conforme') {
+            status = 'Observación';
+          } else if (statusWord.startsWith('buen')) {
+            status = 'Bueno';
+          }
+
+          const remComment = afterColon.substring(statusMatch[0].length).replace(/^[\s\-:]+/, '').trim();
+          comment = remComment;
+        } else {
+          // If no status keyword, afterColon is the comment directly
+          comment = afterColon;
+          status = 'Observación';
+        }
+      } else if (afterCat.includes(' - ')) {
+        // e.g. "Nivel de Aceite - Observación - Fuga" or "Nivel de Aceite - Fuga"
+        const dashParts = afterCat.split(' - ').map(p => p.trim()).filter(Boolean);
+        rawTitle = dashParts[0] || 'Punto Inspeccionado';
+
+        if (dashParts.length > 1) {
+          const secondPart = dashParts[1];
+          const statusMatch = secondPart.match(/^(Crítico|Critico|Observación|Observacion|Bueno|Malo|Regular|Falla)[\s\-:]*/i);
+          if (statusMatch) {
+            const statusWord = statusMatch[1].toLowerCase();
+            if (statusWord.startsWith('crít') || statusWord.startsWith('crit') || statusWord === 'malo') {
+              status = 'Crítico';
+            } else if (statusWord.startsWith('obs') || statusWord === 'regular') {
+              status = 'Observación';
+            } else if (statusWord.startsWith('buen')) {
+              status = 'Bueno';
+            }
+            comment = dashParts.slice(2).join(' - ').trim();
+          } else {
+            comment = dashParts.slice(1).join(' - ').trim();
+            status = 'Observación';
+          }
+        }
+      } else {
+        rawTitle = afterCat;
+        comment = afterCat;
+        status = 'Observación';
       }
+
+      // If rawTitle and comment ended up identical, preserve rawTitle and display realistic comment
+      const finalComment = comment && comment.toLowerCase() !== rawTitle.toLowerCase()
+        ? comment
+        : (isSolved ? 'El hallazgo fue subsanado directamente en terreno.' : `Desviación reportada en ${rawTitle}.`);
 
       const item: ParsedItem = {
         category,
         rawTitle,
-        detail,
+        detail: afterCat,
         status,
         isSolved,
-        comment: comment || (isSolved ? 'El hallazgo fue solucionado en terreno.' : 'Reportado por el operador sin detalles adicionales.'),
+        comment: finalComment,
         itemSolutionNote
       };
 
@@ -275,8 +324,7 @@ export const parseFindingDescription = (
       } else if (['VER', 'OÍR', 'SENTIR', 'OLER'].includes(category)) {
         vosoItems.push(item);
       } else if (currentSection === 'TRAD' || category === 'GENERAL') {
-        // If raw title or comment explicitly marks [ORDEN] or Limpieza
-        if (rawTitle.toUpperCase().includes('[ORDEN]') || rawTitle.toUpperCase().includes('LIMPIEZA') || comment.toUpperCase().includes('LIMPIEZA DE') || comment.toUpperCase().includes('ACUMULACION')) {
+        if (rawTitle.toUpperCase().includes('[ORDEN]') || rawTitle.toUpperCase().includes('LIMPIEZA') || finalComment.toUpperCase().includes('LIMPIEZA DE') || finalComment.toUpperCase().includes('ACUMULACION')) {
           ordenItems.push({ ...item, category: 'ORDEN' });
         } else {
           tradItems.push(item);

@@ -443,13 +443,13 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
       if (error.code === 'auth/cancelled-popup-request') {
         console.warn("Popup request was cancelled.");
       } else if (error.code === 'auth/popup-closed-by-user') {
-        setError("Inicio de sesión cancelado o bloqueado (Ventana emergente cerrada). Como estás en un entorno embebido (iframe), te recomendamos utilizar la sección de 'Acceso Rápido Demo' de abajo o iniciar sesión con tu usuario y contraseña tradicionales.");
+        setError("Inicio de sesión cancelado o bloqueado (Ventana emergente cerrada). Inicia sesión con tu usuario y contraseña corporativa.");
       } else if (error.code === 'auth/popup-blocked') {
-        setError("El navegador bloqueó la ventana emergente. Por favor, permite las ventanas emergentes para este sitio o utiliza el acceso rápido demo de abajo.");
+        setError("El navegador bloqueó la ventana emergente. Por favor, permite las ventanas emergentes para este sitio o utiliza tu usuario y contraseña corporativa.");
       } else if (error.code === 'auth/network-request-failed') {
-        setError("Error de red: No se pudo conectar con el servidor de autenticación. Revisa tu internet o desactiva bloqueadores de anuncios.");
+        setError("Error de red: No se pudo conectar con el servidor de autenticación. Revisa tu conexión a internet.");
       } else {
-        setError("Error al iniciar sesión con Google. Intenta de nuevo o utiliza la sección de Acceso Rápido abajo.");
+        setError("Error al iniciar sesión con Google. Intenta de nuevo o inicia sesión con usuario y contraseña.");
       }
     } finally {
       setIsLoggingIn(false);
@@ -467,62 +467,13 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     } catch (err: any) {
       console.error("Password login failed", err);
       if (err.code === 'auth/network-request-failed') {
-        setError("Error de red: No se pudo conectar con el servidor. Revisa tu conexión a internet o intenta desactivar bloqueadores de anuncios.");
+        setError("Error de red: No se pudo conectar con el servidor. Revisa tu conexión a internet.");
       } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError("Usuario o contraseña incorrectos");
       } else if (err.code === 'auth/too-many-requests') {
-        setError("Demasiados intentos fallidos. Tu cuenta ha sido bloqueada temporalmente. Intenta más tarde.");
+        setError("Demasiados intentos fallidos. Tu cuenta ha sido bloqueada temporalmente por seguridad. Intenta más tarde.");
       } else {
-        setError("Error al iniciar sesión. Intenta de nuevo.");
-      }
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleDemoLogin = async (role: 'Administrador' | 'Supervisor' | 'Operador') => {
-    if (isLoggingIn) return;
-    setIsLoggingIn(true);
-    setError('');
-    
-    let targetEmail = '';
-    let targetName = '';
-    let targetPlantId = 'plant_a';
-    
-    if (role === 'Administrador') {
-      targetEmail = 'maisserk@gmail.com';
-      targetName = 'Administrador Demo';
-    } else if (role === 'Supervisor') {
-      targetEmail = 'supervisor@chekify.local';
-      targetName = 'Supervisor Demo';
-    } else {
-      targetEmail = 'operador@chekify.local';
-      targetName = 'Operador Demo';
-    }
-    
-    const demoPassword = 'password123';
-    
-    try {
-      await signInWithEmailAndPassword(auth, targetEmail, demoPassword);
-    } catch (err: any) {
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-        try {
-          console.log("Demo user not found, auto-registering:", targetEmail);
-          const userCredential = await createUserWithEmailAndPassword(auth, targetEmail, demoPassword);
-          await setDoc(doc(db, 'users', userCredential.user.uid), {
-            uid: userCredential.user.uid,
-            email: targetEmail,
-            name: targetName,
-            role: role,
-            plantId: targetPlantId
-          });
-        } catch (regErr: any) {
-          console.error("Auto-registration of demo user failed", regErr);
-          setError(`No se pudo crear automáticamente el acceso rápido: ${regErr.message || regErr}`);
-        }
-      } else {
-        console.error("Demo login error", err);
-        setError(`Error en acceso rápido: ${err.message || err.code || err}`);
+        setError("Error al iniciar sesión. Verifica tus credenciales.");
       }
     } finally {
       setIsLoggingIn(false);
@@ -644,40 +595,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
               </div>
             )}
 
-            {/* Quick Demo Access Section */}
-            <div className="mt-6 pt-5 border-t border-zinc-100 dark:border-zinc-800">
-              <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-3">
-                Acceso Rápido de Prueba (Demo)
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  disabled={isLoggingIn}
-                  onClick={() => handleDemoLogin('Operador')}
-                  className="p-2.5 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-sky-50 dark:hover:bg-sky-950/30 border border-zinc-200 dark:border-zinc-700 hover:border-sky-300 rounded-xl text-zinc-700 dark:text-zinc-300 font-bold text-xs transition-all active:scale-95 cursor-pointer"
-                >
-                  Operador
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoggingIn}
-                  onClick={() => handleDemoLogin('Supervisor')}
-                  className="p-2.5 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-purple-50 dark:hover:bg-purple-950/30 border border-zinc-200 dark:border-zinc-700 hover:border-purple-300 rounded-xl text-zinc-700 dark:text-zinc-300 font-bold text-xs transition-all active:scale-95 cursor-pointer"
-                >
-                  Supervisor
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoggingIn}
-                  onClick={() => handleDemoLogin('Administrador')}
-                  className="p-2.5 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 border border-zinc-200 dark:border-zinc-700 hover:border-emerald-300 rounded-xl text-zinc-700 dark:text-zinc-300 font-bold text-xs transition-all active:scale-95 cursor-pointer"
-                >
-                  Admin
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5">
+            <div className="mt-8 pt-4 border-t border-zinc-100 dark:border-white/5">
               <p className="text-[9px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Industrial Enterprise PWA • Developed by maisser.cl</p>
             </div>
           </div>
@@ -3656,7 +3574,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
             </div>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-black tracking-tight dark:text-white">{findingStats.complianceRate}%</span>
+            <span className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white">{findingStats.complianceRate}%</span>
             <span className="text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">Cerrados</span>
           </div>
           <div className="w-full bg-zinc-100 dark:bg-zinc-900 h-1.5 rounded-full overflow-hidden">
@@ -3673,7 +3591,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
             </div>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-black tracking-tight dark:text-white">{findingStats.meanTimeToResolutionHours}h</span>
+            <span className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white">{findingStats.meanTimeToResolutionHours}h</span>
             <span className="text-[9px] font-bold text-sky-500 bg-sky-500/10 px-1.5 py-0.5 rounded-md">Promedio</span>
           </div>
           <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate">Tiempo medio de resolución</p>
@@ -3688,7 +3606,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
             </div>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-black tracking-tight dark:text-white">{criticalCount}</span>
+            <span className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white">{criticalCount}</span>
             <span className="text-[9px] font-bold text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded-md flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               Alta
@@ -3706,7 +3624,7 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
             </div>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-black tracking-tight dark:text-white">{findingStats.totalFindings}</span>
+            <span className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white">{findingStats.totalFindings}</span>
             <span className="text-[9px] font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded-md">Reportes</span>
           </div>
           <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate">Registros totales en planta</p>
