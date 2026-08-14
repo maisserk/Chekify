@@ -139,7 +139,6 @@ import { useAppUsers } from './hooks/useAppUsers';
 import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText, parseAnyDate } from './utils/dateUtils';
 import { getCachedAreas, cacheAreas, getCachedEquipment, cacheEquipment, clearAllCaches } from './utils/offlineCache';
 import { SplashScreen } from './components/SplashScreen';
-import { ConnectivityBar } from './components/ConnectivityBar';
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
@@ -10314,10 +10313,6 @@ const AppLayout = ({
 
                   {/* Header Actions & Weather Summary Pill */}
                   <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                    
-                    {/* Live Connectivity Status */}
-                    <ConnectivityBar isCompact={true} />
-
                     {/* Compact Weather Summary Pill in Header */}
                     <button
                       onClick={() => setIsWeatherExpanded(!isWeatherExpanded)}
