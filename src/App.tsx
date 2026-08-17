@@ -4290,21 +4290,22 @@ const SupervisorDashboard = ({
 
       <AnimatePresence>
         {selectedFinding && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
               onClick={() => setSelectedFinding(null)}
-              className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" 
+              className="fixed inset-0 bg-zinc-900/70 backdrop-blur-sm" 
             />
             <motion.div 
-              initial={{ y: '100%' }} 
-              animate={{ y: 0 }} 
-              exit={{ y: '100%' }}
-              className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
+              initial={{ opacity: 0, scale: 0.95, y: 15 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-3xl sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[88vh] sm:max-h-[90vh] border border-zinc-100 dark:border-white/10 my-auto z-10"
             >
-              <div className="min-h-[260px] sm:min-h-[380px] max-h-[450px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-950 flex flex-col">
+              <div className="h-56 sm:h-auto sm:min-h-[380px] sm:w-1/2 shrink-0 relative bg-zinc-950 flex flex-col">
                 <FindingPhotoGallery 
                   photos={extractFindingPhotos(selectedFinding)} 
                   altPrefix={selectedFinding.equipmentName || selectedFinding.areaName || 'Hallazgo'}
@@ -4312,7 +4313,7 @@ const SupervisorDashboard = ({
                   onClose={() => setSelectedFinding(null)}
                 />
               </div>
-              <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-6 custom-scrollbar dark:bg-zinc-950/20">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-8 md:p-10 space-y-4 sm:space-y-6 custom-scrollbar dark:bg-zinc-950/20">
                 <div>
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
@@ -5991,21 +5992,22 @@ const ReportsView = ({
 
         <AnimatePresence>
           {selectedFinding && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
               <motion.div 
                 initial={{ opacity: 0 }} 
                 animate={{ opacity: 1 }} 
                 exit={{ opacity: 0 }}
                 onClick={() => setSelectedFinding(null)}
-                className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" 
+                className="fixed inset-0 bg-zinc-900/70 backdrop-blur-sm" 
               />
               <motion.div 
-                initial={{ y: '100%' }} 
-                animate={{ y: 0 }} 
-                exit={{ y: '100%' }}
-                className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[90vh] border border-transparent dark:border-white/10"
+                initial={{ opacity: 0, scale: 0.95, y: 15 }} 
+                animate={{ opacity: 1, scale: 1, y: 0 }} 
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="relative w-full max-w-lg sm:max-w-5xl bg-white dark:bg-black rounded-3xl sm:rounded-[2.5rem] overflow-hidden shadow-2xl dark:shadow-none flex flex-col sm:flex-row max-h-[88vh] sm:max-h-[90vh] border border-zinc-100 dark:border-white/10 my-auto z-10"
               >
-                <div className="min-h-[260px] sm:min-h-[380px] max-h-[450px] sm:max-h-none sm:h-auto sm:w-1/2 shrink-0 relative bg-zinc-950 flex flex-col">
+                <div className="h-56 sm:h-auto sm:min-h-[380px] sm:w-1/2 shrink-0 relative bg-zinc-950 flex flex-col">
                   <FindingPhotoGallery 
                     photos={extractFindingPhotos(selectedFinding)} 
                     altPrefix={selectedFinding.equipmentName || selectedFinding.areaName || 'Hallazgo'}
@@ -6013,7 +6015,7 @@ const ReportsView = ({
                     onClose={() => setSelectedFinding(null)}
                   />
                 </div>
-                <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-8 md:p-10 space-y-4 sm:space-y-6 custom-scrollbar">
                   <div>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
