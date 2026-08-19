@@ -10235,12 +10235,8 @@ const AppLayout = ({
                   <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                     {/* Compact Weather Summary Pill in Header */}
                     <button
-                      onClick={() => setIsWeatherExpanded(!isWeatherExpanded)}
-                      className={`flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all shadow-2xs shrink-0 cursor-pointer ${
-                        isWeatherExpanded 
-                          ? 'bg-sky-500/20 border-sky-500/40 text-sky-900 dark:text-sky-200 ring-2 ring-sky-500/20' 
-                          : 'bg-gradient-to-r from-sky-500/10 via-blue-500/5 to-indigo-500/10 hover:bg-sky-500/15 border-sky-500/20 text-sky-900 dark:text-sky-300'
-                      }`}
+                      onClick={() => setIsWeatherExpanded(true)}
+                      className="flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all shadow-2xs shrink-0 cursor-pointer bg-gradient-to-r from-sky-500/10 via-blue-500/5 to-indigo-500/10 hover:bg-sky-500/15 border-sky-500/20 text-sky-900 dark:text-sky-300 active:scale-95"
                       title="Ver condiciones meteorológicas detalladas"
                     >
                       {loadingWeather ? (
@@ -10267,7 +10263,6 @@ const AppLayout = ({
                               </>
                             )}
                           </div>
-                          <ChevronDown className={`w-3 h-3 text-sky-500 transition-transform duration-200 ${isWeatherExpanded ? 'rotate-180' : ''}`} />
                         </>
                       )}
                     </button>
@@ -10320,21 +10315,6 @@ const AppLayout = ({
                     {format(currentTime, "HH:mm:ss", { locale: es })}
                   </span>
                 </div>
-
-                {/* Expandable Weather Detail Drawer in Header */}
-                <AnimatePresence>
-                  {isWeatherExpanded && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0, y: -6 }}
-                      animate={{ opacity: 1, height: 'auto', y: 0 }}
-                      exit={{ opacity: 0, height: 0, y: -6 }}
-                      transition={{ duration: 0.2 }}
-                      className="pt-2 pb-1 border-t border-sky-500/15"
-                    >
-                      <WeatherModule plant={plants.find(p => p.id === user.plantId)} onClose={() => setIsWeatherExpanded(false)} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
             </header>
 
@@ -10773,6 +10753,30 @@ const AppLayout = ({
               onClose={() => setShowProfileModal(false)}
               plants={plants}
             />
+
+            {/* Global Centered Weather Detail Popup Modal (Full Front Overlay) */}
+            <AnimatePresence>
+              {isWeatherExpanded && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsWeatherExpanded(false)}
+                    className="fixed inset-0 bg-zinc-950/75 backdrop-blur-md"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="relative w-full max-w-4xl my-auto z-10"
+                  >
+                    <WeatherModule plant={plants.find(p => p.id === user.plantId)} onClose={() => setIsWeatherExpanded(false)} />
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
 
             <ToastContainer toasts={toasts} setToasts={setToasts} />
           </div>
