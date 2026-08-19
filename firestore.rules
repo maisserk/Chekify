@@ -16,7 +16,7 @@ service cloud.firestore {
     function isAdmin() {
       let data = getUserData();
       let r = data != null ? data.role : '';
-      return (isAuthenticated() && request.auth.token.email == "maisserk@gmail.com") || 
+      return (isAuthenticated() && request.auth.token.email == "maisserk@gmail.com") ||
              (isAuthenticated() && (r == 'Administrador' || r == 'Admin' || r == 'administrador' || r == 'admin'));
     }
 
@@ -30,11 +30,31 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Authorization fields are controlled by admins.
+    // A user may update their profile, but cannot promote themselves
+    // or move themselves to another plant.
+    function authorizationFieldsUnchanged() {
+      return request.resource.data.get('role', null) == resource.data.get('role', null) &&
+             request.resource.data.get('plantId', null) == resource.data.get('plantId', null);
+    }
+
     // Rules for collections
 
     match /users/{uid} {
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && (isOwner(uid) || isAdmin());
+
+      // New users created by themselves can only start as Operators.
+      // Administrators can create users with managed authorization fields.
+      allow create: if isAdmin() ||
+                    (isOwner(uid) &&
+                     request.resource.data.get('role', '') == 'Operador' &&
+                     request.resource.data.get('plantId', null) == null);
+
+      // Users can edit their profile fields, but not role or plant.
+      // Administrators can manage authorization fields.
+      allow update: if isAdmin() ||
+                    (isOwner(uid) && authorizationFieldsUnchanged());
+
       allow delete: if isAdmin();
     }
 
@@ -77,4 +97,3 @@ service cloud.firestore {
     }
   }
 }
-
