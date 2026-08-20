@@ -54,8 +54,13 @@ service cloud.firestore {
       allow create, update, delete: if isAuthenticated();
     }
     match /findings/{findingId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAuthenticated();
+      allow read: if isAdmin() || samePlant(resource.data.plantId);
+      allow create: if isAdmin() || (isAuthenticated() && samePlant(request.resource.data.plantId));
+      allow update: if isAdmin() ||
+                    (isAuthenticated() &&
+                     samePlant(resource.data.plantId) &&
+                     samePlant(request.resource.data.plantId));
+      allow delete: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId));
     }
     match /notifications/{notificationId} {
       allow read, create, update, delete: if isAuthenticated();
