@@ -39,7 +39,22 @@ async function run() {
     await seed();
     const supervisor = testEnv.authenticatedContext('supervisorA').firestore();
     const operator = testEnv.authenticatedContext('operatorA').firestore();
+    const supervisorB = testEnv.authenticatedContext('supervisorB').firestore();
     const admin = testEnv.authenticatedContext('admin', { email: 'maisserk@gmail.com' }).firestore();
+
+    // User profile access.
+    await assertSucceeds(getDoc(doc(operator, 'users/operatorA')));
+    await assertFails(getDoc(doc(operator, 'users/supervisorB')));
+    await assertFails(getDoc(doc(operator, 'users/admin')));
+    await assertSucceeds(getDoc(doc(supervisor, 'users/supervisorA')));
+    await assertFails(getDoc(doc(supervisor, 'users/supervisorB')));
+    await assertSucceeds(getDoc(doc(admin, 'users/operatorA')));
+    await assertSucceeds(getDoc(doc(admin, 'users/supervisorB')));
+    await assertSucceeds(updateDoc(doc(operator, 'users/operatorA'), { name: 'Operador actualizado' }));
+    await assertFails(updateDoc(doc(operator, 'users/operatorA'), { role: 'Administrador' }));
+    await assertFails(updateDoc(doc(operator, 'users/operatorA'), { plantId: 'plant-b' }));
+    await assertFails(updateDoc(doc(operator, 'users/supervisorB'), { name: 'Acceso cruzado' }));
+    await assertSucceeds(updateDoc(doc(admin, 'users/operatorA'), { role: 'Supervisor', plantId: 'plant-a' }));
 
     // Equipment tenant isolation.
     await assertSucceeds(getDoc(doc(supervisor, 'equipment/equipmentA')));
@@ -70,7 +85,6 @@ async function run() {
     await assertFails(getDoc(doc(supervisor, 'inspections/inspectionB')));
     await assertSucceeds(getDoc(doc(operator, 'inspections/inspectionA')));
     await assertFails(getDoc(doc(operator, 'inspections/inspectionB')));
-
     await assertSucceeds(setDoc(doc(operator, 'inspections/inspectionA2'), { id: 'inspectionA2', plantId: 'plant-a', areaId: 'area-a', equipmentId: 'equipmentA', operatorId: 'operatorA', status: 'Completed', timestamp: new Date() }));
     await assertFails(setDoc(doc(operator, 'inspections/inspectionB2'), { id: 'inspectionB2', plantId: 'plant-b', areaId: 'area-b', equipmentId: 'equipmentB', operatorId: 'operatorA', status: 'Completed', timestamp: new Date() }));
     await assertFails(updateDoc(doc(operator, 'inspections/inspectionA'), { status: 'Tampered' }));
@@ -78,19 +92,17 @@ async function run() {
     await assertFails(updateDoc(doc(operator, 'inspections/inspectionB'), { status: 'Tampered' }));
     await assertFails(deleteDoc(doc(operator, 'inspections/inspectionA')));
     await assertFails(deleteDoc(doc(operator, 'inspections/inspectionB')));
-
     await assertSucceeds(updateDoc(doc(supervisor, 'inspections/inspectionA'), { status: 'Reviewed' }));
     await assertFails(updateDoc(doc(supervisor, 'inspections/inspectionA'), { plantId: 'plant-b' }));
     await assertFails(updateDoc(doc(supervisor, 'inspections/inspectionB'), { status: 'Tampered' }));
     await assertSucceeds(deleteDoc(doc(supervisor, 'inspections/inspectionA')));
     await assertFails(deleteDoc(doc(supervisor, 'inspections/inspectionB')));
-
     await assertSucceeds(getDoc(doc(admin, 'inspections/inspectionA')));
     await assertSucceeds(getDoc(doc(admin, 'inspections/inspectionB')));
     await assertSucceeds(updateDoc(doc(admin, 'inspections/inspectionB'), { status: 'AdminReviewed' }));
     await assertSucceeds(deleteDoc(doc(admin, 'inspections/inspectionB')));
 
-    console.log('Firestore equipment/findings/inspections Rules smoke test: PASS');
+    console.log('Firestore equipment/findings/inspections/users Rules smoke test: PASS');
   } finally {
     await testEnv.cleanup();
   }
