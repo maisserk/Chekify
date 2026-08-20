@@ -10,9 +10,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
-// Public key only. The matching private key is server-side and is never shipped to the browser.
-const DEFAULT_VAPID_PUBLIC_KEY = 'BPBKWCX021AH94_PTKEU_QaOEwkCnlJi94fKyp_ArAp-JXZ08roOGuqTbxcKej19zhyr_u_d5AfMj1pmWrtBblw';
-
 async function authHeaders(): Promise<Record<string, string>> {
   const user = auth.currentUser;
   if (!user) throw new Error('Sesión no disponible. Inicia sesión nuevamente.');
@@ -48,16 +45,13 @@ export class PushNotificationService {
     if (permission !== 'granted') throw new Error('Permiso de notificaciones denegado. Habilita las notificaciones en la configuración de tu navegador.');
 
     try {
-      let publicKey = DEFAULT_VAPID_PUBLIC_KEY;
-      try {
-        const vapidRes = await fetch('/api/push/vapid-key');
-        if (vapidRes.ok) {
-          const data = await vapidRes.json();
-          if (data?.publicKey) publicKey = data.publicKey;
-        }
-      } catch (keyErr) {
-        console.warn('[PushNotificationService] Failed to fetch VAPID key from server:', keyErr);
+      const vapidRes = await fetch('/api/push/vapid-key');
+      if (!vapidRes.ok) {
+        const data = await vapidRes.json().catch(() => ({}));
+        throw new Error(data?.error || 'Las notificaciones Push no están configuradas en el servidor.');
       }
+      const vapidData = await vapidRes.json();
+      if (!vapidData?.publicKey) throw new Error('Clave pública VAPID no disponible.');
 
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
@@ -65,7 +59,7 @@ export class PushNotificationService {
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey)
+          applicationServerKey: urlBase64ToUint8Array(vapidData.publicKey)
         });
       }
 
