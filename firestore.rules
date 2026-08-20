@@ -50,8 +50,10 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId));
     }
     match /inspections/{inspectionId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAuthenticated();
+      allow read: if isAdmin() || samePlant(resource.data.plantId);
+      allow create: if isAdmin() || (isAuthenticated() && samePlant(request.resource.data.plantId));
+      allow update: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId) && samePlant(request.resource.data.plantId));
+      allow delete: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId));
     }
     match /findings/{findingId} {
       allow read: if isAdmin() || samePlant(resource.data.plantId);
