@@ -44,6 +44,15 @@ async function seed() {
       id: 'findingB', plantId: 'plant-b', areaId: 'area-b', equipmentId: 'equipmentB',
       inspectionId: 'inspectionB', operatorId: 'supervisorB', description: 'Hallazgo B', status: 'Open',
     });
+
+    await setDoc(doc(db, 'inspections/inspectionA'), {
+      id: 'inspectionA', plantId: 'plant-a', areaId: 'area-a', equipmentId: 'equipmentA',
+      operatorId: 'operatorA', status: 'Completed', timestamp: new Date(),
+    });
+    await setDoc(doc(db, 'inspections/inspectionB'), {
+      id: 'inspectionB', plantId: 'plant-b', areaId: 'area-b', equipmentId: 'equipmentB',
+      operatorId: 'supervisorB', status: 'Completed', timestamp: new Date(),
+    });
   });
 }
 
@@ -88,8 +97,7 @@ async function run() {
     await assertSucceeds(getDoc(doc(admin, 'equipment/equipmentA')));
     await assertSucceeds(getDoc(doc(admin, 'equipment/equipmentB')));
 
-    // Findings tenant isolation. Keep same-plant write semantics unchanged for now;
-    // this phase only guarantees that a user cannot cross plant boundaries.
+    // Findings tenant isolation.
     await assertSucceeds(getDoc(doc(supervisor, 'findings/findingA')));
     await assertFails(getDoc(doc(supervisor, 'findings/findingB')));
     await assertSucceeds(getDoc(doc(operator, 'findings/findingA')));
@@ -116,7 +124,33 @@ async function run() {
     await assertSucceeds(getDoc(doc(admin, 'findings/findingA')));
     await assertSucceeds(getDoc(doc(admin, 'findings/findingB')));
 
-    console.log('Firestore equipment/findings Rules smoke test: PASS');
+    // Inspections tenant isolation. This mirrors the production payload, which includes plantId.
+    await assertSucceeds(getDoc(doc(supervisor, 'inspections/inspectionA')));
+    await assertFails(getDoc(doc(supervisor, 'inspections/inspectionB')));
+    await assertSucceeds(getDoc(doc(operator, 'inspections/inspectionA')));
+    await assertFails(getDoc(doc(operator, 'inspections/inspectionB')));
+
+    await assertSucceeds(setDoc(doc(operator, 'inspections/inspectionA2'), {
+      id: 'inspectionA2', plantId: 'plant-a', areaId: 'area-a', equipmentId: 'equipmentA',
+      operatorId: 'operatorA', status: 'Completed', timestamp: new Date(),
+    }));
+
+    await assertFails(setDoc(doc(operator, 'inspections/inspectionB2'), {
+      id: 'inspectionB2', plantId: 'plant-b', areaId: 'area-b', equipmentId: 'equipmentB',
+      operatorId: 'operatorA', status: 'Completed', timestamp: new Date(),
+    }));
+
+    await assertFails(updateDoc(doc(operator, 'inspections/inspectionA'), {
+      plantId: 'plant-b',
+    }));
+    await assertFails(updateDoc(doc(operator, 'inspections/inspectionB'), {
+      status: 'Tampered',
+    }));
+
+    await assertSucceeds(getDoc(doc(admin, 'inspections/inspectionA')));
+    await assertSucceeds(getDoc(doc(admin, 'inspections/inspectionB')));
+
+    console.log('Firestore equipment/findings/inspections Rules smoke test: PASS');
   } finally {
     await testEnv.cleanup();
   }
