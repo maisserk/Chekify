@@ -87,6 +87,7 @@ export class EquipmentService {
   /**
    * Saves or registers an equipment record.
    * Directs the transaction through the Offline Queue system for reliability of terrenos.
+   * Merge semantics allow first-time creation and protect existing fields during offline updates.
    */
   public static async saveEquipment(equipment: Equipment): Promise<{ queued: boolean }> {
     try {
@@ -107,12 +108,13 @@ export class EquipmentService {
         qrCode: equipment.qrCode || `EQ-${equipment.id.toUpperCase()}`
       };
 
-      // Push document write action to the offline-enabled queue adapter
+      // Use merge semantics: setDoc(..., { merge: true }) creates a missing document
+      // while preventing an offline update from replacing unrelated fields.
       const result = await offlineQueueService.enqueue(
         this.COLLECTION_NAME,
         equipment.id,
         cleanPayload,
-        'create'
+        'merge'
       );
 
       return { queued: result.queued };
