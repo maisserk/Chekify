@@ -9,7 +9,8 @@ service cloud.firestore {
     function isAdmin() {
       let data = getUserData();
       let r = data != null ? data.role : '';
-      return (isAuthenticated() && request.auth.token.email == "maisserk@gmail.com") ||
+      let email = request.auth.token.get('email', '');
+      return (isAuthenticated() && email == "maisserk@gmail.com") ||
              (isAuthenticated() && (r == 'Administrador' || r == 'Admin' || r == 'administrador' || r == 'admin'));
     }
     function isSupervisor() {
