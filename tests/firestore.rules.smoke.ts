@@ -1,5 +1,10 @@
 import fs from 'node:fs';
-import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+  RulesTestEnvironment,
+} from '@firebase/rules-unit-testing';
 import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 const projectId = 'chekify-rules-test';
@@ -13,8 +18,13 @@ async function seed() {
       ['supervisorA', 'Supervisor', 'plant-a'],
       ['supervisorB', 'Supervisor', 'plant-b'],
       ['operatorA', 'Operador', 'plant-a'],
+      ['operatorB', 'Operador', 'plant-b'],
     ] as const;
-    for (const [uid, role, plantId] of users) await setDoc(doc(db, `users/${uid}`), { uid, role, plantId, email: `${uid}@test.local` });
+
+    for (const [uid, role, plantId] of users) {
+      await setDoc(doc(db, `users/${uid}`), { uid, role, plantId, email: `${uid}@test.local` });
+    }
+
     await setDoc(doc(db, 'equipment/equipmentA'), { id: 'equipmentA', plantId: 'plant-a', areaId: 'area-a', name: 'Equipo A' });
     await setDoc(doc(db, 'equipment/equipmentB'), { id: 'equipmentB', plantId: 'plant-b', areaId: 'area-b', name: 'Equipo B' });
     await setDoc(doc(db, 'findings/findingA'), { id: 'findingA', plantId: 'plant-a', areaId: 'area-a', equipmentId: 'equipmentA', inspectionId: 'inspectionA', operatorId: 'operatorA', description: 'Hallazgo A', status: 'Open' });
@@ -30,9 +40,10 @@ async function run() {
     await seed();
     const supervisor = testEnv.authenticatedContext('supervisorA').firestore();
     const operator = testEnv.authenticatedContext('operatorA').firestore();
+    const supervisorB = testEnv.authenticatedContext('supervisorB').firestore();
     const admin = testEnv.authenticatedContext('admin', { email: 'maisserk@gmail.com' }).firestore();
 
-    // User profile access: supervisors need the global user directory used by the app.
+    // User profile access.
     await assertSucceeds(getDoc(doc(operator, 'users/operatorA')));
     await assertFails(getDoc(doc(operator, 'users/supervisorB')));
     await assertFails(getDoc(doc(operator, 'users/admin')));
@@ -44,7 +55,7 @@ async function run() {
     await assertFails(updateDoc(doc(operator, 'users/operatorA'), { role: 'Administrador' }));
     await assertFails(updateDoc(doc(operator, 'users/operatorA'), { plantId: 'plant-b' }));
     await assertFails(updateDoc(doc(operator, 'users/supervisorB'), { name: 'Acceso cruzado' }));
-    await assertSucceeds(updateDoc(doc(admin, 'users/operatorA'), { role: 'Supervisor', plantId: 'plant-a' }));
+    await assertSucceeds(updateDoc(doc(admin, 'users/operatorB'), { role: 'Supervisor', plantId: 'plant-b' }));
 
     // Equipment tenant isolation.
     await assertSucceeds(getDoc(doc(supervisor, 'equipment/equipmentA')));
@@ -97,4 +108,9 @@ async function run() {
     await testEnv.cleanup();
   }
 }
-run().catch((error) => { console.error('Firestore Rules smoke test: FAIL'); console.error(error); process.exitCode = 1; });
+
+run().catch((error) => {
+  console.error('Firestore Rules smoke test: FAIL');
+  console.error(error);
+  process.exitCode = 1;
+});
