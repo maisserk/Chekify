@@ -25,6 +25,12 @@ async function seed() {
       await setDoc(doc(db, `users/${uid}`), { uid, role, plantId, email: `${uid}@test.local` });
     }
 
+    await setDoc(doc(db, 'plants/plant-a'), { id: 'plant-a', name: 'Planta A' });
+    await setDoc(doc(db, 'plants/plant-b'), { id: 'plant-b', name: 'Planta B' });
+    await setDoc(doc(db, 'areas/area-a'), { id: 'area-a', plantId: 'plant-a', name: 'Área A' });
+    await setDoc(doc(db, 'areas/area-b'), { id: 'area-b', plantId: 'plant-b', name: 'Área B' });
+    await setDoc(doc(db, 'settings/global'), { maintenanceMode: false, version: 1 });
+
     await setDoc(doc(db, 'equipment/equipmentA'), { id: 'equipmentA', plantId: 'plant-a', areaId: 'area-a', name: 'Equipo A' });
     await setDoc(doc(db, 'equipment/equipmentB'), { id: 'equipmentB', plantId: 'plant-b', areaId: 'area-b', name: 'Equipo B' });
     await setDoc(doc(db, 'findings/findingA'), { id: 'findingA', plantId: 'plant-a', areaId: 'area-a', equipmentId: 'equipmentA', inspectionId: 'inspectionA', operatorId: 'operatorA', description: 'Hallazgo A', status: 'Open' });
@@ -56,6 +62,26 @@ async function run() {
     await assertFails(updateDoc(doc(operator, 'users/operatorA'), { plantId: 'plant-b' }));
     await assertFails(updateDoc(doc(operator, 'users/supervisorB'), { name: 'Acceso cruzado' }));
     await assertSucceeds(updateDoc(doc(admin, 'users/operatorB'), { role: 'Supervisor', plantId: 'plant-b' }));
+
+    // Plants, areas and settings role-based access.
+    await assertSucceeds(getDoc(doc(operator, 'plants/plant-a')));
+    await assertSucceeds(getDoc(doc(operator, 'plants/plant-b')));
+    await assertSucceeds(getDoc(doc(operator, 'areas/area-a')));
+    await assertSucceeds(getDoc(doc(operator, 'areas/area-b')));
+    await assertFails(setDoc(doc(operator, 'plants/plant-c'), { id: 'plant-c', name: 'Planta C' }));
+    await assertFails(updateDoc(doc(operator, 'plants/plant-a'), { name: 'Cambio no autorizado' }));
+    await assertFails(deleteDoc(doc(operator, 'plants/plant-a')));
+    await assertFails(setDoc(doc(operator, 'areas/area-c'), { id: 'area-c', plantId: 'plant-a', name: 'Área C' }));
+    await assertFails(updateDoc(doc(operator, 'areas/area-a'), { name: 'Cambio no autorizado' }));
+    await assertFails(deleteDoc(doc(operator, 'areas/area-a')));
+    await assertSucceeds(updateDoc(doc(supervisor, 'plants/plant-a'), { name: 'Planta A actualizada' }));
+    await assertSucceeds(updateDoc(doc(supervisor, 'areas/area-a'), { name: 'Área A actualizada' }));
+    await assertSucceeds(updateDoc(doc(admin, 'plants/plant-b'), { name: 'Planta B admin' }));
+    await assertSucceeds(updateDoc(doc(admin, 'areas/area-b'), { name: 'Área B admin' }));
+    await assertSucceeds(getDoc(doc(operator, 'settings/global')));
+    await assertFails(updateDoc(doc(operator, 'settings/global'), { maintenanceMode: true }));
+    await assertSucceeds(updateDoc(doc(supervisor, 'settings/global'), { maintenanceMode: true }));
+    await assertSucceeds(updateDoc(doc(admin, 'settings/global'), { maintenanceMode: false }));
 
     // Equipment tenant isolation.
     await assertSucceeds(getDoc(doc(supervisor, 'equipment/equipmentA')));
@@ -103,7 +129,7 @@ async function run() {
     await assertSucceeds(updateDoc(doc(admin, 'inspections/inspectionB'), { status: 'AdminReviewed' }));
     await assertSucceeds(deleteDoc(doc(admin, 'inspections/inspectionB')));
 
-    console.log('Firestore equipment/findings/inspections/users Rules smoke test: PASS');
+    console.log('Firestore equipment/findings/inspections/users/plants/areas/settings Rules smoke test: PASS');
   } finally {
     await testEnv.cleanup();
   }
