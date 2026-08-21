@@ -33,10 +33,13 @@ export class EquipmentService {
   public static async fetchEquipment(plantId?: string): Promise<Equipment[]> {
     try {
       const equipRef = collection(db, this.COLLECTION_NAME);
-      const snapshot = await getDocs(equipRef);
+      const equipmentQuery = plantId
+        ? query(equipRef, where('plantId', '==', plantId))
+        : equipRef;
+      const snapshot = await getDocs(equipmentQuery);
       let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Equipment));
       
-      // Filter out deleted items and apply plant filter client-side
+      // Filter out deleted items and retain the client-side guard as a second barrier
       list = list.filter(item => item.status !== 'deleted');
       if (plantId) {
         list = list.filter(item => item.plantId === plantId);
@@ -44,6 +47,7 @@ export class EquipmentService {
       return list;
     } catch (err) {
       handleFirestoreError(err, 'list', this.COLLECTION_NAME);
+      return [];
     }
   }
 
@@ -55,13 +59,16 @@ export class EquipmentService {
     plantId?: string
   ): () => void {
     const equipRef = collection(db, this.COLLECTION_NAME);
+    const equipmentQuery = plantId
+      ? query(equipRef, where('plantId', '==', plantId))
+      : equipRef;
 
     return onSnapshot(
-      equipRef,
+      equipmentQuery,
       (snapshot) => {
         let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Equipment));
         
-        // Filter out deleted and apply plant filter client-side
+        // Filter out deleted and retain the client-side plant guard as a second barrier
         list = list.filter(item => item.status !== 'deleted');
         if (plantId) {
           list = list.filter(item => item.plantId === plantId);
@@ -80,6 +87,7 @@ export class EquipmentService {
   /**
    * Saves or registers an equipment record.
    * Directs the transaction through the Offline Queue system for reliability of terrenos.
+   * Merge semantics allow first-time creation and protect existing fields during offline updates.
    */
   public static async saveEquipment(equipment: Equipment): Promise<{ queued: boolean }> {
     try {
@@ -100,12 +108,13 @@ export class EquipmentService {
         qrCode: equipment.qrCode || `EQ-${equipment.id.toUpperCase()}`
       };
 
-      // Push document write action to the offline-enabled queue adapter
+      // Use merge semantics: setDoc(..., { merge: true }) creates a missing document
+      // while preventing an offline update from replacing unrelated fields.
       const result = await offlineQueueService.enqueue(
         this.COLLECTION_NAME,
         equipment.id,
         cleanPayload,
-        'create'
+        'merge'
       );
 
       return { queued: result.queued };

@@ -1,0 +1,37 @@
+name: Firestore Rules
+
+on:
+  push:
+    branches:
+      - fix/security-hardening
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  firestore-rules:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Rules test tooling
+        run: npm install --no-save --no-audit --no-fund @firebase/rules-unit-testing firebase-tools
+
+      - name: Run Firestore Rules smoke test
+        run: npx firebase emulators:exec --only firestore --project chekify-rules-test "npx tsx tests/firestore.rules.smoke.ts"

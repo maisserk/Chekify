@@ -151,11 +151,9 @@ class OfflineQueueService {
       state: 'pending',
     };
 
-    // Remove any older duplicate operations for the exact same document to avoid redundant sync writes
-    this.queue = this.queue.filter(
-      item => !(item.collection === collection && item.docId === docId && item.state === 'pending')
-    );
-
+    // Preserve every pending operation in chronological order.
+    // The previous deduplication could silently discard an earlier offline
+    // operation for the same document, which risks losing inspection/finding data.
     this.queue.push(freshItem);
     this.saveQueueToStorage();
 
@@ -250,10 +248,12 @@ class OfflineQueueService {
           } catch (e) {
             // Ignore error if already deleted
           }
-        } else if (item.operation === 'merge') {
+        } else if (item.operation === 'merge' || item.operation === 'update') {
+          // Update/merge operations must not replace fields written by earlier
+          // offline operations for the same document.
           await setDoc(docRef, cleanPayload, { merge: true });
         } else {
-          // 'create' or 'update' writes complete payload
+          // 'create' writes the complete initial document schema.
           await setDoc(docRef, cleanPayload);
         }
 
