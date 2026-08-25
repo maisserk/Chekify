@@ -1,4 +1,4 @@
-import { authenticateRequest, hasPushRole } from './_auth';
+import { authenticateRequest, hasPushRole } from './_auth.ts';
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
@@ -29,11 +29,8 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // Load web-push at runtime. Chekify is an ESM project and web-push is CommonJS;
-    // a top-level import can make a Vercel Function fail before the handler starts.
     const webPushModule: any = await import('web-push');
     const webPush = webPushModule.default || webPushModule;
-
     const docId = Buffer.from(subscription.endpoint).toString('base64').replace(/[/+=]/g, '_').slice(0, 100);
     const stored = await identity.db.collection('push_subscriptions').doc(docId).get();
 
@@ -43,7 +40,6 @@ export default async function handler(req: any, res: any) {
     }
 
     webPush.setVapidDetails('mailto:soporte@chekify.local', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-
     const payload = JSON.stringify({
       title: '🔔 ¡Notificaciones Activadas!',
       body: 'Estás suscrito para recibir alertas instantáneas en Chekify.',
@@ -56,9 +52,6 @@ export default async function handler(req: any, res: any) {
     res.status(200).json({ success: true, message: 'Notificación de prueba enviada' });
   } catch (error: any) {
     console.error('Push test function failed:', error?.statusCode || error?.code || error?.message || error);
-    res.status(500).json({
-      error: 'Failed to send test notification',
-      detail: error?.statusCode ? `Web Push returned HTTP ${error.statusCode}` : 'Server-side Push error',
-    });
+    res.status(500).json({ error: 'Failed to send test notification', detail: error?.statusCode ? `Web Push returned HTTP ${error.statusCode}` : 'Server-side Push error' });
   }
 }
