@@ -1,13 +1,9 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
+ *
  * Chekify Enterprise Industrial SaaS Framework
  * Module: OfflineQueueService
- * 
- * Provides robust transactional queueing for high-risk write operations
- * (such as marking findings, creating inspections, saving equipment)
- * in environments with low, intermittent, or non-existent connectivity.
  */
 
 import { db, handleFirestoreError } from '../firebase';
@@ -25,6 +21,7 @@ export interface QueueItem {
   operation: 'create' | 'update' | 'delete' | 'merge';
   retryCount: number;
   state: 'pending' | 'syncing' | 'failed';
+  offlineQueued?: boolean;
   error?: string;
 }
 
@@ -49,8 +46,7 @@ class OfflineQueueService {
     try {
       const stored = localStorage.getItem('chekify_offline_write_queue');
       if (stored) {
-        this.queue = JSON.parse(stored);
-        this.queue = this.queue.map(item => item.state === 'syncing' ? { ...item, state: 'pending' } : item);
+        this.queue = JSON.parse(stored).map((item: QueueItem) => item.state === 'syncing' ? { ...item, state: 'pending' } : item);
       }
     } catch (e) {
       console.error('[OfflineQueue] Failed to read queue from localStorage:', e);
@@ -84,9 +80,8 @@ class OfflineQueueService {
       const pingUrl = typeof window !== 'undefined' ? `${window.location.origin}/favicon.png` : '/favicon.png';
       await fetch(pingUrl, { method: 'HEAD', cache: 'no-store' });
       this.handleNetworkEvent(true);
-    } catch (e) {
-      const isOnlineFallback = typeof navigator !== 'undefined' ? navigator.onLine : true;
-      this.handleNetworkEvent(isOnlineFallback);
+    } catch {
+      this.handleNetworkEvent(typeof navigator !== 'undefined' ? navigator.onLine : true);
     }
   }
 
@@ -99,12 +94,8 @@ class OfflineQueueService {
     }
   }
 
-  public async enqueue(
-    collection: string,
-    docId: string,
-    payload: any,
-    operation: QueueItem['operation'] = 'create'
-  ): Promise<{ queued: boolean; error?: string }> {
+  public async enqueue(collection: string, docId: string, payload: any, operation: QueueItem['operation'] = 'create'): Promise<{ queued: boolean; error?: string }> {
+    const wasOffline = !this.isOnline;
     const freshItem: QueueItem = {
       id: `${collection}_${docId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       collection,
@@ -114,11 +105,12 @@ class OfflineQueueService {
       operation,
       retryCount: 0,
       state: 'pending',
+      offlineQueued: wasOffline,
     };
     this.queue.push(freshItem);
     this.saveQueueToStorage();
     if (this.isOnline && !this.isSyncing) this.flushQueue();
-    return { queued: !this.isOnline };
+    return { queued: wasOffline };
   }
 
   public async flushQueue(): Promise<void> {
@@ -138,14 +130,8 @@ class OfflineQueueService {
 
         if (item.collection === 'findings' && cleanPayload && typeof cleanPayload === 'object') {
           const desc = (cleanPayload.description || '').toLowerCase();
-          const isSyntheticClean = desc.includes('inspección voso / ruta conforme') ||
-            desc.includes('sin hallazgos') ||
-            desc.includes('inspección conforme') ||
-            desc.includes('todos los puntos evaluados se encuentran en condición normal') ||
-            (Array.isArray(cleanPayload.history) && cleanPayload.history.some((h: any) => h?.action === 'Inspección Conforme (Sin hallazgos)'));
-
+          const isSyntheticClean = desc.includes('inspección voso / ruta conforme') || desc.includes('sin hallazgos') || desc.includes('inspección conforme') || desc.includes('todos los puntos evaluados se encuentran en condición normal') || (Array.isArray(cleanPayload.history) && cleanPayload.history.some((h: any) => h?.action === 'Inspección Conforme (Sin hallazgos)'));
           if (isSyntheticClean) {
-            console.log(`[OfflineQueue] Dropping synthetic clean finding ${item.docId} from queue.`);
             this.queue = this.queue.filter(i => i.id !== item.id);
             this.saveQueueToStorage();
             continue;
@@ -179,23 +165,16 @@ class OfflineQueueService {
 
         if (item.operation === 'delete') {
           await setDoc(docRef, { status: 'deleted' }, { merge: true });
-          try { await deleteDoc(docRef); } catch (e) {}
+          try { await deleteDoc(docRef); } catch {}
         } else if (item.operation === 'merge' || item.operation === 'update') {
           await setDoc(docRef, cleanPayload, { merge: true });
         } else {
           await setDoc(docRef, cleanPayload);
         }
 
-        // Once an offline finding has actually reached Firestore, trigger its Push alert.
-        // This is intentionally after the successful write so reconnecting does not lose the alert.
-        // The service itself decides whether the finding is critical and formats the notification.
-        if (item.collection === 'findings' && item.operation === 'create') {
-          PushNotificationService.broadcastCriticalAlert(
-            cleanPayload,
-            cleanPayload.areaName || 'Área general',
-            cleanPayload.equipmentName || 'Equipo',
-            cleanPayload.inspector || cleanPayload.operatorName
-          ).catch(err => console.warn('[OfflineQueue] Finding Push alert failed:', err));
+        if (item.collection === 'findings' && item.operation === 'create' && item.offlineQueued) {
+          PushNotificationService.broadcastCriticalAlert(cleanPayload, cleanPayload.areaName || 'Área general', cleanPayload.equipmentName || 'Equipo', cleanPayload.inspector || cleanPayload.operatorName)
+            .catch(err => console.warn('[OfflineQueue] Finding Push alert failed:', err));
         }
 
         this.queue = this.queue.filter(i => i.id !== item.id);
@@ -204,11 +183,9 @@ class OfflineQueueService {
       } catch (err: any) {
         item.retryCount += 1;
         item.error = err.message || String(err);
-        if (item.retryCount >= 5) item.state = 'failed';
-        else item.state = 'pending';
+        item.state = item.retryCount >= 5 ? 'failed' : 'pending';
         this.saveQueueToStorage();
-        try { handleFirestoreError(err, 'write', `${item.collection}/${item.docId}`); }
-        catch (capturedErr) { console.error('[OfflineQueue] Handled firebase security/write error:', capturedErr); }
+        try { handleFirestoreError(err, 'write', `${item.collection}/${item.docId}`); } catch (capturedErr) { console.error('[OfflineQueue] Handled firebase security/write error:', capturedErr); }
         break;
       }
     }
@@ -221,7 +198,7 @@ class OfflineQueueService {
   private sanitizePayload(data: any): any {
     if (data === null || data === undefined) return null;
     if (typeof data !== 'object') return data;
-    if (typeof data === 'object' && !Array.isArray(data) && !(data instanceof Date) && (typeof data.seconds === 'number' || typeof data._seconds === 'number')) {
+    if (!Array.isArray(data) && !(data instanceof Date) && (typeof data.seconds === 'number' || typeof data._seconds === 'number')) {
       const secs = typeof data.seconds === 'number' ? data.seconds : data._seconds;
       const nanos = typeof data.nanoseconds === 'number' ? data.nanoseconds : (typeof data._nanoseconds === 'number' ? data._nanoseconds : 0);
       try { return Timestamp.fromDate(new Date(secs * 1000 + nanos / 1000000)); } catch { return null; }
@@ -231,9 +208,7 @@ class OfflineQueueService {
     const clean: Record<string, any> = {};
     for (const [key, val] of Object.entries(data)) {
       if (val === undefined) continue;
-      if (key === 'history' && val && typeof val === 'object' && !Array.isArray(val) && !(val as any)._methodName) {
-        if ((val as any).status || (val as any).action) { clean[key] = [this.sanitizePayload(val)]; continue; }
-      }
+      if (key === 'history' && val && typeof val === 'object' && !Array.isArray(val) && !(val as any)._methodName && ((val as any).status || (val as any).action)) { clean[key] = [this.sanitizePayload(val)]; continue; }
       if (timestampKeys.has(key) && val !== null && (typeof val === 'string' || val instanceof Date)) {
         const parsedDate = val instanceof Date ? val : new Date(val);
         if (!isNaN(parsedDate.getTime())) { clean[key] = Timestamp.fromDate(parsedDate); continue; }
