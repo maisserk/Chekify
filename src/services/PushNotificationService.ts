@@ -4,7 +4,7 @@ import { auth } from '../firebase';
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
+  const rawData = window.atob(base64 + padding);
   const outputArray = new Uint8Array(rawData.length);
   for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
   return outputArray;
@@ -13,7 +13,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 async function authHeaders(): Promise<Record<string, string>> {
   const user = auth.currentUser;
   if (!user) throw new Error('Sesión no disponible. Inicia sesión nuevamente.');
-  // Force a refresh so the Push API never receives a stale/expired Firebase ID token.
   const token = await user.getIdToken(true);
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
@@ -132,8 +131,8 @@ export class PushNotificationService {
       if (typeof registration.showNotification === 'function') {
         await registration.showNotification('🚨 PROBAR ALERTA DE HALLAZGO', {
           body: '¡Alertas activas correctamente! Recibirás avisos ante cualquier hallazgo relevante.',
-          icon: '/icon.png',
-          badge: '/icon.png',
+          icon: '/favicon.png',
+          badge: '/favicon.png',
           tag: 'test-push-' + Date.now(),
           vibrate: [200, 100, 200],
           data: { url: '/' }
