@@ -49,11 +49,27 @@ export async function authenticateRequest(req: ApiRequest, res: ApiResponse): Pr
     return null;
   }
 
+  let app;
   try {
-    const app = getAdminApp();
+    app = getAdminApp();
+  } catch (error: any) {
+    console.error('Push API Firebase Admin initialization failed:', error?.message || error);
+    res.status(500).json({ error: 'Push server authentication is unavailable' });
+    return null;
+  }
+
+  let decoded;
+  try {
     const auth: Auth = getAuth(app);
-    const decoded = await auth.verifyIdToken(token);
-    const db = getFirestore(app, DATABASE_ID);
+    decoded = await auth.verifyIdToken(token);
+  } catch (error: any) {
+    console.warn('Push API ID token verification failed:', error?.code || error?.message || 'unknown error');
+    res.status(401).json({ error: 'Invalid or expired authentication token' });
+    return null;
+  }
+
+  const db = getFirestore(app, DATABASE_ID);
+  try {
     const userDoc = await db.collection('users').doc(decoded.uid).get();
     const userData = userDoc.exists ? userDoc.data() || {} : {};
 
@@ -65,8 +81,8 @@ export async function authenticateRequest(req: ApiRequest, res: ApiResponse): Pr
       db,
     };
   } catch (error: any) {
-    console.warn('Push API authentication failed:', error?.code || error?.message || 'unknown error');
-    res.status(401).json({ error: 'Invalid or expired authentication token' });
+    console.error('Push API Firestore user lookup failed:', error?.code || error?.message || error);
+    res.status(500).json({ error: 'Push server could not load the user profile' });
     return null;
   }
 }
