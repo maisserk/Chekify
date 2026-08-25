@@ -67,7 +67,7 @@ export class PushNotificationService {
       const subRes = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ subscription, user })
+        body: JSON.stringify({ subscription, user, origin: window.location.origin })
       });
 
       if (!subRes.ok) {
@@ -173,7 +173,7 @@ export class PushNotificationService {
         body: JSON.stringify({
           title,
           body,
-          url: '/',
+          url: `/hallazgo/${encodeURIComponent(String(finding?.id || ''))}`,
           priority: isCritical ? 'Alta' : 'Media',
           findingId: finding?.id || Date.now(),
           areaName,
