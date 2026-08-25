@@ -2,68 +2,100 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isAuthenticated() { return request.auth != null; }
+
     function getUserData() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data : null;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : null;
     }
+
     function isAdmin() {
       let data = getUserData();
       let r = data != null ? data.role : '';
       let email = request.auth.token.get('email', '');
-      return (isAuthenticated() && email == "maisserk@gmail.com") ||
-             (isAuthenticated() && (r == 'Administrador' || r == 'Admin' || r == 'administrador' || r == 'admin'));
+      return isAuthenticated() && (
+        email == 'maisserk@gmail.com' ||
+        r == 'Administrador' || r == 'Admin' || r == 'administrador' || r == 'admin'
+      );
     }
+
     function isSupervisor() {
       let data = getUserData();
       let r = data != null ? data.role : '';
-      return (isAuthenticated() && (r == 'Supervisor' || r == 'supervisor' || r == 'Administrador' || r == 'Admin' || r == 'administrador' || r == 'admin')) || isAdmin();
+      return isAuthenticated() && (
+        r == 'Supervisor' || r == 'supervisor' ||
+        r == 'Administrador' || r == 'Admin' || r == 'administrador' || r == 'admin'
+      );
     }
-    function isOwner(userId) { return isAuthenticated() && request.auth.uid == userId; }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     function authorizationFieldsUnchanged() {
       return request.resource.data.get('role', null) == resource.data.get('role', null) &&
              request.resource.data.get('plantId', null) == resource.data.get('plantId', null);
     }
+
     function userPlantId() {
       let data = getUserData();
       return data != null ? data.get('plantId', null) : null;
     }
+
     function samePlant(plantId) {
       return isAuthenticated() && plantId != null && userPlantId() != null && plantId == userPlantId();
     }
+
     match /users/{uid} {
-      allow read: if isAdmin() || isSupervisor() || isOwner(uid);
+      // Every authenticated user may read/update only their own profile's non-authorization fields.
+      // This avoids the circular dependency where isAdmin()/isSupervisor() need to read users/{uid}
+      // in order to decide whether users/{uid} itself may be read.
+      allow read: if isAuthenticated() && isOwner(uid);
+      allow read: if isAdmin() || isSupervisor();
       allow create: if isAdmin() || (isOwner(uid) && request.resource.data.get('role', '') == 'Operador' && request.resource.data.get('plantId', null) == null);
       allow update: if isAdmin() || (isOwner(uid) && authorizationFieldsUnchanged());
       allow delete: if isAdmin();
     }
+
     match /plants/{plantId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() && (isSupervisor() || isAdmin());
     }
+
     match /areas/{areaId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() && (isSupervisor() || isAdmin());
     }
+
     match /equipment/{equipmentId} {
       allow read: if isAdmin() || samePlant(resource.data.plantId);
       allow create: if isAdmin() || (isSupervisor() && samePlant(request.resource.data.plantId));
       allow update: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId) && samePlant(request.resource.data.plantId));
       allow delete: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId));
     }
+
     match /inspections/{inspectionId} {
       allow read: if isAdmin() || samePlant(resource.data.plantId);
       allow create: if isAdmin() || (isAuthenticated() && samePlant(request.resource.data.plantId));
       allow update: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId) && samePlant(request.resource.data.plantId));
       allow delete: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId));
     }
+
     match /findings/{findingId} {
       allow read: if isAdmin() || samePlant(resource.data.plantId);
       allow create: if isAdmin() || (isAuthenticated() && samePlant(request.resource.data.plantId));
       allow update: if isAdmin() || (isAuthenticated() && samePlant(resource.data.plantId) && samePlant(request.resource.data.plantId));
       allow delete: if isAdmin() || (isSupervisor() && samePlant(resource.data.plantId));
     }
-    match /notifications/{notificationId} { allow read, create, update, delete: if isAuthenticated(); }
-    match /push_subscriptions/{subId} { allow read, write: if isAuthenticated(); }
+
+    match /notifications/{notificationId} {
+      allow read, create, update, delete: if isAuthenticated();
+    }
+
+    match /push_subscriptions/{subId} {
+      allow read, write: if isAuthenticated();
+    }
+
     match /settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() && (isSupervisor() || isAdmin());
