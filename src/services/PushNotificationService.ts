@@ -13,7 +13,8 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 async function authHeaders(): Promise<Record<string, string>> {
   const user = auth.currentUser;
   if (!user) throw new Error('Sesión no disponible. Inicia sesión nuevamente.');
-  const token = await user.getIdToken();
+  // Force a refresh so the Push API never receives a stale/expired Firebase ID token.
+  const token = await user.getIdToken(true);
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
 
