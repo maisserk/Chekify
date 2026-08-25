@@ -15,12 +15,14 @@ export default async function handler(req: ApiRequest & { method?: string; body?
   if (!hasPushRole(identity.role)) return res.status(403).json({ error: 'Only supervisors and administrators can enable push alerts' });
 
   try {
+    const origin = String(req.body?.origin || '').trim() || undefined;
     const docId = Buffer.from(subscription.endpoint).toString('base64').replace(/[/+=]/g, '_').slice(0, 100);
     await identity.db.collection('push_subscriptions').doc(docId).set({
       subscription,
       uid: identity.uid,
       role: identity.role,
       plantId: identity.plantId,
+      origin,
       updatedAt: Date.now(),
     }, { merge: true });
     return res.status(200).json({ success: true, message: 'Subscripción registrada correctamente' });
