@@ -20,19 +20,21 @@ export default async function handler(req: ApiRequest & { method?: string; body?
 
     const snapshot = await identity.db.collection('push_subscriptions').get();
     const requestOrigin = String(req.headers?.origin || '').trim();
+
+    // Only deliver to subscriptions registered by this exact app origin.
+    // This prevents old Vercel Preview deployments from receiving the same alert.
     const recipients = snapshot.docs.filter(doc => {
       const data = doc.data() || {};
       const role = String(data.role || '').toLowerCase();
       const isPushRole = role === 'supervisor' || role === 'administrador' || role === 'admin';
-      if (!isPushRole) return false;
+      if (!isPushRole || !requestOrigin || !data.origin || data.origin !== requestOrigin) return false;
 
       const samePlant = !identity.plantId || !data.plantId || data.plantId === identity.plantId;
-      const sameOrigin = !data.origin || !requestOrigin || data.origin === requestOrigin;
-      return (samePlant || role === 'administrador' || role === 'admin') && sameOrigin;
+      return samePlant || role === 'administrador' || role === 'admin';
     });
 
     if (recipients.length === 0) {
-      return res.status(200).json({ success: true, sent: 0, message: 'No hay suscripciones Push destinatarias' });
+      return res.status(200).json({ success: true, sent: 0, message: 'No hay suscripciones Push destinatarias para este origen' });
     }
 
     const payload = JSON.stringify({
