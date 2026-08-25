@@ -1,4 +1,4 @@
-import { authenticateRequest, hasPushRole, type ApiRequest, type ApiResponse } from './_auth';
+import { authenticateRequest, hasPushRole, type ApiRequest, type ApiResponse } from './_auth.js';
 
 export default async function handler(req: ApiRequest & { method?: string; body?: any }, res: ApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
