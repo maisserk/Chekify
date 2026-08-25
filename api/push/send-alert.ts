@@ -19,15 +19,16 @@ export default async function handler(req: ApiRequest & { method?: string; body?
     webPush.setVapidDetails('mailto:soporte@chekify.local', publicKey, privateKey);
 
     const snapshot = await identity.db.collection('push_subscriptions').get();
+    const requestOrigin = String(req.headers?.origin || '').trim();
     const recipients = snapshot.docs.filter(doc => {
       const data = doc.data() || {};
       const role = String(data.role || '').toLowerCase();
       const isPushRole = role === 'supervisor' || role === 'administrador' || role === 'admin';
       if (!isPushRole) return false;
 
-      // Supervisors receive alerts from their own plant. Administrators are global.
       const samePlant = !identity.plantId || !data.plantId || data.plantId === identity.plantId;
-      return samePlant || role === 'administrador' || role === 'admin';
+      const sameOrigin = !data.origin || !requestOrigin || data.origin === requestOrigin;
+      return (samePlant || role === 'administrador' || role === 'admin') && sameOrigin;
     });
 
     if (recipients.length === 0) {
@@ -40,14 +41,7 @@ export default async function handler(req: ApiRequest & { method?: string; body?
       url,
       tag: findingId ? `finding-${findingId}` : `finding-${Date.now()}`,
       requireInteraction: priority === 'Alta',
-      data: {
-        url,
-        findingId,
-        areaName,
-        equipmentName,
-        reportedBy,
-        priority,
-      },
+      data: { url, findingId, areaName, equipmentName, reportedBy, priority },
     });
 
     let sent = 0;
@@ -64,8 +58,6 @@ export default async function handler(req: ApiRequest & { method?: string; body?
       } catch (error: any) {
         const statusCode = error?.statusCode;
         console.warn(`Push delivery failed for ${doc.id}:`, statusCode || error?.message || error);
-
-        // 404/410 means the browser subscription is no longer valid.
         if (statusCode === 404 || statusCode === 410) {
           await doc.ref.delete().catch(() => {});
           removed += 1;
