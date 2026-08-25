@@ -1,4 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+type VercelRequest = { method?: string };
+type VercelResponse = {
+  status: (code: number) => VercelResponse;
+  json: (body: unknown) => void;
+};
 
 export default function handler(_req: VercelRequest, res: VercelResponse) {
   const publicKey = process.env.VAPID_PUBLIC_KEY || '';
