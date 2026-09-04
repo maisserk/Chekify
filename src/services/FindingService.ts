@@ -48,7 +48,6 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg 
 export class FindingService {
   private static readonly COLLECTION_NAME = 'findings';
 
-  private static hasRunCleanup = false;
 
   /**
    * Subscribes to real-time findings with multi-tenant plant scoping.
@@ -57,19 +56,13 @@ export class FindingService {
     callback: (findings: Finding[]) => void,
     plantId?: string
   ): () => void {
-    if (!this.hasRunCleanup) {
-      this.hasRunCleanup = true;
-      setTimeout(() => {
-        this.purgeSyntheticAndDuplicateFindings().catch(err => {
-          console.warn('[FindingService] Auto cleanup of synthetic duplicates failed:', err);
-        });
-      }, 1500);
-    }
-
     const findingsRef = collection(db, this.COLLECTION_NAME);
+    const findingsQuery = plantId
+      ? query(findingsRef, where('plantId', '==', plantId))
+      : findingsRef;
 
     return onSnapshot(
-      findingsRef,
+      findingsQuery,
       (snapshot) => {
         const rawList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
         
