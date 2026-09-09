@@ -1161,20 +1161,34 @@ const OperatorDashboard = ({
   });
 
   useEffect(() => {
-    // Listen for areas
-    const unsubAreas = onSnapshot(collection(db, 'areas'), (snapshot) => {
-      let areaData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area));
-      if (user.role !== 'Administrador' && user.plantId) {
-        areaData = areaData.filter(a => a.plantId === user.plantId);
-      }
+    // Scope realtime listeners to the user's plant whenever possible.
+    // This avoids downloading every plant's areas/equipment/inspections to each client.
+    const isAdmin = user.role === 'Administrador';
+    const hasPlant = Boolean(user.plantId);
+
+    // A non-admin without a plant has no scoped data to load.
+    if (!isAdmin && !hasPlant) return;
+
+    const areasRef = collection(db, 'areas');
+    const areasQuery = !isAdmin && user.plantId
+      ? query(areasRef, where('plantId', '==', user.plantId))
+      : areasRef;
+
+    const unsubAreas = onSnapshot(areasQuery, (snapshot) => {
+      const areaData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area));
       setAreas(areaData);
       cacheAreas(areaData);
     }, (error) => {
       console.error("Error listening to areas:", error);
     });
 
-    // Listen for equipment
-    const unsubEquip = onSnapshot(collection(db, 'equipment'), (snapshot) => {
+    // Operators/supervisors only need equipment from their own plant.
+    const equipmentRef = collection(db, 'equipment');
+    const equipmentQuery = !isAdmin && user.plantId
+      ? query(equipmentRef, where('plantId', '==', user.plantId))
+      : equipmentRef;
+
+    const unsubEquip = onSnapshot(equipmentQuery, (snapshot) => {
       const equipData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment));
       setEquipment(equipData);
       cacheEquipment(equipData);
@@ -1182,16 +1196,39 @@ const OperatorDashboard = ({
       console.error("Error listening to equipment:", error);
     });
 
-    // Listen for inspections
-    const unsubInspections = onSnapshot(collection(db, 'inspections'), (snapshot) => {
-      setTodayInspections(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    // Operators/supervisors only need inspections from their own plant.
+    // Keep the existing client-side date check to avoid requiring a composite index.
+    const inspectionsRef = collection(db, 'inspections');
+    const inspectionsQuery = !isAdmin && user.plantId
+      ? query(inspectionsRef, where('plantId', '==', user.plantId))
+      : inspectionsRef;
+
+    const unsubInspections = onSnapshot(inspectionsQuery, (snapshot) => {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const todayData = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((inspection: any) => {
+          const completedAt = inspection.completedAt;
+          const completedDate = completedAt?.toDate
+            ? completedAt.toDate()
+            : completedAt
+              ? new Date(completedAt)
+              : null;
+          return completedDate ? completedDate >= startOfToday : false;
+        });
+      setTodayInspections(todayData);
     }, (error) => {
       console.error("Error listening to inspections:", error);
     });
 
-    // Listen for all findings in the user's plant to calculate KPIs using enterprise service layer
-    if (!user.plantId) {
-      return unsubAreas;
+    // Listen for findings in the user's plant to calculate KPIs using the enterprise service layer.
+    if (!hasPlant) {
+      return () => {
+        unsubAreas();
+        unsubEquip();
+        unsubInspections();
+      };
     }
     
     const unsubStats = FindingService.subscribeToFindings((plantFindings) => {
