@@ -281,6 +281,10 @@ export const OrdenYLimpiezaDashboard = ({
   onClearPending?: () => void;
 }) => {
   const { getOperatorProfile } = useAppUsers();
+  const isSupervisor = user.role === 'Supervisor' || user.role === 'Administrador';
+  const [activeView, setActiveView] = useState<'dashboard' | 'hallazgos'>(
+    initialFindingId && isSupervisor ? 'hallazgos' : 'dashboard'
+  );
   const [allFindings, setAllFindings] = useState<Finding[]>([]);
   const [filter, setFilter] = useState<'All' | 'Open' | 'Closed' | 'InReview'>('Open');
   const [subcatFilter, setSubcatFilter] = useState<string>('All');
@@ -328,14 +332,23 @@ export const OrdenYLimpiezaDashboard = ({
   }, [allFindings]);
 
   useEffect(() => {
-    if (initialFindingId && ordenFindings.length > 0) {
+    if (isSupervisor && initialFindingId && ordenFindings.length > 0) {
       const finding = ordenFindings.find(f => f.id === initialFindingId);
       if (finding) {
         setSelectedFinding(finding);
+        setActiveView('hallazgos');
         if (onClearPending) onClearPending();
       }
+    } else if (!isSupervisor && initialFindingId) {
+      if (onClearPending) onClearPending();
     }
-  }, [initialFindingId, ordenFindings, onClearPending]);
+  }, [isSupervisor, initialFindingId, ordenFindings, onClearPending]);
+
+  useEffect(() => {
+    if (!isSupervisor && activeView !== 'dashboard') {
+      setActiveView('dashboard');
+    }
+  }, [isSupervisor, activeView]);
 
   // Metrics specifically for Orden y Limpieza
   const stats = useMemo(() => {
@@ -461,6 +474,10 @@ export const OrdenYLimpiezaDashboard = ({
   };
 
   const handleCloseFinding = async () => {
+    if (!isSupervisor) {
+      showToast("Acceso Denegado", "Solo el supervisor puede cerrar hallazgos.", "error");
+      return;
+    }
     if (!selectedFinding) return;
     const dateToUse = useCustomClosedDate && customClosedDate ? new Date(customClosedDate) : null;
     const resultStatus = await FindingService.transitionStatus(selectedFinding.id, 'Closed', user, supervisorComments, dateToUse);
@@ -494,6 +511,10 @@ export const OrdenYLimpiezaDashboard = ({
     solutionText: string,
     solutionDate?: Date
   ) => {
+    if (!isSupervisor) {
+      showToast("Acceso Denegado", "Solo el supervisor puede registrar soluciones a los hallazgos.", "error");
+      return;
+    }
     if (!selectedFinding) return;
     try {
       const solDate = solutionDate || new Date();
@@ -522,6 +543,10 @@ export const OrdenYLimpiezaDashboard = ({
   };
 
   const handleUpdateClosureDate = async () => {
+    if (!isSupervisor) {
+      showToast("Acceso Denegado", "Solo el supervisor puede modificar la fecha de solución.", "error");
+      return;
+    }
     if (!selectedFinding) return;
     const dateToUse = customClosedDate ? new Date(customClosedDate) : new Date();
     const result = await FindingService.updateFindingClosure(
@@ -535,6 +560,10 @@ export const OrdenYLimpiezaDashboard = ({
   };
 
   const handleSetInReview = async () => {
+    if (!isSupervisor) {
+      showToast("Acceso Denegado", "Solo el supervisor puede poner hallazgos en revisión.", "error");
+      return;
+    }
     if (!selectedFinding) return;
     const resultStatus = await FindingService.transitionStatus(selectedFinding.id, 'InReview', user, supervisorComments);
 
@@ -564,6 +593,10 @@ export const OrdenYLimpiezaDashboard = ({
   const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
 
   const handleCleanupDuplicates = async () => {
+    if (!isSupervisor) {
+      showToast("Acceso Denegado", "Solo el supervisor o administrador puede realizar esta acción.", "error");
+      return;
+    }
     setIsCleaningDuplicates(true);
     try {
       const res = await FindingService.cleanupDuplicates();
@@ -614,68 +647,116 @@ export const OrdenYLimpiezaDashboard = ({
           </div>
 
           <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-purple-500/20">
-            <button
-              onClick={handleCleanupDuplicates}
-              disabled={isCleaningDuplicates}
-              className="px-3.5 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/30 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer disabled:opacity-50"
-              title="Elimina hallazgos duplicados realizados anteriormente y limpia fotos duplicadas"
-            >
-              <Trash2 className="w-4 h-4 text-red-300 shrink-0" />
-              <span>{isCleaningDuplicates ? 'Depurando...' : '🧹 Depurar Duplicados'}</span>
-            </button>
+            {isSupervisor && (
+              <button
+                onClick={handleCleanupDuplicates}
+                disabled={isCleaningDuplicates}
+                className="px-3.5 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/30 rounded-2xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer disabled:opacity-50"
+                title="Elimina hallazgos duplicados realizados anteriormente y limpia fotos duplicadas"
+              >
+                <Trash2 className="w-4 h-4 text-red-300 shrink-0" />
+                <span>{isCleaningDuplicates ? 'Depurando...' : '🧹 Depurar Duplicados'}</span>
+              </button>
+            )}
 
             <button
               onClick={() => setShowQuickHelp(true)}
-              className="px-3.5 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
+              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
             >
               <HelpCircle className="w-4 h-4 text-purple-300 shrink-0" />
               <span>Ayuda rápida</span>
             </button>
-            <button
-              onClick={() => exportFindingsToCSV(filteredFindings, 'reporte-orden-limpieza')}
-              className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-purple-300 shrink-0" />
-              <span>CSV ({filteredFindings.length})</span>
-            </button>
-            <button
-              onClick={() => exportFindingsToPDF(filteredFindings, 'Reporte de Orden y Limpieza', 'reporte-orden-limpieza')}
-              className="px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-purple-900/50 flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
-            >
-              <FileText className="w-4 h-4 shrink-0" />
-              <span>Exportar PDF</span>
-            </button>
+            {isSupervisor && (
+              <>
+                <button
+                  onClick={() => exportFindingsToCSV(filteredFindings, 'reporte-orden-limpieza')}
+                  className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 backdrop-blur-md active:scale-95 shadow-md flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-purple-300 shrink-0" />
+                  <span>CSV ({filteredFindings.length})</span>
+                </button>
+                <button
+                  onClick={() => exportFindingsToPDF(filteredFindings, 'Reporte de Orden y Limpieza', 'reporte-orden-limpieza')}
+                  className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-purple-900/50 flex-1 sm:flex-initial whitespace-nowrap cursor-pointer"
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  <span>Exportar PDF</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Stats Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-white dark:bg-black p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-sm">
-          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Total Hallazgos</p>
-          <p className="text-2xl font-black text-zinc-900 dark:text-white">{stats.total}</p>
+      {/* View Switcher Buttons - Pure adaptable buttons (no swipe / no carousel) */}
+      {/* View Switcher Buttons - Only shown for Supervisor and Admin */}
+      {isSupervisor && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 p-2 bg-white dark:bg-[#1C1C1E] border border-zinc-200/80 dark:border-white/10 rounded-2xl shadow-xs w-full">
+          <button
+            type="button"
+            onClick={() => setActiveView('dashboard')}
+            className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all cursor-pointer ${
+              activeView === 'dashboard'
+                ? 'bg-purple-600 text-white shadow-md active:scale-95'
+                : 'bg-zinc-100 hover:bg-zinc-200/70 dark:bg-white/5 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 active:scale-95'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 shrink-0" />
+            <span>📊 Dashboard (Métricas & Gráficos)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView('hallazgos')}
+            className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all cursor-pointer ${
+              activeView === 'hallazgos'
+                ? 'bg-purple-600 text-white shadow-md active:scale-95'
+                : 'bg-zinc-100 hover:bg-zinc-200/70 dark:bg-white/5 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 active:scale-95'
+            }`}
+          >
+            <FileText className="w-4 h-4 shrink-0" />
+            <span>📋 Gestión de Hallazgos</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              activeView === 'hallazgos'
+                ? 'bg-white text-purple-700'
+                : 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300'
+            }`}>
+              {stats.open} Pendientes · {stats.total} Total
+            </span>
+          </button>
         </div>
-        <div className="bg-amber-50 dark:bg-amber-500/10 p-4 rounded-2xl border border-amber-100 dark:border-amber-500/20 shadow-sm">
-          <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">Pendientes</p>
-          <p className="text-2xl font-black text-amber-700 dark:text-amber-300">{stats.open}</p>
-        </div>
-        <div className="bg-orange-50 dark:bg-orange-500/10 p-4 rounded-2xl border border-orange-100 dark:border-orange-500/20 shadow-sm">
-          <p className="text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-1">En Revisión</p>
-          <p className="text-2xl font-black text-orange-700 dark:text-orange-300">{stats.inReview}</p>
-        </div>
-        <div className="bg-emerald-50 dark:bg-emerald-500/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 shadow-sm">
-          <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Cerrados</p>
-          <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300">{stats.closed}</p>
-        </div>
-        <div className="bg-purple-50 dark:bg-purple-500/10 p-4 rounded-2xl border border-purple-100 dark:border-purple-500/20 shadow-sm">
-          <p className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-1">Cumplimiento</p>
-          <p className="text-2xl font-black text-purple-700 dark:text-purple-300">{stats.complianceRate}%</p>
-        </div>
-        <div className="bg-sky-50 dark:bg-sky-500/10 p-4 rounded-2xl border border-sky-100 dark:border-sky-500/20 shadow-sm">
-          <p className="text-[10px] font-black text-sky-600 dark:text-sky-400 uppercase tracking-widest mb-1">MTTR Solución</p>
-          <p className="text-2xl font-black text-sky-700 dark:text-sky-300">{stats.mttrHours}h</p>
-        </div>
-      </div>
+      )}
+
+      {/* VIEW 1: Dashboard (Metrics, Charts, Hotspots, Leaderboard) */}
+      {activeView === 'dashboard' && (
+        <div className="space-y-6">
+          {/* Stats Summary Cards - Centered and optimized for mobile version */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            <div className="bg-white dark:bg-black p-3.5 sm:p-4 rounded-2xl border border-zinc-100 dark:border-white/10 shadow-xs flex flex-col items-center justify-center text-center">
+              <p className="text-[10px] sm:text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1 text-center truncate w-full">Total Hallazgos</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white tracking-tight text-center leading-none">{stats.total}</p>
+            </div>
+            <div className="bg-amber-500/10 dark:bg-amber-500/15 p-3.5 sm:p-4 rounded-2xl border border-amber-500/25 shadow-xs flex flex-col items-center justify-center text-center">
+              <p className="text-[10px] sm:text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-1 text-center truncate w-full">Pendientes</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-amber-800 dark:text-amber-300 tracking-tight text-center leading-none">{stats.open}</p>
+            </div>
+            <div className="bg-orange-500/10 dark:bg-orange-500/15 p-3.5 sm:p-4 rounded-2xl border border-orange-500/25 shadow-xs flex flex-col items-center justify-center text-center">
+              <p className="text-[10px] sm:text-[11px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wider mb-1 text-center truncate w-full">En Revisión</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-orange-800 dark:text-orange-300 tracking-tight text-center leading-none">{stats.inReview}</p>
+            </div>
+            <div className="bg-emerald-500/10 dark:bg-emerald-500/15 p-3.5 sm:p-4 rounded-2xl border border-emerald-500/25 shadow-xs flex flex-col items-center justify-center text-center">
+              <p className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-1 text-center truncate w-full">Cerrados</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-emerald-800 dark:text-emerald-300 tracking-tight text-center leading-none">{stats.closed}</p>
+            </div>
+            <div className="bg-purple-500/10 dark:bg-purple-500/15 p-3.5 sm:p-4 rounded-2xl border border-purple-500/25 shadow-xs flex flex-col items-center justify-center text-center">
+              <p className="text-[10px] sm:text-[11px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider mb-1 text-center truncate w-full">Cumplimiento</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-purple-800 dark:text-purple-300 tracking-tight text-center leading-none">{stats.complianceRate}%</p>
+            </div>
+            <div className="bg-sky-500/10 dark:bg-sky-500/15 p-3.5 sm:p-4 rounded-2xl border border-sky-500/25 shadow-xs flex flex-col items-center justify-center text-center">
+              <p className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-400 uppercase tracking-wider mb-1 text-center truncate w-full">MTTR Solución</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-sky-800 dark:text-sky-300 tracking-tight text-center leading-none">{stats.mttrHours}h</p>
+            </div>
+          </div>
 
       {/* Analytics Charts & Rankings */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -762,8 +843,74 @@ export const OrdenYLimpiezaDashboard = ({
         </div>
       </div>
 
-      {/* Advanced Filters Panel */}
-      <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm space-y-4">
+          {/* Quick Supervisor Action or Operator 5S Guide within Dashboard */}
+          {isSupervisor ? (
+            <div className="bg-gradient-to-r from-purple-900/60 to-indigo-900/60 border border-purple-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">Registro de Hallazgos en Terreno</h4>
+                  <p className="text-xs text-purple-200/80">Hay {stats.open} hallazgos pendientes de revisión y cierre para esta planta.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveView('hallazgos')}
+                className="px-5 py-2.5 bg-white text-purple-950 hover:bg-purple-50 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 shrink-0 flex items-center gap-2 cursor-pointer"
+              >
+                <span>Ir a Hallazgos ({ordenFindings.length})</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200/70 dark:border-purple-500/20 p-5 sm:p-6 rounded-3xl space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-200 dark:border-purple-500/30">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-purple-950 dark:text-purple-200">
+                    Metodología 5S · Orden y Limpieza en Terreno
+                  </h4>
+                  <p className="text-xs text-purple-900/70 dark:text-purple-300/70">
+                    Como operador, tienes acceso al resumen de indicadores del programa 5S. La auditoría, revisión en terreno y cierre administrativo corresponden al supervisor.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
+                <div className="bg-white/80 dark:bg-black/40 p-2.5 rounded-xl border border-purple-200/50 dark:border-white/5 text-center">
+                  <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">1. Residuos</p>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">Desechos y basura</p>
+                </div>
+                <div className="bg-white/80 dark:bg-black/40 p-2.5 rounded-xl border border-purple-200/50 dark:border-white/5 text-center">
+                  <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">2. Herramientas</p>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">Fuera de lugar</p>
+                </div>
+                <div className="bg-white/80 dark:bg-black/40 p-2.5 rounded-xl border border-purple-200/50 dark:border-white/5 text-center">
+                  <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">3. Derrames</p>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">Lubricantes y fluidos</p>
+                </div>
+                <div className="bg-white/80 dark:bg-black/40 p-2.5 rounded-xl border border-purple-200/50 dark:border-white/5 text-center">
+                  <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">4. Accesos</p>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">Obstrucciones</p>
+                </div>
+                <div className="bg-white/80 dark:bg-black/40 p-2.5 rounded-xl border border-purple-200/50 dark:border-white/5 text-center col-span-2 sm:col-span-1">
+                  <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">5. Limpieza</p>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">Aseo y orden</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VIEW 2: Hallazgos (Exclusivo para Supervisores y Administradores) */}
+      {isSupervisor && activeView === 'hallazgos' && (
+        <div className="space-y-6">
+          {/* Advanced Filters Panel */}
+          <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-white/10 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
             <Filter className="w-4 h-4 text-purple-500" />
@@ -973,145 +1120,178 @@ export const OrdenYLimpiezaDashboard = ({
                       description={selectedFinding.description} 
                       source="OrdenYLimpieza" 
                       filterModule="OrdenYLimpieza"
-                      onSolveItem={handleSolveIndividualItem}
+                      onSolveItem={isSupervisor ? handleSolveIndividualItem : undefined}
                     />
                   </div>
                 </div>
 
                 {selectedFinding.status !== 'Closed' ? (
-                  <div className="space-y-4 pt-2">
-                    <div>
-                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1">Comentarios del Supervisor</label>
-                      <textarea 
-                        value={supervisorComments}
-                        onChange={(e) => setSupervisorComments(e.target.value)}
-                        className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-2xl focus:ring-2 focus:ring-purple-500 outline-none text-xs font-medium dark:text-white"
-                        placeholder="Instrucciones o acciones correctivas aplicadas..."
-                      />
-                    </div>
-
-                    {/* Resolution Date & Time (MTTR Adjustment) */}
-                    <div className="bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-500/20 p-4 rounded-2xl space-y-3">
-                      <div 
-                        className="flex items-center justify-between cursor-pointer select-none" 
-                        onClick={() => setUseCustomClosedDate(!useCustomClosedDate)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                          <span className="text-xs font-bold text-purple-900 dark:text-purple-200">
-                            ¿Ajustar fecha/hora de solución? (Cierre retroactivo)
-                          </span>
-                        </div>
-                        <input 
-                          type="checkbox" 
-                          checked={useCustomClosedDate}
-                          onChange={(e) => setUseCustomClosedDate(e.target.checked)}
-                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                  isSupervisor ? (
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">
+                          Comentarios del Supervisor
+                        </label>
+                        <textarea 
+                          value={supervisorComments}
+                          onChange={(e) => setSupervisorComments(e.target.value)}
+                          className="w-full p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-2xl focus:ring-2 focus:ring-[#0071E3] outline-none text-xs font-medium dark:text-white"
+                          placeholder="Instrucciones o acciones correctivas aplicadas..."
                         />
                       </div>
 
-                      {useCustomClosedDate ? (
-                        <div className="space-y-3 pt-2 border-t border-purple-200/50 dark:border-purple-500/10">
-                          <p className="text-[11px] text-purple-800 dark:text-purple-300 font-medium">
-                            Indica cuándo se solucionó realmente en terreno para mantener el cálculo de MTTR preciso sin retrasos ficticios.
-                          </p>
-
-                          <div>
-                            <label className="block text-[10px] font-black text-purple-900 dark:text-purple-300 uppercase tracking-widest mb-1">
-                              Fecha y Hora de Solución
-                            </label>
-                            <input 
-                              type="datetime-local"
-                              value={customClosedDate}
-                              onChange={(e) => setCustomClosedDate(e.target.value)}
-                              max={formatToDatetimeLocal(new Date())}
-                              className="w-full p-3 bg-white dark:bg-zinc-900 border border-purple-300 dark:border-purple-500/30 rounded-xl text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-                            />
+                      {/* Resolution Date & Time (MTTR Adjustment) */}
+                      <div className="bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-500/20 p-4 rounded-2xl space-y-3">
+                        <div 
+                          className="flex items-center justify-between cursor-pointer select-none" 
+                          onClick={() => setUseCustomClosedDate(!useCustomClosedDate)}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                            <span className="text-xs font-semibold text-purple-900 dark:text-purple-200">
+                              ¿Ajustar fecha/hora de solución? (Cierre retroactivo)
+                            </span>
                           </div>
+                          <input 
+                            type="checkbox" 
+                            checked={useCustomClosedDate}
+                            onChange={(e) => setUseCustomClosedDate(e.target.checked)}
+                            className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                          />
+                        </div>
 
-                          {/* Quick Presets */}
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date()))}
-                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
-                            >
-                              ⚡ Ahora mismo
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 3600 * 1000)))}
-                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
-                            >
-                              ⏱️ Hace 1 hr
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 4 * 3600 * 1000)))}
-                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
-                            >
-                              🕒 Hace 4 hrs
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 24 * 3600 * 1000)))}
-                              className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
-                            >
-                              📅 Ayer
-                            </button>
-                            {getFindingDate(selectedFinding) && (
+                        {useCustomClosedDate ? (
+                          <div className="space-y-3 pt-2 border-t border-purple-200/50 dark:border-purple-500/10">
+                            <p className="text-[11px] text-purple-800 dark:text-purple-300 font-medium">
+                              Indica cuándo se solucionó realmente en terreno para mantener el cálculo de MTTR preciso sin retrasos ficticios.
+                            </p>
+
+                            <div>
+                              <label className="block text-[10px] font-semibold text-purple-900 dark:text-purple-300 uppercase tracking-widest mb-1">
+                                Fecha y Hora de Solución
+                              </label>
+                              <input 
+                                type="datetime-local"
+                                value={customClosedDate}
+                                onChange={(e) => setCustomClosedDate(e.target.value)}
+                                max={formatToDatetimeLocal(new Date())}
+                                className="w-full p-3 bg-white dark:bg-zinc-900 border border-purple-300 dark:border-purple-500/30 rounded-xl text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-[#0071E3]"
+                              />
+                            </div>
+
+                            {/* Quick Presets */}
+                            <div className="flex flex-wrap gap-1.5 pt-1">
                               <button
                                 type="button"
-                                onClick={() => setCustomClosedDate(formatToDatetimeLocal(getFindingDate(selectedFinding)))}
-                                className="px-2.5 py-1 text-[10px] font-bold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors"
+                                onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date()))}
+                                className="px-2.5 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors cursor-pointer"
                               >
-                                📋 Hora de reporte
+                                ⚡ Ahora mismo
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 3600 * 1000)))}
+                                className="px-2.5 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors cursor-pointer"
+                              >
+                                ⏱️ Hace 1 hr
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 4 * 3600 * 1000)))}
+                                className="px-2.5 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors cursor-pointer"
+                              >
+                                🕒 Hace 4 hrs
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCustomClosedDate(formatToDatetimeLocal(new Date(Date.now() - 24 * 3600 * 1000)))}
+                                className="px-2.5 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors cursor-pointer"
+                              >
+                                📅 Ayer
+                              </button>
+                              {getFindingDate(selectedFinding) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomClosedDate(formatToDatetimeLocal(getFindingDate(selectedFinding)))}
+                                  className="px-2.5 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-900 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800/50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  📋 Hora de reporte
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Dynamic MTTR Preview */}
+                            {getFindingDate(selectedFinding) && customClosedDate && (
+                              <div className="p-2.5 bg-purple-100/70 dark:bg-purple-900/40 rounded-xl text-[11px] font-semibold text-purple-950 dark:text-purple-200 flex items-center justify-between">
+                                <span>MTTR Resultante:</span>
+                                <span className="font-mono">{getCalculatedMTTRText(getFindingDate(selectedFinding)!, customClosedDate)}</span>
+                              </div>
                             )}
                           </div>
+                        ) : (
+                          <p className="text-[11px] text-purple-800/80 dark:text-purple-300/80 italic font-medium">
+                            Se utilizará la fecha y hora actual al presionar "Cerrar Hallazgo".
+                          </p>
+                        )}
+                      </div>
 
-                          {/* Dynamic MTTR Preview */}
-                          {getFindingDate(selectedFinding) && customClosedDate && (
-                            <div className="p-2.5 bg-purple-100/70 dark:bg-purple-900/40 rounded-xl text-[11px] font-bold text-purple-950 dark:text-purple-200 flex items-center justify-between">
-                              <span>MTTR Resultante:</span>
-                              <span className="font-mono">{getCalculatedMTTRText(getFindingDate(selectedFinding)!, customClosedDate)}</span>
-                            </div>
-                          )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <button 
+                          onClick={handleSetInReview}
+                          disabled={selectedFinding.status === 'InReview'}
+                          className="py-3.5 bg-white dark:bg-black border border-orange-300 dark:border-orange-500/30 text-orange-600 dark:text-orange-400 rounded-2xl font-semibold text-xs hover:bg-orange-50 dark:hover:bg-orange-500/10 disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          Poner en Revisión
+                        </button>
+                        <button 
+                          onClick={handleCloseFinding}
+                          className="py-3.5 bg-[#0071E3] hover:bg-[#0077ED] text-white rounded-2xl font-semibold text-xs shadow-sm transition-all cursor-pointer active:scale-98"
+                        >
+                          Cerrar Hallazgo
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pt-2">
+                      <div className="p-4 bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/20 rounded-2xl space-y-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                            <Clock className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-purple-950 dark:text-purple-200 leading-snug">
+                              Revisión y Cierre Reservados al Supervisor
+                            </p>
+                            <p className="text-[11px] text-purple-800/80 dark:text-purple-300/80 font-medium leading-relaxed">
+                              Este hallazgo está en estado <span className="font-semibold">{selectedFinding.status === 'Open' ? 'Abierto' : 'En Revisión'}</span>. La revisión y el cierre administrativo corresponden exclusivamente al supervisor.
+                            </p>
+                          </div>
                         </div>
-                      ) : (
-                        <p className="text-[11px] text-purple-800/80 dark:text-purple-300/80 italic">
-                          Se utilizará la fecha y hora actual al presionar "Cerrar Hallazgo".
-                        </p>
-                      )}
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <button 
-                        onClick={handleSetInReview}
-                        disabled={selectedFinding.status === 'InReview'}
-                        className="py-3.5 bg-white dark:bg-black border border-orange-300 text-orange-600 rounded-2xl font-black uppercase text-xs hover:bg-orange-50 disabled:opacity-50"
-                      >
-                        Poner en Revisión
-                      </button>
-                      <button 
-                        onClick={handleCloseFinding}
-                        className="py-3.5 bg-purple-600 text-white rounded-2xl font-black uppercase text-xs hover:bg-purple-700 shadow-lg shadow-purple-200 dark:shadow-none"
-                      >
-                        Cerrar Hallazgo
-                      </button>
+                        {selectedFinding.supervisorComments && (
+                          <div className="mt-2 pt-2.5 border-t border-purple-500/20">
+                            <p className="text-[10px] font-semibold text-purple-900 dark:text-purple-300 uppercase tracking-wider">
+                              Instrucciones / Comentarios del Supervisor:
+                            </p>
+                            <p className="text-xs text-zinc-700 dark:text-zinc-300 italic mt-1 font-medium leading-relaxed">
+                              "{selectedFinding.supervisorComments}"
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )
                 ) : (
                   <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-2xl space-y-3 border border-zinc-100 dark:border-white/5">
                     <div>
-                      <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Solución Aplicada</p>
-                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{selectedFinding.solution || 'Solucionado por supervisor/operador'}</p>
+                      <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">Solución Aplicada</p>
+                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{selectedFinding.solution || 'Solucionado por supervisor'}</p>
                     </div>
 
                     <div className="pt-2 border-t border-zinc-200/60 dark:border-white/5 flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Fecha / Hora de Solución</p>
-                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        <p className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Fecha / Hora de Solución</p>
+                        <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                           {getFindingClosedDate(selectedFinding) ? getFindingClosedDate(selectedFinding)!.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'No especificada'}
                         </p>
                         {getFindingDate(selectedFinding) && getFindingClosedDate(selectedFinding) && (
@@ -1121,28 +1301,30 @@ export const OrdenYLimpiezaDashboard = ({
                         )}
                       </div>
                       
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingClosedDate(!isEditingClosedDate)}
-                        className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-[11px] font-bold rounded-xl transition-colors"
-                      >
-                        {isEditingClosedDate ? 'Cancelar' : '✏️ Editar Fecha'}
-                      </button>
+                      {isSupervisor && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingClosedDate(!isEditingClosedDate)}
+                          className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-[11px] font-semibold rounded-xl transition-colors cursor-pointer"
+                        >
+                          {isEditingClosedDate ? 'Cancelar' : '✏️ Editar Fecha'}
+                        </button>
+                      )}
                     </div>
 
-                    {isEditingClosedDate && (
+                    {isSupervisor && isEditingClosedDate && (
                       <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-500/20 rounded-xl space-y-2">
-                        <label className="block text-[10px] font-black text-purple-900 dark:text-purple-300 uppercase">Nueva Fecha y Hora de Solución:</label>
+                        <label className="block text-[10px] font-semibold text-purple-900 dark:text-purple-300 uppercase">Nueva Fecha y Hora de Solución:</label>
                         <input 
                           type="datetime-local"
                           value={customClosedDate}
                           onChange={(e) => setCustomClosedDate(e.target.value)}
-                          className="w-full p-2.5 bg-white dark:bg-zinc-900 border border-purple-300 dark:border-purple-500/30 rounded-lg text-xs font-bold dark:text-white"
+                          className="w-full p-2.5 bg-white dark:bg-zinc-900 border border-purple-300 dark:border-purple-500/30 rounded-lg text-xs font-semibold dark:text-white"
                         />
                         <button
                           type="button"
                           onClick={handleUpdateClosureDate}
-                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs uppercase"
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs uppercase cursor-pointer"
                         >
                           Guardar Cambio de Fecha (Ajustar MTTR)
                         </button>
@@ -1211,6 +1393,8 @@ export const OrdenYLimpiezaDashboard = ({
           </div>
         )}
       </AnimatePresence>
+        </div>
+      )}
       <QuickHelpModal
         isOpen={showQuickHelp}
         onClose={() => setShowQuickHelp(false)}

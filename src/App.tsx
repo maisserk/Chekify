@@ -2039,50 +2039,50 @@ const OperatorDashboard = ({
         </div>
       </div>
 
-      {/* Standalone Actions & Status Bar - Centered, uniform height (h-11), px-5 and consistent gap-2 layout */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 p-2 sm:p-2.5 bg-white dark:bg-[#1C1C1E] border border-zinc-200/80 dark:border-white/10 rounded-2xl shadow-xs w-full items-stretch">
+      {/* Standalone Actions & Status Bar - Centered 2x2 grid on mobile, 4 columns on desktop with coherent margin */}
+      <div className="w-full max-w-xl sm:max-w-none mx-auto my-2 sm:my-3 p-2.5 sm:p-3 bg-white dark:bg-[#1C1C1E] border border-zinc-200/80 dark:border-white/10 rounded-2xl shadow-xs grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 items-stretch justify-center">
         {/* Prominent Dedicated Scan QR Button */}
         {!selectedArea && !scanning ? (
           <button
             onClick={startScanner}
-            className="w-full h-11 flex items-center justify-center gap-2 px-5 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-xl shadow-xs hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
+            className="w-full h-12 py-2.5 sm:py-3 flex items-center justify-center gap-2 px-3 sm:px-4 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-xl shadow-xs hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
             title="Escanear Código QR de Área o Equipo"
           >
             <ScanLine className="w-[18px] h-[18px] shrink-0" />
             <span className="truncate">Escanear QR</span>
           </button>
         ) : (
-          <div className="w-full h-11 flex items-center justify-center gap-2 px-5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-center truncate">
+          <div className="w-full h-12 py-2.5 sm:py-3 flex items-center justify-center gap-2 px-3 sm:px-4 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-center truncate">
             <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-500" />
             <span className="truncate">{selectedArea ? selectedArea.name : 'Escaneando...'}</span>
           </div>
         )}
 
-        {/* Clima & EPP Button - uniform px-5 */}
+        {/* Clima & EPP Button */}
         <button
           onClick={() => {
             setPendingAreaForInspection(selectedArea || areas[0] || null);
             setShowWeatherSafetyModal(true);
           }}
-          className="w-full h-11 flex items-center justify-center gap-2 px-5 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-xl hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
+          className="w-full h-12 py-2.5 sm:py-3 flex items-center justify-center gap-2 px-3 sm:px-4 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-xl hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
           title="Ver Advertencias Climáticas y EPP Reglamentario"
         >
           <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <span className="truncate">Clima & EPP</span>
         </button>
 
-        {/* Ayuda Rápida Button - uniform px-5 */}
+        {/* Ayuda Rápida Button */}
         <button
           onClick={() => setShowQuickHelp(true)}
-          className="w-full h-11 flex items-center justify-center gap-2 px-5 bg-zinc-100 hover:bg-zinc-200/70 dark:bg-white/5 dark:hover:bg-white/10 border border-zinc-200/70 dark:border-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-semibold rounded-xl hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
+          className="w-full h-12 py-2.5 sm:py-3 flex items-center justify-center gap-2 px-3 sm:px-4 bg-zinc-100 hover:bg-zinc-200/70 dark:bg-white/5 dark:hover:bg-white/10 border border-zinc-200/70 dark:border-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-semibold rounded-xl hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
           title="Guía y ayuda rápida"
         >
           <HelpCircle className="w-4 h-4 shrink-0 text-[#0071E3] dark:text-[#0A84FF]" />
           <span className="truncate">Ayuda Rápida</span>
         </button>
 
-        {/* Operador Activo Chip - uniform px-5 */}
-        <div className="w-full h-11 flex items-center justify-center gap-2 px-5 bg-zinc-100/80 dark:bg-white/5 border border-zinc-200/60 dark:border-white/10 rounded-xl text-center">
+        {/* Operador Activo Chip */}
+        <div className="w-full h-12 py-2.5 sm:py-3 flex items-center justify-center gap-2 px-3 sm:px-4 bg-zinc-100/80 dark:bg-white/5 border border-zinc-200/60 dark:border-white/10 rounded-xl text-center">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
           <div className="min-w-0 text-left">
             <p className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 leading-none">Operador</p>
@@ -2091,38 +2091,38 @@ const OperatorDashboard = ({
         </div>
       </div>
 
-      {/* Plant Stats for Operator */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
-        <div className="bg-brand-blue text-white p-4 rounded-3xl shadow-lg shadow-sky-100 dark:shadow-none border border-sky-400/20">
-          <p className="text-[10px] font-bold text-sky-100 uppercase tracking-widest mb-1">Cierre Prom.</p>
-          <div className="flex items-baseline gap-1">
-            <p className="text-xl font-bold">{plantStats.avgResolutionHours}</p>
+      {/* Plant Stats for Operator - Centered and optimized for mobile */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 text-center">
+        <div className="bg-brand-blue text-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-sky-400/20 flex flex-col items-center justify-center text-center">
+          <p className="text-[10px] font-bold text-sky-100 uppercase tracking-wider mb-1 text-center truncate w-full">Cierre Prom.</p>
+          <div className="flex items-baseline justify-center gap-1">
+            <p className="text-xl sm:text-2xl font-extrabold">{plantStats.avgResolutionHours}</p>
             <span className="text-[10px] font-bold text-sky-200">hrs</span>
           </div>
         </div>
-        <div className="bg-white dark:bg-black text-zinc-900 dark:text-white p-4 rounded-3xl border border-zinc-100 dark:border-white/20 flex flex-col justify-center shadow-sm dark:shadow-none">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Área Prom.</p>
-          <div className="flex items-baseline gap-1">
-            <p className="text-xl font-bold text-zinc-900 dark:text-white">{Math.floor(plantStats.avgInspectionSeconds / 60)}m {plantStats.avgInspectionSeconds % 60}s</p>
-          </div>
+        <div className="bg-white dark:bg-black text-zinc-900 dark:text-white p-3.5 sm:p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex flex-col items-center justify-center text-center shadow-xs">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1 text-center truncate w-full">Área Prom.</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-zinc-900 dark:text-white text-center">
+            {Math.floor(plantStats.avgInspectionSeconds / 60)}m {plantStats.avgInspectionSeconds % 60}s
+          </p>
         </div>
-        <div className="bg-white dark:bg-black text-zinc-900 dark:text-white p-4 rounded-3xl border border-zinc-100 dark:border-white/20 flex flex-col justify-center shadow-sm dark:shadow-none">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Equipo Prom.</p>
-          <div className="flex items-baseline gap-1">
-            <p className="text-xl font-bold text-sky-600 dark:text-sky-400">{(plantStats as any).avgEquipSeconds}s</p>
-          </div>
+        <div className="bg-white dark:bg-black text-zinc-900 dark:text-white p-3.5 sm:p-4 rounded-2xl border border-zinc-100 dark:border-white/10 flex flex-col items-center justify-center text-center shadow-xs">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1 text-center truncate w-full">Equipo Prom.</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-sky-600 dark:text-sky-400 text-center">
+            {(plantStats as any).avgEquipSeconds}s
+          </p>
         </div>
-        <div className="bg-white p-4 rounded-3xl shadow-sm dark:shadow-none border border-zinc-100 dark:bg-black dark:border-white/20 flex flex-col justify-center">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Pendientes</p>
-          <p className="text-xl font-bold text-zinc-900 dark:text-white">{plantStats.totalOpen}</p>
+        <div className="bg-white dark:bg-black p-3.5 sm:p-4 rounded-2xl shadow-xs border border-zinc-100 dark:border-white/10 flex flex-col items-center justify-center text-center">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1 text-center truncate w-full">Pendientes</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 text-center">{plantStats.totalOpen}</p>
         </div>
-        <div className="bg-white p-4 rounded-3xl shadow-sm dark:shadow-none border border-zinc-100 dark:bg-black dark:border-white/20 flex flex-col justify-center">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">En Revisión</p>
-          <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{plantStats.totalInReview}</p>
+        <div className="bg-white dark:bg-black p-3.5 sm:p-4 rounded-2xl shadow-xs border border-zinc-100 dark:border-white/10 flex flex-col items-center justify-center text-center">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1 text-center truncate w-full">En Revisión</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-orange-600 dark:text-orange-400 text-center">{plantStats.totalInReview}</p>
         </div>
-        <div className="bg-white p-4 rounded-3xl shadow-sm dark:shadow-none border border-zinc-100 dark:bg-black dark:border-white/20 hidden sm:flex flex-col justify-center">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Total Cerrados</p>
-          <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{plantStats.totalClosed}</p>
+        <div className="bg-white dark:bg-black p-3.5 sm:p-4 rounded-2xl shadow-xs border border-zinc-100 dark:border-white/10 flex flex-col items-center justify-center text-center">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1 text-center truncate w-full">Total Cerrados</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 text-center">{plantStats.totalClosed}</p>
         </div>
       </div>
 
@@ -6217,7 +6217,7 @@ const ReportsView = ({
                         source={selectedFinding.source} 
                         filterModule={isVOSOFinding(selectedFinding) ? 'VOSO' : 'OrdenYLimpieza'} 
                         className="text-zinc-800 dark:text-zinc-200" 
-                        onSolveItem={async (item, solutionText, solutionDate) => {
+                        onSolveItem={(user.role === 'Supervisor' || user.role === 'Administrador') ? async (item, solutionText, solutionDate) => {
                           if (!selectedFinding) return;
                           try {
                             const solDate = solutionDate || new Date();
@@ -6243,7 +6243,7 @@ const ReportsView = ({
                           } catch (err: any) {
                             showToast("Error", `No se pudo registrar la solución: ${err.message}`, "error");
                           }
-                        }}
+                        } : undefined}
                       />
                     </div>
 
@@ -10596,7 +10596,7 @@ const AppLayout = ({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    <OrdenYLimpiezaDashboard user={user} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
+                    <OrdenYLimpiezaDashboard user={{ ...user, role: effectiveRole }} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
                   </motion.div>
                 )}
                 {activeTab === 'History' && (
@@ -10606,7 +10606,7 @@ const AppLayout = ({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    <ReportsView user={user} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
+                    <ReportsView user={{ ...user, role: effectiveRole }} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
                   </motion.div>
                 )}
                 {activeTab === 'Admin' && (
