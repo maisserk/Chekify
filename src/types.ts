@@ -80,7 +80,7 @@ export interface HistoryEntry {
 
 export interface Finding {
   id: string;
-  inspectionId: string;
+  inspectionId?: string;
   areaId: string;
   operatorId: string;
   operatorPhotoUrl?: string;

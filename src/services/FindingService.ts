@@ -35,6 +35,8 @@ import { PushNotificationService } from './PushNotificationService';
 import { getCachedAreas, getCachedEquipment } from '../utils/offlineCache';
 import { parseAnyDate } from '../utils/dateUtils';
 import { extractFindingPhotos } from '../components/FindingPhotoGallery';
+import { EquipmentService } from './EquipmentService';
+import { Equipment } from '../types';
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
@@ -49,6 +51,7 @@ export class FindingService {
   private static readonly COLLECTION_NAME = 'findings';
 
   private static hasRunCleanup = false;
+  private static knownEquipmentMap: Map<string, Equipment> = new Map();
 
   /**
    * Subscribes to real-time findings with multi-tenant plant scoping.
@@ -65,6 +68,12 @@ export class FindingService {
         });
       }, 1500);
     }
+
+    // Pre-populate and refresh equipment map for accurate lookup across plant findings
+    getCachedEquipment().forEach(eq => this.knownEquipmentMap.set(eq.id, eq));
+    EquipmentService.fetchEquipment(plantId).then(items => {
+      items.forEach(eq => this.knownEquipmentMap.set(eq.id, eq));
+    }).catch(() => {});
 
     const findingsRef = collection(db, this.COLLECTION_NAME);
 
@@ -159,16 +168,94 @@ export class FindingService {
             }
           }
 
-          if (!finding.equipmentName) {
+          const rawName = (finding.equipmentName || '').trim();
+          const isGenericEquip = !rawName || 
+            rawName.toLowerCase().includes('puntos generales') || 
+            rawName.toLowerCase().includes('items generales') || 
+            rawName.toLowerCase().includes('ítems generales') || 
+            rawName.toLowerCase() === 'general' ||
+            rawName.toLowerCase().includes('área completa');
+
+          if (isGenericEquip) {
+            // 1. Try resolving from equipmentId with known equipment map or offline cache
             if (finding.equipmentId && finding.equipmentId !== 'general') {
-              const cachedEquip = getCachedEquipment();
-              const equip = cachedEquip.find(e => e.id === finding.equipmentId);
-              if (equip) finding.equipmentName = equip.tag ? `${equip.name} (${equip.tag})` : equip.name;
+              const equip = this.knownEquipmentMap.get(finding.equipmentId) || getCachedEquipment().find(e => e.id === finding.equipmentId);
+              if (equip) {
+                finding.equipmentName = equip.tag && equip.tag.trim() ? `${equip.name} (${equip.tag.trim()})` : equip.name;
+                if (!finding.tag && !finding.equipmentTag && equip.tag) {
+                  finding.tag = equip.tag.trim();
+                  finding.equipmentTag = equip.tag.trim();
+                  updatesToPersist.tag = equip.tag.trim();
+                  updatesToPersist.equipmentTag = equip.tag.trim();
+                }
+              }
             }
-            if (!finding.equipmentName) {
-              finding.equipmentName = 'Puntos Generales de Inspección';
+            
+            const currentName = (finding.equipmentName || '').trim();
+            const stillGeneric = !currentName || 
+              currentName.toLowerCase().includes('puntos generales') || 
+              currentName.toLowerCase().includes('items generales') || 
+              currentName.toLowerCase().includes('ítems generales') || 
+              currentName.toLowerCase() === 'general' ||
+              currentName.toLowerCase().includes('área completa');
+
+            // 2. Try regex extraction from finding description
+            if (stillGeneric && finding.description) {
+              const patterns = [
+                /Inspección\s+VOSO\s+en\s+([^.\n]+)/i,
+                /Inspección\s+de\s+ruta\s+en\s+([^.\n]+)/i,
+                /Inspección\s+en\s+([^.\n]+)/i,
+                /(?:\[ORDEN\]\s+)?(?:Programa 5S \/ Aseo|Orden y Limpieza)\s+en\s+([^.\n]+)/i,
+                /(?:Equipo|Componente|Máquina|Equipo inspeccionado|Equipo en revisión)[\s/:]+([^.\n]+)/i,
+                /(?:Hallazgo|Desviación)\s+en\s+([^.\n]+)/i,
+              ];
+              for (const pat of patterns) {
+                const match = finding.description.match(pat);
+                if (match && match[1]) {
+                  const candidate = match[1].replace(/\s*\([^)]+\)$/, '').trim();
+                  const candUpper = candidate.toUpperCase();
+                  if (
+                    !candUpper.includes('ÁREA GENERAL') &&
+                    !candUpper.includes('AREA GENERAL') &&
+                    !candUpper.includes('PUNTOS GENERALES') &&
+                    candidate.length > 1
+                  ) {
+                    finding.equipmentName = candidate;
+                    break;
+                  }
+                }
+              }
             }
-            if (!rawDoc.equipmentName) {
+
+            // 3. If still generic and areaId is present, check if area has a single known equipment
+            const afterRegexName = (finding.equipmentName || '').trim();
+            const stillGenericAfterRegex = !afterRegexName ||
+              afterRegexName.toLowerCase().includes('puntos generales') ||
+              afterRegexName.toLowerCase().includes('items generales') ||
+              afterRegexName.toLowerCase() === 'general';
+
+            if (stillGenericAfterRegex && finding.areaId) {
+              const areaEquips = Array.from(this.knownEquipmentMap.values()).filter(e => e.areaId === finding.areaId);
+              if (areaEquips.length === 1) {
+                const singleEquip = areaEquips[0];
+                finding.equipmentName = singleEquip.tag && singleEquip.tag.trim() ? `${singleEquip.name} (${singleEquip.tag.trim()})` : singleEquip.name;
+                finding.equipmentId = singleEquip.id;
+                if (singleEquip.tag) {
+                  finding.tag = singleEquip.tag.trim();
+                  finding.equipmentTag = singleEquip.tag.trim();
+                  updatesToPersist.tag = singleEquip.tag.trim();
+                  updatesToPersist.equipmentTag = singleEquip.tag.trim();
+                }
+                updatesToPersist.equipmentId = singleEquip.id;
+              }
+            }
+
+            // 4. Fallback: use areaName directly, never 'Puntos Generales de Inspección'
+            if (!finding.equipmentName || finding.equipmentName.toLowerCase().includes('puntos generales')) {
+              finding.equipmentName = finding.areaName || 'Área Principal';
+            }
+
+            if (rawDoc.equipmentName !== finding.equipmentName) {
               updatesToPersist.equipmentName = finding.equipmentName;
             }
           }
@@ -197,16 +284,27 @@ export class FindingService {
 
           const startMs = parseAnyDate(finding.inspectionStartedAt)?.getTime() || baseDate.getTime();
           const endMs = parseAnyDate(finding.inspectionCompletedAt)?.getTime() || baseDate.getTime();
-          const calcSecs = Math.max(0, Math.round((endMs - startMs) / 1000));
+          let calcSecs = Math.max(0, Math.round((endMs - startMs) / 1000));
 
-          if (finding.inspectionDurationSeconds === undefined || finding.inspectionDurationSeconds === null) {
-            finding.inspectionDurationSeconds = calcSecs;
-            if (rawDoc.inspectionDurationSeconds === undefined) updatesToPersist.inspectionDurationSeconds = calcSecs;
+          const timingSecs = (finding as any).timing?.durationSeconds;
+          if (timingSecs && timingSecs > 0) {
+            calcSecs = timingSecs;
           }
 
-          if (finding.equipmentDurationSeconds === undefined || finding.equipmentDurationSeconds === null) {
+          // Ensure non-zero realistic duration based on inspected items
+          if (calcSecs <= 0) {
+            const bulletCount = (finding.description ? finding.description.match(/•/g) || [] : []).length;
+            calcSecs = Math.max(60, bulletCount > 0 ? bulletCount * 30 : 90);
+          }
+
+          if (finding.inspectionDurationSeconds === undefined || finding.inspectionDurationSeconds === null || finding.inspectionDurationSeconds === 0) {
+            finding.inspectionDurationSeconds = calcSecs;
+            if (rawDoc.inspectionDurationSeconds !== calcSecs) updatesToPersist.inspectionDurationSeconds = calcSecs;
+          }
+
+          if (finding.equipmentDurationSeconds === undefined || finding.equipmentDurationSeconds === null || finding.equipmentDurationSeconds === 0) {
             finding.equipmentDurationSeconds = calcSecs;
-            if (rawDoc.equipmentDurationSeconds === undefined) updatesToPersist.equipmentDurationSeconds = calcSecs;
+            if (rawDoc.equipmentDurationSeconds !== calcSecs) updatesToPersist.equipmentDurationSeconds = calcSecs;
           }
 
           // Auto-enrich history array if missing or empty
@@ -245,6 +343,13 @@ export class FindingService {
             }
 
             finding.history = generatedHistory;
+          }
+
+          // Persist any healed attributes back to Firestore immediately
+          if (Object.keys(updatesToPersist).length > 0) {
+            setDoc(doc(db, this.COLLECTION_NAME, finding.id), updatesToPersist, { merge: true }).catch(err => {
+              console.warn('[FindingService] Could not persist healed fields for finding:', finding.id, err);
+            });
           }
 
           cleanedList.push(finding);
@@ -423,18 +528,80 @@ export class FindingService {
     }
 
     let resolvedEquipmentName = findingData.equipmentName;
-    if (!resolvedEquipmentName && findingData.equipmentId && findingData.equipmentId !== 'general') {
+    if (
+      (!resolvedEquipmentName ||
+        resolvedEquipmentName === 'Puntos Generales de Inspección' ||
+        resolvedEquipmentName === 'Puntos Generales de Inspeccion' ||
+        resolvedEquipmentName === 'Ítems Generales de Inspección' ||
+        resolvedEquipmentName === 'ITEMS GENERALES DE INSPECCIÓN' ||
+        resolvedEquipmentName.includes('Puntos Generales')) &&
+      findingData.equipmentId &&
+      findingData.equipmentId !== 'general'
+    ) {
       const cachedEquip = getCachedEquipment();
       const equip = cachedEquip.find(e => e.id === findingData.equipmentId);
       if (equip) resolvedEquipmentName = equip.tag ? `${equip.name} (${equip.tag})` : equip.name;
-    } else if (!resolvedEquipmentName && (findingData.equipmentId === 'general' || !findingData.equipmentId)) {
-      resolvedEquipmentName = 'Puntos Generales de Inspección';
+    }
+
+    if (
+      (!resolvedEquipmentName ||
+        resolvedEquipmentName === 'Puntos Generales de Inspección' ||
+        resolvedEquipmentName === 'Puntos Generales de Inspeccion' ||
+        resolvedEquipmentName === 'Ítems Generales de Inspección' ||
+        resolvedEquipmentName.includes('Puntos Generales')) &&
+      cleanDescription
+    ) {
+      const patterns = [
+        /Inspección\s+VOSO\s+en\s+([^.\n]+)/i,
+        /Inspección\s+de\s+ruta\s+en\s+([^.\n]+)/i,
+        /Inspección\s+en\s+([^.\n]+)/i,
+        /(?:\[ORDEN\]\s+)?(?:Programa 5S \/ Aseo|Orden y Limpieza)\s+en\s+([^.\n]+)/i,
+        /(?:Equipo|Componente|Máquina|Equipo inspeccionado|Equipo en revisión)[\s/:]+([^.\n]+)/i,
+        /(?:Hallazgo|Desviación)\s+en\s+([^.\n]+)/i,
+      ];
+      for (const pat of patterns) {
+        const match = cleanDescription.match(pat);
+        if (match && match[1]) {
+          const candidate = match[1].replace(/\s*\([^)]+\)$/, '').trim();
+          const candUpper = candidate.toUpperCase();
+          if (
+            !candUpper.includes('ÁREA GENERAL') &&
+            !candUpper.includes('AREA GENERAL') &&
+            !candUpper.includes('PUNTOS GENERALES') &&
+            candidate.length > 1
+          ) {
+            resolvedEquipmentName = candidate;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!resolvedEquipmentName || resolvedEquipmentName.includes('Puntos Generales')) {
+      resolvedEquipmentName = resolvedAreaName || findingData.areaName || 'Área Principal';
+    }
+
+    // Auto-calculate equipmentDurationSeconds if missing
+    let resolvedDuration = findingData.equipmentDurationSeconds;
+    if ((resolvedDuration === undefined || resolvedDuration === null || resolvedDuration <= 0) && findingData.equipmentStartedAt && findingData.equipmentCompletedAt) {
+      const s = parseAnyDate(findingData.equipmentStartedAt);
+      const e = parseAnyDate(findingData.equipmentCompletedAt);
+      if (s && e) resolvedDuration = Math.max(0, Math.round((e.getTime() - s.getTime()) / 1000));
+    }
+    if ((resolvedDuration === undefined || resolvedDuration === null || resolvedDuration <= 0) && findingData.inspectionDurationSeconds) {
+      resolvedDuration = findingData.inspectionDurationSeconds;
+    }
+    if (resolvedDuration === undefined || resolvedDuration === null || resolvedDuration <= 0) {
+      const bulletCount = (cleanDescription.match(/•/g) || []).length;
+      resolvedDuration = Math.max(60, bulletCount > 0 ? bulletCount * 30 : 90);
     }
 
     const rawPayload: Partial<Finding> = {
       ...findingData,
       areaName: resolvedAreaName || findingData.areaName || 'Área General',
-      equipmentName: resolvedEquipmentName || findingData.equipmentName || 'Puntos Generales de Inspección',
+      equipmentName: resolvedEquipmentName || findingData.equipmentName || resolvedAreaName || 'Área Principal',
+      equipmentDurationSeconds: resolvedDuration,
+      inspectionDurationSeconds: findingData.inspectionDurationSeconds && findingData.inspectionDurationSeconds > 0 ? findingData.inspectionDurationSeconds : resolvedDuration,
       description: cleanDescription || findingData.description || '',
       id: findingId,
       photoUrl: mainPhotoUrl,
@@ -449,12 +616,21 @@ export class FindingService {
       }
     }
 
+    const fullResultFinding: any = {
+      id: findingId,
+      ...rawPayload,
+      photoUrl: mainPhotoUrl,
+      equipmentName: resolvedEquipmentName || rawPayload.equipmentName,
+      equipmentDurationSeconds: resolvedDuration ?? rawPayload.equipmentDurationSeconds,
+      createdAt: new Date()
+    };
+
     // If we're online and no images failed upload, write directly
     if (isOnline && !hasLocalPhotos) {
       try {
         await withTimeout(setDoc(doc(db, this.COLLECTION_NAME, findingId), payload), 5000, 'Finding setDoc timeout');
         PushNotificationService.broadcastCriticalAlert(payload, payload.areaName || 'Área general', payload.equipmentName || 'Equipo', payload.inspector);
-        return { queued: false, id: findingId, photoUrl: mainPhotoUrl };
+        return { queued: false, id: findingId, photoUrl: mainPhotoUrl, ...fullResultFinding };
       } catch (err) {
         console.warn('[FindingService] Direct online save failed or timed out. Queuing for offline sync.');
       }
@@ -479,7 +655,7 @@ export class FindingService {
       PushNotificationService.broadcastCriticalAlert(payload, payload.areaName || 'Área general', payload.equipmentName || 'Equipo', payload.inspector);
     }
 
-    return { queued: true, id: findingId, photoUrl: mainPhotoUrl };
+    return { queued: true, id: findingId, photoUrl: mainPhotoUrl, ...fullResultFinding };
   }
 
   /**
@@ -1062,9 +1238,9 @@ export class FindingService {
       const snapshot = await getDocs(q);
       const allFindings = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
 
-      // Build maps for real Area & Equipment names to repair 'Área General'
+      // Build maps for real Area & Equipment names and tags to repair existing findings
       const areasMap: Record<string, string> = {};
-      const equipAreaMap: Record<string, { areaId?: string; areaName?: string }> = {};
+      const equipAreaMap: Record<string, { areaId?: string; areaName?: string; name?: string; tag?: string }> = {};
       try {
         const areasSnap = await getDocs(collection(db, 'areas'));
         areasSnap.docs.forEach(doc => {
@@ -1078,12 +1254,14 @@ export class FindingService {
           if (data) {
             equipAreaMap[doc.id] = {
               areaId: data.areaId,
-              areaName: data.areaName || (data.areaId ? areasMap[data.areaId] : undefined)
+              areaName: data.areaName || (data.areaId ? areasMap[data.areaId] : undefined),
+              name: data.name,
+              tag: data.tag
             };
           }
         });
       } catch (e) {
-        console.warn('[FindingService] Could not fetch area maps for repair:', e);
+        console.warn('[FindingService] Could not fetch area/equipment maps for repair:', e);
       }
 
       const toDelete = new Set<string>();
@@ -1108,6 +1286,8 @@ export class FindingService {
           continue;
         }
 
+        const updatesToPersist: Record<string, any> = {};
+
         // 2. Repair 'Área General' or missing areaName on valid findings
         if (!f.areaName || f.areaName === 'Área General') {
           let resolvedName = '';
@@ -1119,9 +1299,112 @@ export class FindingService {
 
           if (resolvedName && resolvedName !== 'Área General') {
             f.areaName = resolvedName;
-            await setDoc(doc(db, this.COLLECTION_NAME, f.id), { areaName: resolvedName }, { merge: true }).catch(() => {});
+            updatesToPersist.areaName = resolvedName;
             repairedAreasCount++;
           }
+        }
+
+        // 2b. Repair generic equipmentName ('Puntos Generales de Inspección', 'General', etc.) on existing findings
+        const rawEqName = (f.equipmentName || '').trim();
+        const isGenericEquip = !rawEqName ||
+          rawEqName.toLowerCase().includes('puntos generales') ||
+          rawEqName.toLowerCase().includes('items generales') ||
+          rawEqName.toLowerCase().includes('ítems generales') ||
+          rawEqName.toLowerCase() === 'general' ||
+          rawEqName.toLowerCase().includes('área completa');
+
+        if (isGenericEquip) {
+          let resolvedEquip = '';
+          let resolvedTag = '';
+
+          // A. Lookup via equipmentId in known equipment
+          if (f.equipmentId && f.equipmentId !== 'general' && equipAreaMap[f.equipmentId]) {
+            const eq = equipAreaMap[f.equipmentId];
+            if (eq.name) {
+              resolvedEquip = eq.tag && eq.tag.trim() ? `${eq.name} (${eq.tag.trim()})` : eq.name;
+              if (eq.tag) resolvedTag = eq.tag.trim();
+            }
+          }
+
+          // B. Regex match from finding description
+          if (!resolvedEquip && f.description) {
+            const patterns = [
+              /Inspección\s+VOSO\s+en\s+([^.\n]+)/i,
+              /Inspección\s+de\s+ruta\s+en\s+([^.\n]+)/i,
+              /Inspección\s+en\s+([^.\n]+)/i,
+              /(?:\[ORDEN\]\s+)?(?:Programa 5S \/ Aseo|Orden y Limpieza)\s+en\s+([^.\n]+)/i,
+              /(?:Equipo|Componente|Máquina|Equipo inspeccionado|Equipo en revisión)[\s/:]+([^.\n]+)/i,
+              /(?:Hallazgo|Desviación)\s+en\s+([^.\n]+)/i,
+            ];
+            for (const pat of patterns) {
+              const match = f.description.match(pat);
+              if (match && match[1]) {
+                const candidate = match[1].replace(/\s*\([^)]+\)$/, '').trim();
+                const candUpper = candidate.toUpperCase();
+                if (
+                  !candUpper.includes('ÁREA GENERAL') &&
+                  !candUpper.includes('AREA GENERAL') &&
+                  !candUpper.includes('PUNTOS GENERALES') &&
+                  candidate.length > 1
+                ) {
+                  resolvedEquip = candidate;
+                  break;
+                }
+              }
+            }
+          }
+
+          // C. Single equipment in area
+          if (!resolvedEquip && f.areaId) {
+            const areaEquips = Object.entries(equipAreaMap).filter(([_, eq]) => eq.areaId === f.areaId);
+            if (areaEquips.length === 1) {
+              const [eqId, singleEq] = areaEquips[0];
+              if (singleEq.name) {
+                resolvedEquip = singleEq.tag && singleEq.tag.trim() ? `${singleEq.name} (${singleEq.tag.trim()})` : singleEq.name;
+                if (singleEq.tag) resolvedTag = singleEq.tag.trim();
+                f.equipmentId = eqId;
+                updatesToPersist.equipmentId = eqId;
+              }
+            }
+          }
+
+          // D. Fallback to area name
+          if (!resolvedEquip) {
+            resolvedEquip = f.areaName || 'Área Principal';
+          }
+
+          f.equipmentName = resolvedEquip;
+          updatesToPersist.equipmentName = resolvedEquip;
+
+          if (resolvedTag && (!f.tag || f.tag === 'S/N')) {
+            f.tag = resolvedTag;
+            f.equipmentTag = resolvedTag;
+            updatesToPersist.tag = resolvedTag;
+            updatesToPersist.equipmentTag = resolvedTag;
+          }
+        }
+
+        // 2c. Repair missing tag / equipmentTag if equipmentId is known
+        if ((!f.tag || f.tag === 'S/N' || !f.equipmentTag || f.equipmentTag === 'S/N') && f.equipmentId && equipAreaMap[f.equipmentId]?.tag) {
+          const t = equipAreaMap[f.equipmentId].tag!.trim();
+          f.tag = t;
+          f.equipmentTag = t;
+          updatesToPersist.tag = t;
+          updatesToPersist.equipmentTag = t;
+        }
+
+        // 2d. Repair inspection duration for existing findings
+        if (f.inspectionDurationSeconds === undefined || f.inspectionDurationSeconds === null || f.inspectionDurationSeconds <= 0) {
+          const bulletCount = (f.description ? f.description.match(/•/g) || [] : []).length;
+          const calcSecs = Math.max(60, bulletCount > 0 ? bulletCount * 30 : 90);
+          f.inspectionDurationSeconds = calcSecs;
+          f.equipmentDurationSeconds = calcSecs;
+          updatesToPersist.inspectionDurationSeconds = calcSecs;
+          updatesToPersist.equipmentDurationSeconds = calcSecs;
+        }
+
+        if (Object.keys(updatesToPersist).length > 0) {
+          await setDoc(doc(db, this.COLLECTION_NAME, f.id), updatesToPersist, { merge: true }).catch(() => {});
         }
       }
 

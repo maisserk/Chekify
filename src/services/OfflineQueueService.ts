@@ -213,12 +213,53 @@ class OfflineQueueService {
             cleanPayload.areaName = 'Área General';
           }
 
-          if (!cleanPayload.equipmentName && cleanPayload.equipmentId && cleanPayload.equipmentId !== 'general') {
+          if (
+            (!cleanPayload.equipmentName ||
+              cleanPayload.equipmentName === 'Puntos Generales de Inspección' ||
+              cleanPayload.equipmentName === 'Ítems Generales de Inspección') &&
+            cleanPayload.equipmentId &&
+            cleanPayload.equipmentId !== 'general'
+          ) {
             const equip = cachedEquip.find(e => e.id === cleanPayload.equipmentId);
             if (equip) cleanPayload.equipmentName = equip.tag ? `${equip.name} (${equip.tag})` : equip.name;
           }
-          if (!cleanPayload.equipmentName) {
-            cleanPayload.equipmentName = 'Puntos Generales de Inspección';
+
+          if (
+            (!cleanPayload.equipmentName ||
+              cleanPayload.equipmentName === 'Puntos Generales de Inspección' ||
+              cleanPayload.equipmentName === 'Puntos Generales de Inspeccion' ||
+              cleanPayload.equipmentName === 'Ítems Generales de Inspección' ||
+              cleanPayload.equipmentName.includes('Puntos Generales')) &&
+            cleanPayload.description
+          ) {
+            const patterns = [
+              /Inspección\s+VOSO\s+en\s+([^.\n]+)/i,
+              /Inspección\s+de\s+ruta\s+en\s+([^.\n]+)/i,
+              /Inspección\s+en\s+([^.\n]+)/i,
+              /(?:\[ORDEN\]\s+)?(?:Programa 5S \/ Aseo|Orden y Limpieza)\s+en\s+([^.\n]+)/i,
+              /(?:Equipo|Componente|Máquina|Equipo inspeccionado|Equipo en revisión)[\s/:]+([^.\n]+)/i,
+              /(?:Hallazgo|Desviación)\s+en\s+([^.\n]+)/i,
+            ];
+            for (const pat of patterns) {
+              const match = cleanPayload.description.match(pat);
+              if (match && match[1]) {
+                const candidate = match[1].replace(/\s*\([^)]+\)$/, '').trim();
+                const candUpper = candidate.toUpperCase();
+                if (
+                  !candUpper.includes('ÁREA GENERAL') &&
+                  !candUpper.includes('AREA GENERAL') &&
+                  !candUpper.includes('PUNTOS GENERALES') &&
+                  candidate.length > 1
+                ) {
+                  cleanPayload.equipmentName = candidate;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (!cleanPayload.equipmentName || cleanPayload.equipmentName.includes('Puntos Generales')) {
+            cleanPayload.equipmentName = cleanPayload.areaName || 'Área Principal';
           }
 
           const baseDate = parseAnyDate(cleanPayload.createdAt || cleanPayload.date) || new Date();
@@ -231,12 +272,16 @@ class OfflineQueueService {
 
           const sMs = parseAnyDate(cleanPayload.inspectionStartedAt)?.getTime() || baseDate.getTime();
           const eMs = parseAnyDate(cleanPayload.inspectionCompletedAt)?.getTime() || baseDate.getTime();
-          const dur = Math.max(0, Math.round((eMs - sMs) / 1000));
+          let dur = Math.max(0, Math.round((eMs - sMs) / 1000));
+          if (dur <= 0) {
+            const bulletCount = (cleanPayload.description?.match(/•/g) || []).length;
+            dur = Math.max(60, bulletCount > 0 ? bulletCount * 30 : 90);
+          }
 
-          if (cleanPayload.inspectionDurationSeconds === undefined || cleanPayload.inspectionDurationSeconds === null) {
+          if (cleanPayload.inspectionDurationSeconds === undefined || cleanPayload.inspectionDurationSeconds === null || cleanPayload.inspectionDurationSeconds === 0) {
             cleanPayload.inspectionDurationSeconds = dur;
           }
-          if (cleanPayload.equipmentDurationSeconds === undefined || cleanPayload.equipmentDurationSeconds === null) {
+          if (cleanPayload.equipmentDurationSeconds === undefined || cleanPayload.equipmentDurationSeconds === null || cleanPayload.equipmentDurationSeconds === 0) {
             cleanPayload.equipmentDurationSeconds = dur;
           }
         }

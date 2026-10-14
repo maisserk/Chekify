@@ -35,6 +35,7 @@ import {
 } from 'firebase/firestore';
 import { 
   QrCode, 
+  ScanLine,
   Camera, 
   CheckCircle2, 
   XCircle,
@@ -113,7 +114,9 @@ import {
   Droplets,
   CloudRain,
   CloudOff,
-  UserCheck
+  UserCheck,
+  HardHat,
+  Briefcase
 } from 'lucide-react';
 
 import { EquipmentService } from './services/EquipmentService';
@@ -122,6 +125,7 @@ import { offlineQueueService } from './services/OfflineQueueService';
 import { weatherService, WeatherData } from './services/weatherService';
 import { Plant } from './types';
 import { WeatherModule } from './components/WeatherModule';
+import { WeatherSafetyModal } from './components/WeatherSafetyModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { QuickHelpModal } from './components/QuickHelpModal';
 import { OfflineImage } from './components/OfflineImage';
@@ -860,13 +864,15 @@ const OperatorDashboard = ({
   setActiveTab,
   weather = null,
   loadingWeather = false,
-  weatherError = false
+  weatherError = false,
+  plant = null
 }: { 
   user: AppUser; 
   setActiveTab?: (tab: 'Home' | 'History' | 'Admin' | 'Notifications' | 'PDFConfig') => void;
   weather?: WeatherData | null;
   loadingWeather?: boolean;
   weatherError?: boolean;
+  plant?: Plant | null;
 }) => {
   const [scanning, setScanning] = useState(false);
   const [showQuickHelp, setShowQuickHelp] = useState(false);
@@ -984,7 +990,12 @@ const OperatorDashboard = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentEquipmentIndex, selectedArea?.id, showEquipmentSummary]);
 
-  const startAreaInspection = (area: Area, initialEquipIndex = 0) => {
+  // Weather & Safety Pre-Inspection Warning Pop-up State
+  const [pendingAreaForInspection, setPendingAreaForInspection] = useState<Area | null>(null);
+  const [pendingEquipIndexForInspection, setPendingEquipIndexForInspection] = useState<number>(0);
+  const [showWeatherSafetyModal, setShowWeatherSafetyModal] = useState<boolean>(false);
+
+  const executeStartAreaInspection = (area: Area, initialEquipIndex = 0) => {
     setSelectedArea(area);
     setCurrentEquipmentIndex(initialEquipIndex);
     setInspectionStartTime(new Date());
@@ -994,6 +1005,12 @@ const OperatorDashboard = ({
     setIsInspectionPaused(false);
     setIsPauseModalOpen(false);
     setPauseReason('');
+  };
+
+  const startAreaInspection = (area: Area, initialEquipIndex = 0) => {
+    setPendingAreaForInspection(area);
+    setPendingEquipIndexForInspection(initialEquipIndex);
+    setShowWeatherSafetyModal(true);
   };
 
   const resetInspectionState = () => {
@@ -1173,14 +1190,11 @@ const OperatorDashboard = ({
       console.error("Error listening to areas:", error);
     });
 
-    // Listen for equipment
-    const unsubEquip = onSnapshot(collection(db, 'equipment'), (snapshot) => {
-      const equipData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment));
+    // Listen for equipment via enterprise EquipmentService honoring plant permissions
+    const unsubEquip = EquipmentService.subscribeToEquipment((equipData) => {
       setEquipment(equipData);
       cacheEquipment(equipData);
-    }, (error) => {
-      console.error("Error listening to equipment:", error);
-    });
+    }, user.role === 'Administrador' ? undefined : (user.plantId || undefined));
 
     // Listen for inspections
     const unsubInspections = onSnapshot(collection(db, 'inspections'), (snapshot) => {
@@ -1390,13 +1404,18 @@ const OperatorDashboard = ({
 
     const now = new Date();
     const currentOpStatus = (currentEquipment && equipmentOperatingStatus[currentEquipment.id]) || 'En Funcionamiento';
+    const computedSecs = equipmentTimerSeconds > 0
+      ? equipmentTimerSeconds
+      : (equipmentStartTime ? Math.max(1, Math.round((now.getTime() - equipmentStartTime.getTime()) / 1000)) : 0);
+
     const currentData = {
       trad: { ...checkItemStates },
       voso: { ...vosoResponses },
       operatingStatus: currentOpStatus,
       timing: {
-        startedAt: equipmentStartTime,
-        completedAt: now
+        startedAt: equipmentStartTime || now,
+        completedAt: now,
+        durationSeconds: computedSecs
       }
     };
     
@@ -1501,12 +1520,22 @@ const OperatorDashboard = ({
 
         // Register findings in the 'findings' collection for each equipment that has issues or is compliant
         for (const [equipId, resAny] of Object.entries(updatedResults)) {
-          const res = resAny as { trad: any, voso: any, operatingStatus?: string, timing?: { startedAt: any, completedAt: any } };
-          const equip = equipment.find(e => e.id === equipId);
+          const res = resAny as { trad: any, voso: any, operatingStatus?: string, timing?: { startedAt: any, completedAt: any, durationSeconds?: number } };
+          const equip = areaEquipment.find(e => e.id === equipId)
+            || equipment.find(e => e.id === equipId)
+            || getCachedEquipment().find(e => e.id === equipId)
+            || (currentEquipment?.id === equipId ? currentEquipment : null)
+            || (areaEquipment.length === 1 ? areaEquipment[0] : null);
           
           const equipStarted = res?.timing?.startedAt instanceof Date ? res.timing.startedAt : (res?.timing?.startedAt?.toDate ? res.timing.startedAt.toDate() : null);
           const equipCompleted = res?.timing?.completedAt instanceof Date ? res.timing.completedAt : (res?.timing?.completedAt?.toDate ? res.timing.completedAt.toDate() : null);
-          const equipDuration = (equipStarted && equipCompleted) ? Math.round((equipCompleted.getTime() - equipStarted.getTime()) / 1000) : 0;
+          const timingSecs = res?.timing?.durationSeconds;
+          let equipDuration = (timingSecs && timingSecs > 0)
+            ? timingSecs
+            : ((equipStarted && equipCompleted) ? Math.round((equipCompleted.getTime() - equipStarted.getTime()) / 1000) : (equipmentTimerSeconds > 0 ? equipmentTimerSeconds : totalDurationSeconds));
+          if (equipDuration <= 0) {
+            equipDuration = totalDurationSeconds > 0 ? totalDurationSeconds : 90;
+          }
 
           const resTrad = res?.trad || {};
           const resVoso = res?.voso || {};
@@ -1519,12 +1548,16 @@ const OperatorDashboard = ({
           const pureOrdenIssues = vosoIssues.filter(([id]) => ordenList.some(o => o.id === id));
 
           const currentPlantId = user.plantId || selectedArea?.plantId || 'default-plant';
+          const opStatusLabel = res?.operatingStatus === 'Detenido' ? 'Detenido' : 'En Funcionamiento';
+          const resolvedEquipName = equip 
+            ? (equip.tag && equip.tag.trim() ? `${equip.name} (${equip.tag.trim()})` : equip.name) 
+            : (currentEquipment?.name || (selectedArea ? selectedArea.name : 'Equipo'));
+          const resolvedTag = equip?.tag?.trim() || undefined;
 
           // 1. Create VOSO Finding if pure VOSO or traditional issues exist
           if (pureVosoIssues.length > 0 || tradIssues.length > 0) {
             try {
-              const opStatusLabel = res?.operatingStatus === 'Detenido' ? 'Detenido' : 'En Funcionamiento';
-              let description = `Inspección VOSO en ${equip?.name || equipId}. Condición operativa: ${opStatusLabel}.\n\n`;
+              let description = `Inspección VOSO en ${equip?.name || resolvedEquipName}. Condición operativa: ${opStatusLabel}.\n\n`;
               
               if (pureVosoIssues.length > 0) {
                 description += "HALLAZGOS VOSO:\n";
@@ -1573,16 +1606,19 @@ const OperatorDashboard = ({
               });
               const firstPhoto = allPhotos[0] || null;
 
-              const resultObj = await FindingService.createFinding({
+              const vosoPayloadData = {
+                inspectionId: inspectionId,
                 areaId: selectedArea!.id,
                 areaName: selectedArea!.name,
                 plantId: currentPlantId,
                 equipmentId: equipId,
-                equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
+                equipmentName: resolvedEquipName,
+                equipmentTag: resolvedTag,
+                tag: resolvedTag,
                 description: description,
                 photoUrl: firstPhoto || undefined,
                 photoUrls: allPhotos,
-                status: pureVosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open',
+                status: (pureVosoIssues.every(v => v[1]?.solvedByOperator) && tradIssues.length === 0 ? 'Closed' : 'Open') as any,
                 priority,
                 date: new Date(),
                 inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
@@ -1591,6 +1627,7 @@ const OperatorDashboard = ({
                 equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
                 equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
                 equipmentDurationSeconds: equipDuration,
+                equipmentOperatingStatus: opStatusLabel,
                 operatorId: user.uid,
                 operatorName: user.name || user.email,
                 operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
@@ -1606,9 +1643,18 @@ const OperatorDashboard = ({
                     comment: 'Hallazgo detectado durante la inspección de ruta.'
                   } as any
                 ]
-              }, firstPhoto);
+              };
 
-              setLastSavedFindingForPdf(resultObj as unknown as Finding);
+              const resultObj = await FindingService.createFinding(vosoPayloadData, firstPhoto);
+
+              // Set the complete finding object for PDF download / sharing
+              const fullVosoFindingForPdf: Finding = {
+                id: resultObj.id,
+                ...vosoPayloadData,
+                photoUrl: resultObj.photoUrl || firstPhoto || undefined,
+                createdAt: new Date()
+              } as Finding;
+              setLastSavedFindingForPdf(fullVosoFindingForPdf);
 
               const notificationId = doc(collection(db, 'notifications')).id;
               const notificationPayload = {
@@ -1640,7 +1686,7 @@ const OperatorDashboard = ({
           // 2. Create Orden y Limpieza Finding if Orden issues exist
           if (pureOrdenIssues.length > 0) {
             try {
-              let ordenDesc = `[ORDEN] Programa 5S / Aseo en ${equip?.name || equipId}.\n\n`;
+              let ordenDesc = `[ORDEN] Programa 5S / Aseo en ${equip?.name || resolvedEquipName}.\n\n`;
               pureOrdenIssues.forEach(([id, v]) => {
                 const item = ordenList.find(i => i.id === id);
                 const itemName = item?.name || id;
@@ -1664,16 +1710,19 @@ const OperatorDashboard = ({
               });
               const firstOrdenPhoto = ordenPhotos[0] || null;
 
-              const ordenResultObj = await FindingService.createFinding({
+              const ordenPayloadData = {
+                inspectionId: inspectionId,
                 areaId: selectedArea!.id,
                 areaName: selectedArea!.name,
                 plantId: currentPlantId,
                 equipmentId: equipId,
-                equipmentName: equip ? (equip.tag ? `${equip.name} (${equip.tag})` : equip.name) : null,
+                equipmentName: resolvedEquipName,
+                equipmentTag: resolvedTag,
+                tag: resolvedTag,
                 description: ordenDesc,
                 photoUrl: firstOrdenPhoto || undefined,
                 photoUrls: ordenPhotos,
-                status: pureOrdenIssues.every(v => v[1]?.solvedByOperator) ? 'Closed' : 'Open',
+                status: (pureOrdenIssues.every(v => v[1]?.solvedByOperator) ? 'Closed' : 'Open') as any,
                 priority: 'Media',
                 date: new Date(),
                 inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
@@ -1682,6 +1731,7 @@ const OperatorDashboard = ({
                 equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
                 equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
                 equipmentDurationSeconds: equipDuration,
+                equipmentOperatingStatus: opStatusLabel,
                 operatorId: user.uid,
                 operatorName: user.name || user.email,
                 operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
@@ -1697,14 +1747,55 @@ const OperatorDashboard = ({
                     comment: 'Desviación de 5S detectada durante la inspección.'
                   } as any
                 ]
-              }, firstOrdenPhoto);
+              };
+
+              const ordenResultObj = await FindingService.createFinding(ordenPayloadData, firstOrdenPhoto);
 
               if (pureVosoIssues.length === 0 && tradIssues.length === 0) {
-                setLastSavedFindingForPdf(ordenResultObj as unknown as Finding);
+                const fullOrdenFindingForPdf: Finding = {
+                  id: ordenResultObj.id,
+                  ...ordenPayloadData,
+                  photoUrl: ordenResultObj.photoUrl || firstOrdenPhoto || undefined,
+                  createdAt: new Date()
+                } as Finding;
+                setLastSavedFindingForPdf(fullOrdenFindingForPdf);
               }
             } catch (ordenErr) {
               console.warn('[Inspections] Failed creating Orden finding for equip:', equipId, ordenErr);
             }
+          }
+
+          // 3. If entirely compliant (no deviations detected), prepare a complete compliant inspection finding for PDF report
+          if (pureVosoIssues.length === 0 && tradIssues.length === 0 && pureOrdenIssues.length === 0) {
+            const compliantFindingForPdf: Finding = {
+              id: inspectionId,
+              areaId: selectedArea!.id,
+              areaName: selectedArea!.name,
+              plantId: currentPlantId,
+              equipmentId: equipId,
+              equipmentName: resolvedEquipName,
+              equipmentTag: resolvedTag,
+              tag: resolvedTag,
+              description: `Inspección VOSO en ${equip?.name || resolvedEquipName}. Condición operativa: ${opStatusLabel}.\n\n• Todos los ítems evaluados conformes (Sin observaciones detectadas).`,
+              status: 'Closed',
+              priority: 'Baja',
+              date: new Date(),
+              inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
+              inspectionCompletedAt: Timestamp.fromDate(inspectionCompletedTime),
+              inspectionDurationSeconds: totalDurationSeconds,
+              equipmentStartedAt: equipStarted ? Timestamp.fromDate(equipStarted) : null,
+              equipmentCompletedAt: equipCompleted ? Timestamp.fromDate(equipCompleted) : null,
+              equipmentDurationSeconds: equipDuration,
+              equipmentOperatingStatus: opStatusLabel,
+              operatorId: user.uid,
+              operatorName: user.name || user.email,
+              operatorPhotoUrl: user.avatarUrl || (user as any).photoURL || undefined,
+              source: 'VOSO',
+              clima: climaPayload,
+              createdAt: new Date()
+            } as Finding;
+
+            setLastSavedFindingForPdf(compliantFindingForPdf);
           }
         }
 
@@ -1798,6 +1889,10 @@ const OperatorDashboard = ({
       areaName: selectedArea.name,
       equipmentId: currentEquipment?.id || null,
       equipmentName: currentEquipment ? (currentEquipment.tag ? `${currentEquipment.name} (${currentEquipment.tag})` : currentEquipment.name) : null,
+      equipmentTag: currentEquipment?.tag?.trim() || undefined,
+      tag: currentEquipment?.tag?.trim() || undefined,
+      equipmentDurationSeconds: equipmentTimerSeconds > 0 ? equipmentTimerSeconds : (inspectionTimerSeconds > 0 ? inspectionTimerSeconds : 60),
+      equipmentOperatingStatus: (currentEquipment && equipmentOperatingStatus[currentEquipment.id]) || 'En Funcionamiento',
       plantId: selectedArea.plantId || user.plantId || 'default-plant',
       operatorId: user.uid,
       operatorName: user.name || user.email || 'Operador',
@@ -1807,17 +1902,18 @@ const OperatorDashboard = ({
       photoUrls: findingPhotos,
       source: isOrden ? 'OrdenYLimpieza' : 'VOSO',
       category: isOrden ? 'OrdenYLimpieza' : 'VOSO',
-      status: isClosingImmediately ? 'Closed' : 'Open' as any,
+      status: (isClosingImmediately ? 'Closed' : 'Open') as any,
       solution: isClosingImmediately ? immediateSolution : '',
       closedBy: isClosingImmediately ? user.uid : null,
       closedAt: isClosingImmediately ? new Date() : null,
       inspectionStartedAt: inspectionStartTime ? Timestamp.fromDate(inspectionStartTime) : Timestamp.now(),
       inspectionCompletedAt: Timestamp.now(),
+      inspectionDurationSeconds: inspectionTimerSeconds > 0 ? inspectionTimerSeconds : 60,
       date: new Date(),
       clima: climaPayload,
       history: [
         {
-          status: isClosingImmediately ? 'Closed' : 'Open' as any,
+          status: (isClosingImmediately ? 'Closed' : 'Open') as any,
           userId: user.uid,
           userName: user.name || user.email || 'Operador',
           timestamp: new Date().toISOString(),
@@ -1829,7 +1925,13 @@ const OperatorDashboard = ({
 
     try {
       const resultObj = await FindingService.createFinding(findingData, primaryPhoto);
-      setLastSavedFindingForPdf(resultObj as unknown as Finding);
+      const fullFindingForPdf: Finding = {
+        id: resultObj.id,
+        ...findingData,
+        photoUrl: resultObj.photoUrl || primaryPhoto || undefined,
+        createdAt: new Date()
+      } as Finding;
+      setLastSavedFindingForPdf(fullFindingForPdf);
       const findingRef = { id: resultObj.id };
       
       // Auto-generate notification for supervisors and admins supporting offline queueing
@@ -1913,49 +2015,78 @@ const OperatorDashboard = ({
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Header Banner Card for Inspección Primaria */}
-      <div className="bg-gradient-to-r from-sky-950 via-blue-900 to-zinc-950 p-5 sm:p-7 md:p-8 rounded-3xl md:rounded-[2.5rem] border border-sky-500/20 text-white shadow-xl relative overflow-hidden">
+      {/* Header Banner Card for Inspección Primaria - Clean, minimal iOS design */}
+      <div className="bg-gradient-to-r from-sky-950 via-blue-900 to-zinc-950 p-5 sm:p-6 md:p-7 rounded-3xl md:rounded-[2.25rem] border border-sky-500/20 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-sky-500/10 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6 min-w-0">
-          <div className="space-y-2.5 min-w-0 flex-1">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
+          <div className="space-y-2 min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 bg-sky-500/25 border border-sky-400/30 text-sky-200 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0">
+              <span className="px-2.5 py-0.5 bg-sky-500/25 border border-sky-400/30 text-sky-200 rounded-full text-[10px] sm:text-xs font-semibold tracking-wide flex items-center gap-1.5 shrink-0">
                 <ShieldCheck className="w-3.5 h-3.5 text-sky-300" />
                 Módulo Inspección Primaria
               </span>
-              <span className="px-2.5 py-1 bg-white/10 border border-white/10 text-white/90 rounded-full text-[10px] font-bold uppercase tracking-wider">
+              <span className="px-2.5 py-0.5 bg-white/10 border border-white/10 text-white/90 rounded-full text-[10px] font-medium tracking-wide">
                 {user.plantId || 'Planta General'}
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black uppercase tracking-tight text-white leading-tight break-words">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white leading-tight break-words">
               Inspección Primaria de Planta
             </h2>
-            <p className="text-xs sm:text-sm md:text-base text-sky-100/90 font-medium max-w-2xl leading-relaxed">
-              Transformando inspecciones en decisiones.
+            <p className="text-xs sm:text-sm text-sky-100/85 font-normal max-w-xl leading-relaxed">
+              Transformando inspecciones en decisiones operacionales.
             </p>
           </div>
+        </div>
+      </div>
 
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-sky-500/20">
-            <button
-              onClick={() => setShowQuickHelp(true)}
-              className="px-3.5 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl border border-white/20 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer whitespace-nowrap shadow-sm flex-1 sm:flex-initial"
-            >
-              <HelpCircle className="w-4 h-4 text-sky-300 shrink-0" />
-              <span>Ayuda rápida</span>
-            </button>
-            {!selectedArea && !scanning && (
-              <button
-                onClick={startScanner}
-                className="px-4 py-3 bg-sky-600 hover:bg-sky-500 text-white font-black text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-sky-900/50 active:scale-95 cursor-pointer whitespace-nowrap flex-1 sm:flex-initial"
-              >
-                <QrCode className="w-4 h-4 shrink-0" />
-                <span>Escanear QR</span>
-              </button>
-            )}
-            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center sm:text-right min-w-[120px] flex-1 sm:flex-initial">
-              <p className="text-[9px] font-black uppercase text-sky-300 tracking-wider">Operador Activo</p>
-              <p className="text-xs font-black text-white truncate max-w-[150px] mx-auto sm:ml-auto">{user.name}</p>
-            </div>
+      {/* Standalone Actions & Status Bar - Centered, uniform height (h-11), px-5 and consistent gap-2 layout */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 p-2 sm:p-2.5 bg-white dark:bg-[#1C1C1E] border border-zinc-200/80 dark:border-white/10 rounded-2xl shadow-xs w-full items-stretch">
+        {/* Prominent Dedicated Scan QR Button */}
+        {!selectedArea && !scanning ? (
+          <button
+            onClick={startScanner}
+            className="w-full h-11 flex items-center justify-center gap-2 px-5 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-xl shadow-xs hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
+            title="Escanear Código QR de Área o Equipo"
+          >
+            <ScanLine className="w-[18px] h-[18px] shrink-0" />
+            <span className="truncate">Escanear QR</span>
+          </button>
+        ) : (
+          <div className="w-full h-11 flex items-center justify-center gap-2 px-5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-center truncate">
+            <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-500" />
+            <span className="truncate">{selectedArea ? selectedArea.name : 'Escaneando...'}</span>
+          </div>
+        )}
+
+        {/* Clima & EPP Button - uniform px-5 */}
+        <button
+          onClick={() => {
+            setPendingAreaForInspection(selectedArea || areas[0] || null);
+            setShowWeatherSafetyModal(true);
+          }}
+          className="w-full h-11 flex items-center justify-center gap-2 px-5 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-xl hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
+          title="Ver Advertencias Climáticas y EPP Reglamentario"
+        >
+          <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span className="truncate">Clima & EPP</span>
+        </button>
+
+        {/* Ayuda Rápida Button - uniform px-5 */}
+        <button
+          onClick={() => setShowQuickHelp(true)}
+          className="w-full h-11 flex items-center justify-center gap-2 px-5 bg-zinc-100 hover:bg-zinc-200/70 dark:bg-white/5 dark:hover:bg-white/10 border border-zinc-200/70 dark:border-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-semibold rounded-xl hover:scale-[1.02] active:scale-95 transition-all cursor-pointer text-center"
+          title="Guía y ayuda rápida"
+        >
+          <HelpCircle className="w-4 h-4 shrink-0 text-[#0071E3] dark:text-[#0A84FF]" />
+          <span className="truncate">Ayuda Rápida</span>
+        </button>
+
+        {/* Operador Activo Chip - uniform px-5 */}
+        <div className="w-full h-11 flex items-center justify-center gap-2 px-5 bg-zinc-100/80 dark:bg-white/5 border border-zinc-200/60 dark:border-white/10 rounded-xl text-center">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <div className="min-w-0 text-left">
+            <p className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 leading-none">Operador</p>
+            <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate max-w-[110px] leading-tight">{user.name}</p>
           </div>
         </div>
       </div>
@@ -2059,7 +2190,7 @@ const OperatorDashboard = ({
                             <MapPin className="w-5 h-5" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h3 className="font-extrabold text-zinc-900 dark:text-white text-sm sm:text-base tracking-tight truncate group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
+                            <h3 className="font-bold text-zinc-900 dark:text-white text-xs sm:text-sm tracking-tight truncate group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
                               {area.name}
                             </h3>
                             <div className="flex items-center gap-2 mt-0.5">
@@ -2275,63 +2406,64 @@ const OperatorDashboard = ({
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
           >
-            {/* Backdrop */}
+            {/* Backdrop (Dark blur) */}
             <motion.div 
               key="qr-scanner-overlay"
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
               onClick={stopScanner}
-              className="absolute inset-0 bg-zinc-950/80 backdrop-blur-md"
+              className="absolute inset-0 bg-black/85 ios-glass"
             />
 
-            {/* Modal Box */}
+            {/* iOS Native Camera Style Box */}
             <motion.div 
               key="qr-scanner-content"
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ scale: 0.95, opacity: 0, y: 16 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-md bg-zinc-900 border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden z-10 flex flex-col"
+              exit={{ scale: 0.95, opacity: 0, y: 16 }}
+              transition={{ type: "spring", stiffness: 350, damping: 28 }}
+              className="relative w-full max-w-sm sm:max-w-md bg-[#1C1C1E] border border-white/10 rounded-[28px] shadow-2xl overflow-hidden z-10 flex flex-col"
             >
-              {/* Modal Header */}
-              <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-zinc-950/60">
+              {/* Top Controls Bar */}
+              <div className="p-4 sm:p-5 flex items-center justify-between bg-black/40 border-b border-white/5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400">
-                    <QrCode className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-2xl bg-[#0071E3]/15 text-[#0A84FF] flex items-center justify-center shrink-0">
+                    <QrCode className="w-5 h-5 stroke-[2.2]" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-white text-sm sm:text-base uppercase tracking-tight">Escanear Código QR</h3>
-                    <p className="text-[10px] font-bold text-zinc-400">Apunta la cámara al código QR del área</p>
+                    <h3 className="font-bold text-white text-base tracking-tight">Escanear Código QR</h3>
+                    <p className="text-[11px] text-[#98989D] font-medium">Apunta al código del área o equipo</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   <FlashlightWidget variant="compact" />
                   <button 
                     onClick={stopScanner}
-                    className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer"
                     title="Cerrar escáner"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4 stroke-[2.5]" />
                   </button>
                 </div>
               </div>
 
-              {/* Reader Camera Frame */}
-              <div className="p-4 flex flex-col items-center justify-center bg-black relative min-h-[300px]">
-                <div id="reader" className="w-full max-w-[320px] overflow-hidden rounded-2xl border-2 border-sky-500/40 shadow-inner"></div>
+              {/* Reader Camera Viewfinder */}
+              <div className="p-6 flex flex-col items-center justify-center bg-black relative min-h-[320px]">
+                <div id="reader" className="w-full max-w-[280px] sm:max-w-[320px] overflow-hidden rounded-[24px] border border-white/20 shadow-2xl relative"></div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="p-4 bg-zinc-950/80 border-t border-white/10 flex items-center justify-between">
-                <p className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Buscando código QR...
-                </p>
+              {/* Bottom Status Bar */}
+              <div className="p-4 bg-black/50 border-t border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#34C759] animate-pulse" />
+                  <span className="text-xs font-medium text-[#98989D]">Buscando código QR...</span>
+                </div>
                 <button
                   onClick={stopScanner}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                  className="px-4 py-2 bg-white/10 hover:bg-white/15 active:scale-95 text-[#F5F5F7] font-semibold text-xs rounded-xl transition-all cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -3457,6 +3589,25 @@ const OperatorDashboard = ({
           </div>
         )}
       </AnimatePresence>
+      <WeatherSafetyModal
+        isOpen={showWeatherSafetyModal}
+        onClose={() => {
+          setShowWeatherSafetyModal(false);
+          setPendingAreaForInspection(null);
+        }}
+        onConfirm={() => {
+          if (pendingAreaForInspection) {
+            executeStartAreaInspection(pendingAreaForInspection, pendingEquipIndexForInspection);
+          }
+          setShowWeatherSafetyModal(false);
+          setPendingAreaForInspection(null);
+        }}
+        area={pendingAreaForInspection}
+        equipment={pendingAreaForInspection ? equipment.filter(e => e.areaId === pendingAreaForInspection.id)[pendingEquipIndexForInspection] : null}
+        weather={weather}
+        loadingWeather={loadingWeather}
+        plant={plant}
+      />
       <QuickHelpModal
         isOpen={showQuickHelp}
         onClose={() => setShowQuickHelp(false)}
@@ -3855,11 +4006,13 @@ const SupervisorStats = ({ findings }: { findings: Finding[] }) => {
 const SupervisorDashboard = ({ 
   user, 
   initialFindingId, 
-  onClearPending 
+  onClearPending,
+  onStartOperatorInspection
 }: { 
   user: AppUser, 
   initialFindingId?: string | null, 
-  onClearPending?: () => void 
+  onClearPending?: () => void,
+  onStartOperatorInspection?: () => void
 }) => {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [filter, setFilter] = useState<'All' | 'Open' | 'Closed' | 'InReview'>('Open');
@@ -4079,6 +4232,17 @@ const SupervisorDashboard = ({
           </div>
 
           <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-emerald-500/20">
+            {onStartOperatorInspection && (
+              <button
+                type="button"
+                onClick={onStartOperatorInspection}
+                className="px-4 py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-black uppercase tracking-wider rounded-2xl shadow-lg shadow-sky-500/30 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                title="Cambiar a Vista de Operador Mantenedor para realizar la ronda de inspección"
+              >
+                <HardHat className="w-4 h-4 text-white" />
+                <span>Ronda de Inspección (Modo Operador)</span>
+              </button>
+            )}
             <button
               onClick={() => setShowQuickHelp(true)}
               className="px-3.5 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl border border-white/20 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer whitespace-nowrap shadow-sm flex-1 sm:flex-initial"
@@ -5548,7 +5712,9 @@ const ReportsView = ({
                                 <div className="flex flex-col">
                                   <span className="font-bold text-zinc-900 dark:text-white">{f.areaName || 'Área Principal'}</span>
                                   <span className="text-[10px] text-sky-600 dark:text-sky-400 font-semibold uppercase tracking-wider">
-                                    {f.equipmentName ? `Área Completa (${f.equipmentName})` : 'Área Completa'}
+                                    {f.equipmentName && !f.equipmentName.toLowerCase().includes('puntos generales') && !f.equipmentName.toLowerCase().includes('área completa')
+                                      ? f.equipmentName
+                                      : 'Área Completa'}
                                   </span>
                                 </div>
                               </td>
@@ -9591,30 +9757,31 @@ export const showToast = (title: string, message: string, type: 'success' | 'inf
 
 const ToastContainer = ({ toasts, setToasts }: { toasts: ToastMessage[], setToasts: React.Dispatch<React.SetStateAction<ToastMessage[]>> }) => {
   return (
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full px-4 sm:px-0">
+    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2.5 pointer-events-none max-w-sm w-full px-4 sm:px-0">
       <AnimatePresence>
         {toasts.map((toast) => (
           <motion.div
             key={toast.id}
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 50, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-            className="pointer-events-auto w-full bg-white dark:bg-zinc-950 border rounded-2xl shadow-lg dark:shadow-none p-4 flex items-start gap-3 border-zinc-150/80 dark:border-zinc-800 transition-colors duration-200"
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className="pointer-events-auto w-full bg-white/95 dark:bg-[#1C1C1E]/95 ios-glass border border-[#D2D2D7]/50 dark:border-white/10 rounded-2xl shadow-xl shadow-black/5 p-3.5 flex items-start gap-3 transition-colors duration-150"
           >
             <div className="flex-shrink-0 mt-0.5">
-              {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />}
-              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />}
-              {toast.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400" />}
-              {toast.type === 'info' && <Bell className="w-5 h-5 text-brand-blue dark:text-sky-400" />}
+              {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-[#34C759]" />}
+              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-[#FF3B30]" />}
+              {toast.type === 'warning' && <AlertTriangle className="w-5 h-5 text-[#FF9500]" />}
+              {toast.type === 'info' && <Bell className="w-5 h-5 text-[#0071E3] dark:text-[#0A84FF]" />}
             </div>
-            <div className="flex-1">
-              <h4 className="font-bold text-sm text-zinc-900 dark:text-white uppercase tracking-tight">{toast.title}</h4>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed font-medium">{toast.message}</p>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-semibold text-xs sm:text-sm text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight">{toast.title}</h4>
+              <p className="text-xs text-[#6E6E73] dark:text-[#98989D] mt-0.5 leading-relaxed font-normal">{toast.message}</p>
             </div>
             <button
               onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
-              className="flex-shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors p-1 rounded-full hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+              className="flex-shrink-0 text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] transition-colors p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+              title="Cerrar"
             >
               <X className="w-4 h-4" />
             </button>
@@ -9708,6 +9875,15 @@ const AppLayout = ({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
 
+  // View mode switcher: allows Admins and Supervisors to toggle between "Operador Mantenedor" and "Supervisor/Admin"
+  const [activeRoleView, setActiveRoleView] = useState<UserRole>(() => {
+    if (user.role === 'Operador') return 'Operador';
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('chekify_active_role_view') : null;
+    return (saved as UserRole) || 'Operador'; // Default to Operador so user immediately has access to inspections
+  });
+
+  const effectiveRole = (user.role === 'Administrador' || user.role === 'Supervisor') ? activeRoleView : 'Operador';
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -9716,8 +9892,6 @@ const AppLayout = ({
   const [plants, setPlants] = useState<Plant[]>([]);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const seenNotificationIdsRef = useRef<Set<string>>(new Set());
-  const isFirstSnapshotRef = useRef(true);
 
   // PWA states
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -9776,8 +9950,8 @@ const AppLayout = ({
       return;
     }
 
-    // 2. Check if dismissed in this session
-    const isDismissed = sessionStorage.getItem('pwa_install_dismissed') === 'true';
+    // 2. Check if dismissed previously
+    const isDismissed = localStorage.getItem('pwa_install_dismissed') === 'true';
     if (isDismissed) {
       return;
     }
@@ -9817,7 +9991,7 @@ const AppLayout = ({
   };
 
   const handleDismissBanner = () => {
-    sessionStorage.setItem('pwa_install_dismissed', 'true');
+    localStorage.setItem('pwa_install_dismissed', 'true');
     setShowInstallBanner(false);
   };
 
@@ -9826,34 +10000,18 @@ const AppLayout = ({
       const customEvent = e as CustomEvent<Omit<ToastMessage, 'id'>>;
       const { title, message, type } = customEvent.detail;
       const id = Math.random().toString(36).substr(2, 9);
-      setToasts(prev => [...prev, { id, title, message, type }]);
+      // Keep at most 3 toasts on screen to prevent visual clutter
+      setToasts(prev => [...prev.slice(-2), { id, title, message, type }]);
       
-      // Auto dismiss after 5 seconds
+      // Auto dismiss after 4 seconds
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== id));
-      }, 5000);
+      }, 4000);
     };
 
     window.addEventListener('app-toast', handleToastEvent);
     return () => window.removeEventListener('app-toast', handleToastEvent);
   }, []);
-
-  useEffect(() => {
-    // Check for any newly added notifications
-    notifications.forEach(n => {
-      if (!seenNotificationIdsRef.current.has(n.id)) {
-        seenNotificationIdsRef.current.add(n.id);
-        
-        if (n.title === 'Hallazgo Cerrado' || n.message?.toLowerCase().includes('cerrado')) {
-          showToast('🔒 ' + n.title, n.message, 'success');
-        } else if (n.title === 'Hallazgo en Revisión' || n.message?.toLowerCase().includes('revisado')) {
-          showToast('🕵️ ' + n.title, n.message, 'info');
-        } else {
-          showToast('🔔 ' + n.title, n.message, 'info');
-        }
-      }
-    });
-  }, [notifications]);
 
   useEffect(() => {
     const unsubPlants = onSnapshot(collection(db, 'plants'), (snapshot) => {
@@ -9865,7 +10023,7 @@ const AppLayout = ({
   }, []);
 
   useEffect(() => {
-    // Notification listener
+    // Notification listener for Notification Center & badge count
     let notifyQuery;
     
     if (user.role === 'Administrador') {
@@ -9876,7 +10034,6 @@ const AppLayout = ({
       );
     } else {
       // For non-admins, we must filter to match security rules exactly
-      // to avoid permission-denied
       notifyQuery = query(
         collection(db, 'notifications'), 
         where('targetRole', 'in', ['All', user.role]),
@@ -9900,9 +10057,7 @@ const AppLayout = ({
         if (!roleMatches) return false;
 
         // 2. Strict Plant Filtering
-        // If it's a finding NOT belonging to the user's plant, reject it
         if (n.type === 'Finding' || n.plantId) {
-          // If the user has no plant assigned, they shouldn't see plant-specific notifications
           if (!user.plantId) return false;
           return n.plantId === user.plantId;
         }
@@ -9911,11 +10066,8 @@ const AppLayout = ({
         return true;
       });
 
-      if (isFirstSnapshotRef.current) {
-        filtered.forEach(n => seenNotificationIdsRef.current.add(n.id));
-        isFirstSnapshotRef.current = false;
-      }
-
+      // Silently populate notifications for the Bell Notification Center and badge.
+      // Never trigger automatic toast popups or boxes on login/session start.
       setNotifications(filtered);
     }, (error) => {
       console.warn("Notification listener error:", error);
@@ -9969,41 +10121,41 @@ const AppLayout = ({
   }, []);
 
   return (
-    <div data-theme={theme} className="min-h-screen bg-zinc-50 dark:bg-black bg-concrete flex flex-col md:flex-row transition-colors duration-200">
-          {/* Sidebar Navigation (Desktop & Tablet) */}
-          <aside className={`hidden md:flex flex-col ${isSidebarCollapsed ? 'w-24' : 'w-64'} bg-white dark:bg-black border-r border-zinc-100 dark:border-white/10 h-screen sticky top-0 z-40 p-6 transition-all duration-300 ease-in-out`}>
-            <div className={`flex flex-col mb-6 gap-4 ${isSidebarCollapsed ? 'items-center' : ''}`}>
+    <div data-theme={theme} className="min-h-screen bg-[#F5F5F7] dark:bg-black text-[#1D1D1F] dark:text-[#F5F5F7] flex flex-col md:flex-row transition-colors duration-200">
+          {/* Sidebar Navigation (Desktop & Tablet) - Modern Apple macOS/iPadOS HIG Style */}
+          <aside className={`hidden md:flex flex-col ${isSidebarCollapsed ? 'w-20 p-3' : 'w-64 p-5'} bg-white/90 dark:bg-[#1C1C1E]/90 ios-glass border-r border-[#D2D2D7]/40 dark:border-white/10 h-screen sticky top-0 z-40 transition-all duration-300 ease-in-out`}>
+            <div className={`flex flex-col mb-5 gap-3.5 ${isSidebarCollapsed ? 'items-center' : ''}`}>
               <div className="flex items-center justify-between w-full">
                 <button 
                   onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                  className={`p-2 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-zinc-400 transition-colors flex shrink-0 ${isSidebarCollapsed ? 'mx-auto' : ''}`}
-                  title={isSidebarCollapsed ? "Expandir" : "Contraer"}
+                  className={`p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-[#6E6E73] dark:text-[#98989D] transition-colors flex shrink-0 cursor-pointer ${isSidebarCollapsed ? 'mx-auto' : ''}`}
+                  title={isSidebarCollapsed ? "Expandir barra lateral" : "Contraer barra lateral"}
                 >
-                  {isSidebarCollapsed ? <PanelLeftOpen className="w-6 h-6" /> : <PanelLeftClose className="w-5 h-5" />}
+                  {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
                 </button>
                 {!isSidebarCollapsed && (
                   <button
                     onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                    className="p-2 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-zinc-400 transition-colors"
+                    className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-[#6E6E73] dark:text-[#98989D] transition-colors cursor-pointer"
                     title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
                   >
-                    {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                    {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                   </button>
                 )}
               </div>
-              <div className={isSidebarCollapsed ? 'w-full flex justify-center' : 'px-2'}>
-                <Logo isCollapsed={isSidebarCollapsed} className={isSidebarCollapsed ? 'h-24 px-2' : 'h-12'} />
+              <div className={isSidebarCollapsed ? 'w-full flex justify-center py-1' : 'px-1 py-1'}>
+                <Logo isCollapsed={isSidebarCollapsed} className={isSidebarCollapsed ? 'h-16 px-1' : 'h-11'} />
               </div>
 
               {/* Operator Profile Card directly under Logo */}
               <div 
                 onClick={() => setShowProfileModal(true)}
-                className={`w-full p-3 bg-gradient-to-br from-zinc-50 via-sky-500/5 to-blue-500/5 dark:from-zinc-900 dark:via-zinc-900 dark:to-sky-950/20 rounded-2xl border border-zinc-200/70 dark:border-white/10 hover:border-sky-500/40 hover:shadow-md cursor-pointer transition-all shadow-2xs group ${isSidebarCollapsed ? 'flex justify-center p-2' : ''}`}
+                className={`w-full p-3 bg-[#F5F5F7] dark:bg-[#2C2C2E]/60 rounded-2xl border border-[#D2D2D7]/40 dark:border-white/5 hover:border-[#0071E3]/40 hover:bg-[#E5E5EA]/70 dark:hover:bg-[#2C2C2E] cursor-pointer transition-all shadow-xs group ${isSidebarCollapsed ? 'flex justify-center p-2' : ''}`}
                 title="Ver y editar mi perfil personal"
               >
                 {isSidebarCollapsed ? (
                   <div className="relative group/avatar cursor-pointer">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white font-black text-sm flex items-center justify-center border border-white/20 shadow-md shadow-sky-500/20 shrink-0 overflow-hidden">
+                    <div className="w-10 h-10 rounded-2xl bg-[#0071E3] text-white font-bold text-sm flex items-center justify-center border border-white/20 shadow-xs shrink-0 overflow-hidden">
                       {user.avatarUrl ? (
                         <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
                       ) : (
@@ -10011,12 +10163,12 @@ const AppLayout = ({
                       )}
                     </div>
                     {isOffline && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white dark:border-black rounded-full animate-ping" />
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#FF9500] border-2 border-white dark:border-black rounded-full animate-ping" />
                     )}
                   </div>
                 ) : (
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white font-black text-sm flex items-center justify-center border border-white/20 shadow-md shadow-sky-500/20 shrink-0 overflow-hidden relative">
+                    <div className="w-10 h-10 rounded-2xl bg-[#0071E3] text-white font-bold text-sm flex items-center justify-center border border-white/20 shadow-xs shrink-0 overflow-hidden relative">
                       {user.avatarUrl ? (
                         <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
                       ) : (
@@ -10028,21 +10180,21 @@ const AppLayout = ({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-[9px] font-black uppercase text-sky-600 dark:text-sky-400 tracking-wider flex items-center gap-1">
+                        <span className="text-[10px] font-semibold text-[#0071E3] dark:text-[#0A84FF] tracking-tight flex items-center gap-1">
                           {user.role}
-                          <Edit3 className="w-2.5 h-2.5 text-sky-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <Edit3 className="w-2.5 h-2.5 text-[#0071E3] opacity-0 group-hover:opacity-100 transition-opacity" />
                         </span>
                       </div>
-                      <p className="text-xs font-black text-zinc-900 dark:text-white truncate transition-colors leading-tight mt-0.5 group-hover:text-sky-600 dark:group-hover:text-sky-400">
+                      <p className="text-xs font-bold text-[#1D1D1F] dark:text-[#F5F5F7] truncate leading-tight mt-0.5 group-hover:text-[#0071E3] transition-colors">
                         {user.name}
                       </p>
-                      <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 truncate mt-0.5">
+                      <p className="text-[10px] font-medium text-[#6E6E73] dark:text-[#98989D] truncate mt-0.5">
                         {user.cargo || user.email.replace('@chekify.local', '')}
                       </p>
                       {isOffline && (
-                        <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-extrabold uppercase rounded-md">
+                        <div className="mt-1 flex items-center gap-1 px-1.5 py-0.5 bg-[#FF9500]/10 border border-[#FF9500]/20 text-[#C96800] dark:text-[#FF9F0A] text-[9px] font-semibold rounded-md">
                           <AlertCircle className="w-2.5 h-2.5 shrink-0" />
-                          <span>Desconectado</span>
+                          <span>Sin conexión</span>
                         </div>
                       )}
                     </div>
@@ -10051,113 +10203,138 @@ const AppLayout = ({
               </div>
             </div>
 
-            <div className="flex-1 space-y-2">
+            <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
               <button 
                 onClick={() => setShowProfileModal(true)}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm text-zinc-600 dark:text-zinc-400 hover:bg-sky-500/10 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer`}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-3 px-3.5'} py-2.5 rounded-xl transition-all font-medium text-sm text-[#1D1D1F] dark:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer`}
                 title={isSidebarCollapsed ? "Mi Perfil" : undefined}
               >
-                <UserCheck className="w-5 h-5 shrink-0 text-sky-500" />
-                {!isSidebarCollapsed && <span>Mi Perfil</span>}
+                <div className="w-8 h-8 rounded-xl bg-[#0071E3]/12 text-[#0071E3] dark:text-[#0A84FF] flex items-center justify-center shrink-0">
+                  <UserCheck className="w-4 h-4" />
+                </div>
+                {!isSidebarCollapsed && <span className="truncate">Mi Perfil</span>}
               </button>
               <button 
                 onClick={() => setActiveTab('Home')}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-3 px-3.5'} py-2.5 rounded-xl transition-all font-semibold text-sm cursor-pointer ${
                   activeTab === 'Home' 
-                    ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/25 ring-1 ring-sky-400/30' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-sky-500/10 hover:text-sky-600 dark:hover:text-sky-400'
+                    ? 'bg-[#0071E3] text-white shadow-xs' 
+                    : 'text-[#1D1D1F] dark:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 font-medium'
                 }`}
                 title={isSidebarCollapsed ? "Inspección Primaria" : undefined}
               >
-                <ShieldCheck className={`w-5 h-5 shrink-0 ${activeTab === 'Home' ? 'text-white' : 'text-sky-500'}`} />
-                {!isSidebarCollapsed && <span>Inspección Primaria</span>}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'Home' ? 'bg-white/20 text-white' : 'bg-[#0071E3]/12 text-[#0071E3] dark:text-[#0A84FF]'}`}>
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                {!isSidebarCollapsed && <span className="truncate">Inspección VOSO</span>}
               </button>
               <button 
                 onClick={() => setActiveTab('OrdenLimpieza')}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-3 px-3.5'} py-2.5 rounded-xl transition-all font-semibold text-sm cursor-pointer ${
                   activeTab === 'OrdenLimpieza' 
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 ring-1 ring-purple-400/30' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-purple-500/10 hover:text-purple-600 dark:hover:text-purple-400'
+                    ? 'bg-[#0071E3] text-white shadow-xs' 
+                    : 'text-[#1D1D1F] dark:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 font-medium'
                 }`}
                 title={isSidebarCollapsed ? "Orden & Limpieza" : undefined}
               >
-                <Sparkles className={`w-5 h-5 shrink-0 ${activeTab === 'OrdenLimpieza' ? 'text-white' : 'text-purple-500'}`} />
-                {!isSidebarCollapsed && <span>Orden & Limpieza</span>}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'OrdenLimpieza' ? 'bg-white/20 text-white' : 'bg-[#AF52DE]/15 text-[#AF52DE]'}`}>
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                {!isSidebarCollapsed && <span className="truncate">Orden & Limpieza</span>}
               </button>
               <button 
                 onClick={() => setActiveTab('History')}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-3 px-3.5'} py-2.5 rounded-xl transition-all font-semibold text-sm cursor-pointer ${
                   activeTab === 'History' 
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/25 ring-1 ring-emerald-400/30' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400'
+                    ? 'bg-[#0071E3] text-white shadow-xs' 
+                    : 'text-[#1D1D1F] dark:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 font-medium'
                 }`}
                 title={isSidebarCollapsed ? "Historial" : undefined}
               >
-                <History className={`w-5 h-5 shrink-0 ${activeTab === 'History' ? 'text-white' : 'text-emerald-500'}`} />
-                {!isSidebarCollapsed && <span>Historial</span>}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'History' ? 'bg-white/20 text-white' : 'bg-[#34C759]/15 text-[#34C759]'}`}>
+                  <History className="w-4 h-4" />
+                </div>
+                {!isSidebarCollapsed && <span className="truncate">Historial</span>}
               </button>
               {user.role === 'Administrador' && (
                 <>
                   <button 
                     onClick={() => setActiveTab('Admin')}
-                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-3 px-3.5'} py-2.5 rounded-xl transition-all font-semibold text-sm cursor-pointer ${
                       activeTab === 'Admin' 
-                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 ring-1 ring-indigo-400/30' 
-                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400'
+                        ? 'bg-[#0071E3] text-white shadow-xs' 
+                        : 'text-[#1D1D1F] dark:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 font-medium'
                     }`}
                     title={isSidebarCollapsed ? "Administración" : undefined}
                   >
-                    <Users className={`w-5 h-5 shrink-0 ${activeTab === 'Admin' ? 'text-white' : 'text-indigo-500'}`} />
-                    {!isSidebarCollapsed && <span>Administración</span>}
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'Admin' ? 'bg-white/20 text-white' : 'bg-[#5856D6]/15 text-[#5856D6]'}`}>
+                      <Users className="w-4 h-4" />
+                    </div>
+                    {!isSidebarCollapsed && <span className="truncate">Administración</span>}
                   </button>
                   <button 
                     onClick={() => setActiveTab('Notifications')}
-                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-3 px-3.5'} py-2.5 rounded-xl transition-all font-semibold text-sm cursor-pointer ${
                       activeTab === 'Notifications' 
-                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md shadow-amber-500/25 ring-1 ring-amber-400/30' 
-                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400'
+                        ? 'bg-[#0071E3] text-white shadow-xs' 
+                        : 'text-[#1D1D1F] dark:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 font-medium'
                     }`}
                     title={isSidebarCollapsed ? "Notificaciones" : undefined}
                   >
-                    <Bell className={`w-5 h-5 shrink-0 ${activeTab === 'Notifications' ? 'text-white' : 'text-amber-500'}`} />
-                    {!isSidebarCollapsed && <span>Notificaciones</span>}
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'Notifications' ? 'bg-white/20 text-white' : 'bg-[#FF9500]/15 text-[#FF9500]'}`}>
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    {!isSidebarCollapsed && (
+                      <div className="flex items-center justify-between flex-1 min-w-0">
+                        <span className="truncate">Notificaciones</span>
+                        {unreadCount > 0 && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-[#FF3B30] text-white">
+                            {unreadCount}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </button>
                   <button 
                     onClick={() => setActiveTab('PDFConfig')}
-                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-3 px-3.5'} py-2.5 rounded-xl transition-all font-semibold text-sm cursor-pointer ${
                       activeTab === 'PDFConfig' 
-                        ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-500/25 ring-1 ring-rose-400/30' 
-                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400'
+                        ? 'bg-[#0071E3] text-white shadow-xs' 
+                        : 'text-[#1D1D1F] dark:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 font-medium'
                     }`}
                     title={isSidebarCollapsed ? "Configuración PDF" : undefined}
                   >
-                    <Shield className={`w-5 h-5 shrink-0 ${activeTab === 'PDFConfig' ? 'text-white' : 'text-rose-500'}`} />
-                    {!isSidebarCollapsed && <span>Configuración PDF</span>}
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'PDFConfig' ? 'bg-white/20 text-white' : 'bg-[#FF2D55]/15 text-[#FF2D55]'}`}>
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    {!isSidebarCollapsed && <span className="truncate">Configuración PDF</span>}
                   </button>
                 </>
               )}
               <button 
                 onClick={() => setActiveTab('Help')}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-3 rounded-2xl transition-all font-bold text-sm ${
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-3 px-3.5'} py-2.5 rounded-xl transition-all font-semibold text-sm cursor-pointer ${
                   activeTab === 'Help' 
-                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/25 ring-1 ring-cyan-400/30' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400'
+                    ? 'bg-[#0071E3] text-white shadow-xs' 
+                    : 'text-[#1D1D1F] dark:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 font-medium'
                 }`}
                 title={isSidebarCollapsed ? "Ayuda" : undefined}
               >
-                <HelpCircle className={`w-5 h-5 shrink-0 ${activeTab === 'Help' ? 'text-white' : 'text-cyan-500'}`} />
-                {!isSidebarCollapsed && <span>Ayuda / Instructivo</span>}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'Help' ? 'bg-white/20 text-white' : 'bg-[#0071E3]/12 text-[#0071E3] dark:text-[#0A84FF]'}`}>
+                  <HelpCircle className="w-4 h-4" />
+                </div>
+                {!isSidebarCollapsed && <span className="truncate">Ayuda / Instructivo</span>}
               </button>
             </div>
 
-            <div className="mt-auto space-y-2">
+            <div className="mt-auto pt-3 border-t border-[#D2D2D7]/30 dark:border-white/5 space-y-1.5">
               {isSidebarCollapsed && (
                 <button
                   onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                  className="w-full flex items-center justify-center p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-2xl text-zinc-400 transition-colors"
+                  className="w-full flex items-center justify-center p-2.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-[#6E6E73] dark:text-[#98989D] transition-colors"
                   title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
                 >
-                  {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                  {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                 </button>
               )}
               <button 
@@ -10167,23 +10344,23 @@ const AppLayout = ({
                     window.location.reload();
                   }
                 }}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-2.5 rounded-2xl text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-all font-bold text-xs uppercase tracking-wider cursor-pointer`}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-2.5 px-3'} py-2 rounded-xl text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] hover:bg-black/5 dark:hover:bg-white/5 transition-all text-xs font-medium cursor-pointer`}
                 title={isSidebarCollapsed ? "Limpiar Caché Local" : undefined}
               >
-                <RefreshCw className="w-4 h-4 shrink-0" />
+                <RefreshCw className="w-3.5 h-3.5 shrink-0" />
                 {!isSidebarCollapsed && <span>Limpiar Caché</span>}
               </button>
               <button 
                 onClick={() => signOut(auth)}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'} py-2.5 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all font-bold text-xs uppercase tracking-wider cursor-pointer`}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-2.5 px-3'} py-2 rounded-xl text-[#FF3B30] hover:bg-[#FF3B30]/10 transition-all text-xs font-semibold cursor-pointer`}
                 title={isSidebarCollapsed ? "Cerrar Sesión" : undefined}
               >
-                <LogOut className="w-4 h-4 shrink-0" />
+                <LogOut className="w-3.5 h-3.5 shrink-0" />
                 {!isSidebarCollapsed && <span>Cerrar Sesión</span>}
               </button>
               {!isSidebarCollapsed && (
-                <div className="text-center pt-2">
-                  <p className="text-[8px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-[0.2em]">Developed by maisser.cl</p>
+                <div className="text-center pt-1">
+                  <p className="text-[10px] text-[#8E8E93] dark:text-[#636366]">Chekify Industrial · v2.5</p>
                 </div>
               )}
             </div>
@@ -10191,19 +10368,19 @@ const AppLayout = ({
 
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0">
-            {/* Header (Mobile & Sticky desktop header) */}
-            <header className="bg-white/95 dark:bg-zinc-950/95 border-b border-zinc-200/80 dark:border-white/10 px-2.5 sm:px-6 md:px-8 py-2.5 sm:py-3.5 sticky top-0 z-40 backdrop-blur-md transition-colors duration-200 shadow-xs">
+            {/* Header (Apple HIG Translucent Sticky Header) */}
+            <header className="bg-[#F5F5F7]/85 dark:bg-black/80 ios-glass border-b border-[#D2D2D7]/30 dark:border-white/5 px-3.5 sm:px-6 md:px-8 py-2.5 sm:py-3 sticky top-0 z-40 transition-colors duration-200">
               <div className="max-w-7xl mx-auto flex flex-col gap-2 sm:gap-2.5">
-                <div className="flex items-center justify-between gap-1.5 sm:gap-4 min-w-0">
+                <div className="flex items-center justify-between gap-2 sm:gap-4 min-w-0">
                   {/* Mobile Identity / Avatar Photo */}
                   <div className="flex items-center gap-2 md:hidden shrink-0">
                     <Logo className="h-7 sm:h-8 shrink-0" />
                     <button 
                       onClick={() => setShowProfileModal(true)}
-                      className="hover:opacity-80 transition-opacity cursor-pointer p-0.5 rounded-full ring-2 ring-sky-500/30 hover:ring-sky-500/80 shrink-0 ml-0.5"
+                      className="cursor-pointer p-0.5 rounded-full ring-2 ring-[#0071E3]/30 hover:ring-[#0071E3]/80 shrink-0 ml-0.5 transition-all"
                       title={`Perfil: ${user.name || user.email}`}
                     >
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs overflow-hidden border border-white/20">
+                      <div className="w-8 h-8 rounded-full bg-[#0071E3] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs overflow-hidden border border-white/20">
                         {user.avatarUrl ? (
                           <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
                         ) : (
@@ -10216,50 +10393,88 @@ const AppLayout = ({
                   {/* Active View Title & Date/Time (Desktop) */}
                   <div className="hidden md:flex flex-col min-w-0 flex-1 pr-2">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <h1 className="text-zinc-900 dark:text-white font-black text-base lg:text-lg leading-tight transition-colors truncate tracking-tight">
-                        {activeTab === 'Home' ? `¡Bienvenido ${user.name?.split(' ')[0] || user.name || 'Usuario'}!` : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial de Inspecciones' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda / Instructivo'}
+                      <h1 className="text-[#1D1D1F] dark:text-[#F5F5F7] font-bold text-base lg:text-lg leading-tight transition-colors truncate tracking-tight">
+                        {activeTab === 'Home' ? `¡Bienvenido, ${user.name?.split(' ')[0] || user.name || 'Usuario'}!` : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial de Inspecciones' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda / Instructivo'}
                       </h1>
                       {isOffline && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-extrabold uppercase rounded-full animate-pulse shrink-0">
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-[#FF9500]/10 border border-[#FF9500]/20 text-[#C96800] dark:text-[#FF9F0A] text-[9px] font-semibold rounded-full shrink-0">
                           <AlertCircle className="w-2.5 h-2.5" />
-                          Desconectado
+                          Sin conexión
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] lg:text-xs text-zinc-400 dark:text-zinc-500 font-semibold truncate mt-0.5">
+                    <p className="text-[11px] text-[#6E6E73] dark:text-[#98989D] font-medium truncate mt-0.5">
                       {format(currentTime, "EEEE, dd 'de' MMMM • HH:mm:ss", { locale: es })}
                     </p>
                   </div>
 
                   {/* Header Actions & Weather Summary Pill */}
-                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    {/* View Switcher for Admins & Supervisors - Apple HIG Segmented Control */}
+                    {(user.role === 'Administrador' || user.role === 'Supervisor') && (
+                      <div className="flex items-center bg-[#E5E5EA]/70 dark:bg-[#2C2C2E]/70 p-1 rounded-xl shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveRoleView('Operador');
+                            if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', 'Operador');
+                          }}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                            effectiveRole === 'Operador'
+                              ? 'bg-white dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7] shadow-xs'
+                              : 'text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
+                          }`}
+                          title="Cambiar a Vista de Operador Mantenedor (Inspecciones de Terreno)"
+                        >
+                          <HardHat className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Operador</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveRoleView(user.role);
+                            if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', user.role);
+                          }}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                            effectiveRole !== 'Operador'
+                              ? 'bg-white dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7] shadow-xs'
+                              : 'text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
+                          }`}
+                          title={`Cambiar a Vista de ${user.role}`}
+                        >
+                          <Briefcase className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">{user.role}</span>
+                        </button>
+                      </div>
+                    )}
+
                     {/* Compact Weather Summary Pill in Header */}
                     <button
                       onClick={() => setIsWeatherExpanded(true)}
-                      className="flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all shadow-2xs shrink-0 cursor-pointer bg-gradient-to-r from-sky-500/10 via-blue-500/5 to-indigo-500/10 hover:bg-sky-500/15 border-sky-500/20 text-sky-900 dark:text-sky-300 active:scale-95"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 text-xs font-medium transition-all shadow-xs shrink-0 cursor-pointer hover:bg-[#F2F2F7] dark:hover:bg-[#2C2C2E] active:scale-98"
                       title="Ver condiciones meteorológicas detalladas"
                     >
                       {loadingWeather ? (
-                        <div className="flex items-center gap-1 text-sky-600 dark:text-sky-400">
+                        <div className="flex items-center gap-1 text-[#0071E3] dark:text-[#0A84FF]">
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span className="hidden sm:inline text-[10px]">Clima...</span>
+                          <span className="hidden sm:inline text-[11px]">Clima...</span>
                         </div>
                       ) : weatherError || !weather ? (
-                        <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                        <div className="flex items-center gap-1 text-[#FF9500]">
                           <CloudOff className="w-3.5 h-3.5" />
-                          <span className="text-[10px]">N/A</span>
+                          <span className="text-[11px]">N/A</span>
                         </div>
                       ) : (
                         <>
-                          <CloudSun className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                          <div className="flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-xs">
-                            <span className="font-extrabold text-zinc-900 dark:text-white">{weather.temperature}</span>
-                            <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline">•</span>
-                            <span className="text-zinc-600 dark:text-zinc-300 hidden sm:inline">Hum: {weather.humidity}</span>
+                          <CloudSun className="w-3.5 h-3.5 text-[#0071E3] dark:text-[#0A84FF] shrink-0" />
+                          <div className="flex items-center gap-1 text-xs font-semibold">
+                            <span className="text-[#1D1D1F] dark:text-[#F5F5F7] tabular-nums">{weather.temperature}</span>
+                            <span className="text-[#8E8E93] hidden sm:inline">·</span>
+                            <span className="text-[#6E6E73] dark:text-[#98989D] hidden sm:inline text-[11px]">Hum {weather.humidity}</span>
                             {weather.uvIndex !== undefined && (
                               <>
-                                <span className="text-zinc-300 dark:text-zinc-700 hidden md:inline">•</span>
-                                <span className="text-amber-600 dark:text-amber-400 font-bold hidden md:inline">UV: {weather.uvIndex}</span>
+                                <span className="text-[#8E8E93] hidden md:inline">·</span>
+                                <span className="text-[#FF9500] font-bold hidden md:inline text-[11px]">UV {weather.uvIndex}</span>
                               </>
                             )}
                           </div>
@@ -10267,43 +10482,43 @@ const AppLayout = ({
                       )}
                     </button>
 
-                    <div className="h-4 w-px bg-zinc-200 dark:bg-white/10 hidden sm:block mx-0.5" />
+                    <div className="h-4 w-px bg-[#D2D2D7]/50 dark:bg-white/10 hidden sm:block mx-0.5" />
 
                     <button
                       onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                      className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200/50 dark:border-white/5 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9"
+                      className="text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
                       title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
                     >
-                      {theme === 'light' ? <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                      {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                     </button>
                     <button 
                       onClick={() => setShowNotificationCenter(true)}
-                      className="relative text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200/50 dark:border-white/5 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9"
+                      className="relative text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
                       title="Notificaciones"
                     >
-                      <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      <Bell className="w-4 h-4" />
                       {unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[7px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-black animate-pulse-subtle">
+                        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#FF3B30] text-white text-[9px] font-bold flex items-center justify-center leading-none">
                           {unreadCount}
                         </span>
                       )}
                     </button>
                     <button 
                       onClick={() => signOut(auth)}
-                      className="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1.5 sm:p-2 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100/50 dark:border-red-500/20 text-red-500 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9"
+                      className="text-[#FF3B30] hover:bg-[#FF3B30]/10 transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
                       title="Cerrar Sesión"
                     >
-                      <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      <LogOut className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
 
                 {/* Mobile Sub-Header: Active Module Title & Time Bar */}
-                <div className="md:hidden flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-white/5 min-w-0">
+                <div className="md:hidden flex items-center justify-between pt-2 border-t border-[#D2D2D7]/30 dark:border-white/5 min-w-0">
                   <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
-                    <h1 className="text-zinc-900 dark:text-white font-extrabold text-xs tracking-tight truncate">
-                      {activeTab === 'Home' ? `¡Bienvenido ${user.name?.split(' ')[0] || user.name || 'Usuario'}!` : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda'}
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0071E3] shrink-0" />
+                    <h1 className="text-[#1D1D1F] dark:text-[#F5F5F7] font-bold text-xs tracking-tight truncate">
+                      {activeTab === 'Home' ? (effectiveRole === 'Operador' ? 'Inspección Terreno' : 'Panel Supervisión') : activeTab === 'OrdenLimpieza' ? 'Orden & Limpieza' : activeTab === 'History' ? 'Historial' : activeTab === 'Admin' ? 'Administración' : activeTab === 'Notifications' ? 'Notificaciones' : activeTab === 'PDFConfig' ? 'Configuración PDF' : 'Ayuda'}
                     </h1>
                     {isOffline && (
                       <span className="px-1.5 py-0.2 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-600 dark:text-red-400 text-[8px] font-black uppercase rounded-full shrink-0">
@@ -10311,7 +10526,21 @@ const AppLayout = ({
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold shrink-0">
+                  {(user.role === 'Administrador' || user.role === 'Supervisor') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = effectiveRole === 'Operador' ? user.role : 'Operador';
+                        setActiveRoleView(next);
+                        if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', next);
+                      }}
+                      className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <HardHat className="w-2.5 h-2.5" />
+                      <span>{effectiveRole === 'Operador' ? 'Ver Admin' : 'Ver Operador'}</span>
+                    </button>
+                  )}
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold shrink-0 ml-1.5">
                     {format(currentTime, "HH:mm:ss", { locale: es })}
                   </span>
                 </div>
@@ -10338,16 +10567,25 @@ const AppLayout = ({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    {user.role === 'Operador' ? (
+                    {effectiveRole === 'Operador' ? (
                       <OperatorDashboard 
                         user={user} 
                         setActiveTab={setActiveTab} 
                         weather={weather}
                         loadingWeather={loadingWeather}
                         weatherError={weatherError}
+                        plant={plants.find(p => p.id === user.plantId) || plants[0] || null}
                       />
                     ) : (
-                      <SupervisorDashboard user={user} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
+                      <SupervisorDashboard 
+                        user={user} 
+                        initialFindingId={pendingFindingId} 
+                        onClearPending={() => setPendingFindingId(null)}
+                        onStartOperatorInspection={() => {
+                          setActiveRoleView('Operador');
+                          if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', 'Operador');
+                        }}
+                      />
                     )}
                   </motion.div>
                 )}
@@ -10415,80 +10653,100 @@ const AppLayout = ({
             </main>
             <SyncStatusTray />
 
-            {/* Mobile Navigation Dock */}
-            <nav className="md:hidden fixed bottom-3 left-3 right-3 bg-white/95 dark:bg-zinc-900/95 border border-zinc-200/80 dark:border-white/10 rounded-2xl p-1.5 shadow-xl shadow-black/10 z-40 backdrop-blur-xl transition-all duration-200">
-              <div className="flex items-center justify-around gap-1">
+            {/* Mobile Navigation Bar (Apple HIG Translucent Tab Bar) */}
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/85 dark:bg-[#1C1C1E]/85 ios-glass border-t border-[#D2D2D7]/40 dark:border-white/10 px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom,0.5rem),0.5rem)] z-40 shadow-sm transition-all duration-200">
+              <div className="flex items-center justify-around max-w-md mx-auto">
                 {/* 1. Home VOSO */}
                 <button 
                   onClick={() => { setActiveTab('Home'); setIsMobileMoreOpen(false); }}
-                  className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                  className={`flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 ${
                     activeTab === 'Home' 
-                      ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/25' 
-                      : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      ? 'text-[#0071E3] dark:text-[#0A84FF]' 
+                      : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
                   }`}
                 >
-                  <LayoutDashboard className="w-4 h-4 shrink-0" />
-                  <span className="text-[9px] font-black uppercase tracking-wider leading-none">VOSO</span>
+                  <div className={`p-1 rounded-xl transition-colors ${activeTab === 'Home' ? 'bg-[#0071E3]/12' : ''}`}>
+                    <LayoutDashboard className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-tight leading-none">VOSO</span>
                 </button>
 
                 {/* 2. Orden & Limpieza */}
                 <button 
                   onClick={() => { setActiveTab('OrdenLimpieza'); setIsMobileMoreOpen(false); }}
-                  className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                  className={`flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 ${
                     activeTab === 'OrdenLimpieza' 
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25' 
-                      : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      ? 'text-[#AF52DE] dark:text-[#BF5AF2]' 
+                      : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
                   }`}
                 >
-                  <Sparkles className="w-4 h-4 shrink-0" />
-                  <span className="text-[9px] font-black uppercase tracking-wider leading-none">5S Limp.</span>
+                  <div className={`p-1 rounded-xl transition-colors ${activeTab === 'OrdenLimpieza' ? 'bg-[#AF52DE]/12' : ''}`}>
+                    <Sparkles className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-tight leading-none">5S Limp.</span>
                 </button>
 
                 {/* 3. Historial */}
                 <button 
                   onClick={() => { setActiveTab('History'); setIsMobileMoreOpen(false); }}
-                  className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                  className={`flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 ${
                     activeTab === 'History' 
-                      ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/25' 
-                      : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      ? 'text-[#34C759] dark:text-[#30D158]' 
+                      : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
                   }`}
                 >
-                  <History className="w-4 h-4 shrink-0" />
-                  <span className="text-[9px] font-black uppercase tracking-wider leading-none">Historial</span>
+                  <div className={`p-1 rounded-xl transition-colors ${activeTab === 'History' ? 'bg-[#34C759]/12' : ''}`}>
+                    <History className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-tight leading-none">Historial</span>
                 </button>
 
-                {/* 4. If Non-Admin -> Help */}
+                {/* 4. Perfil */}
+                <button 
+                  onClick={() => { setShowProfileModal(true); setIsMobileMoreOpen(false); }}
+                  className="flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]"
+                  title="Ver perfil"
+                >
+                  <div className="p-1 rounded-xl">
+                    <UserCheck className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-tight leading-none">Perfil</span>
+                </button>
+
+                {/* 5. If Non-Admin -> Help */}
                 {user.role !== 'Administrador' && (
                   <button 
                     onClick={() => { setActiveTab('Help'); setIsMobileMoreOpen(false); }}
-                    className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                    className={`flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 ${
                       activeTab === 'Help' 
-                        ? 'bg-gradient-to-r from-zinc-800 to-zinc-950 dark:from-zinc-100 dark:to-white text-white dark:text-zinc-950 shadow-md' 
-                        : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                        ? 'text-[#0071E3] dark:text-[#0A84FF]' 
+                        : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
                     }`}
                   >
-                    <HelpCircle className="w-4 h-4 shrink-0" />
-                    <span className="text-[9px] font-black uppercase tracking-wider leading-none">Ayuda</span>
+                    <div className={`p-1 rounded-xl transition-colors ${activeTab === 'Help' ? 'bg-[#0071E3]/12' : ''}`}>
+                      <HelpCircle className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                    </div>
+                    <span className="text-[10px] font-semibold tracking-tight leading-none">Ayuda</span>
                   </button>
                 )}
 
-                {/* 4. If Admin -> More / Admin Sheet trigger */}
+                {/* 5. If Admin -> More / Admin Sheet trigger */}
                 {user.role === 'Administrador' && (
                   <button 
                     onClick={() => setIsMobileMoreOpen(!isMobileMoreOpen)}
-                    className={`flex-1 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all relative ${
+                    className={`flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 relative ${
                       ['Admin', 'Notifications', 'PDFConfig', 'Help'].includes(activeTab) || isMobileMoreOpen
-                        ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 shadow-md' 
-                        : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                        ? 'text-[#0071E3] dark:text-[#0A84FF]' 
+                        : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
                     }`}
                   >
-                    <div className="relative">
-                      <Menu className="w-4 h-4 shrink-0" />
+                    <div className={`p-1 rounded-xl relative transition-colors ${(['Admin', 'Notifications', 'PDFConfig', 'Help'].includes(activeTab) || isMobileMoreOpen) ? 'bg-[#0071E3]/12' : ''}`}>
+                      <Menu className="w-5 h-5 shrink-0 stroke-[2.2]" />
                       {unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                        <span className="absolute 1 top-0.5 right-0.5 w-2 h-2 bg-[#FF3B30] rounded-full" />
                       )}
                     </div>
-                    <span className="text-[9px] font-black uppercase tracking-wider leading-none">Menú</span>
+                    <span className="text-[10px] font-semibold tracking-tight leading-none">Más</span>
                   </button>
                 )}
               </div>

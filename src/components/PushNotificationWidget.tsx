@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, BellRing, Smartphone, CheckCircle2, AlertTriangle, Loader2, Radio, Volume2, ShieldAlert } from 'lucide-react';
+import { Bell, BellRing, Smartphone, CheckCircle2, AlertTriangle, Loader2, Radio, Volume2, ShieldAlert, X } from 'lucide-react';
 import { PushNotificationService } from '../services/PushNotificationService';
 import { AppUser } from '../types';
 
@@ -15,6 +15,9 @@ export const PushNotificationWidget: React.FC<PushNotificationWidgetProps> = ({ 
   const [actionLoading, setActionLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [dismissed, setDismissed] = useState(() => {
+    return localStorage.getItem('push_notification_widget_dismissed') === 'true';
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -39,6 +42,11 @@ export const PushNotificationWidget: React.FC<PushNotificationWidgetProps> = ({ 
       mounted = false;
     };
   }, []);
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    localStorage.setItem('push_notification_widget_dismissed', 'true');
+  };
 
   const handleToggleSubscribe = async () => {
     if (!isSupported) return;
@@ -75,7 +83,7 @@ export const PushNotificationWidget: React.FC<PushNotificationWidgetProps> = ({ 
     try {
       await PushNotificationService.sendTestNotification();
       setFeedback({
-        text: '¡Notificación de prueba enviada! Revisa el panel de notificaciones de tu dispositivo.',
+        text: '¡Notificación de prueba enviada! Revisa el panel de tu dispositivo.',
         type: 'success'
       });
     } catch (error: any) {
@@ -89,190 +97,142 @@ export const PushNotificationWidget: React.FC<PushNotificationWidgetProps> = ({ 
     }
   };
 
+  // Do not flash empty or loading boxes on login
   if (loading) {
-    return (
-      <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-white/10 flex items-center justify-center gap-2 text-xs text-zinc-500">
-        <Loader2 className="w-4 h-4 animate-spin text-sky-500" />
-        <span>Verificando estado de notificaciones Push...</span>
-      </div>
-    );
+    return null;
   }
 
+  // If dismissed by user and not currently subscribed, don't show the card
+  if (dismissed && !isSubscribed) {
+    return null;
+  }
+
+  // If browser doesn't support push notifications, do not block or show intrusive alert
   if (!isSupported) {
-    return (
-      <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-xs font-bold text-amber-900 dark:text-amber-300">
-            Alertas Push no soportadas
-          </p>
-          <p className="text-[11px] text-amber-700/90 dark:text-amber-400/80 mt-0.5 leading-relaxed">
-            Tu navegador actual no soporta notificaciones en segundo plano. Te sugerimos usar Chrome, Edge o instalar la app como PWA en Android/iOS.
-          </p>
+    if (compact) {
+      return (
+        <div className="p-3 rounded-2xl bg-[#FF9500]/10 text-[#C96800] dark:text-[#FF9F0A] text-xs flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>Alertas Push no soportadas en este navegador.</span>
         </div>
-      </div>
-    );
+      );
+    }
+    return null;
   }
 
-  if (isSubscribed) {
+  // Compact / Active mode
+  if (compact || isSubscribed) {
     return (
-      <div className="p-3 px-4 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-500/30 text-zinc-900 dark:text-zinc-100 flex flex-wrap items-center justify-between gap-3 shadow-sm transition-all">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="relative flex h-3 w-3 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-          </span>
-          <div className="flex items-center gap-2 min-w-0">
-            <BellRing className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
-              Alertas Push Activas
-            </span>
+      <div className="p-3.5 px-4 rounded-2xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 text-[#1D1D1F] dark:text-[#F5F5F7] flex flex-wrap items-center justify-between gap-3 shadow-xs transition-all">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-[#34C759]/15 text-[#34C759] flex items-center justify-center shrink-0">
+            <BellRing className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-[#1D1D1F] dark:text-[#F5F5F7] truncate">
+              {isSubscribed ? 'Alertas Push Activas' : 'Alertas Push'}
+            </p>
+            <p className="text-[11px] text-[#6E6E73] dark:text-[#98989D] truncate">
+              {isSubscribed ? 'Notificaciones en segundo plano habilitadas' : 'Recibe avisos de hallazgos críticos'}
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleTestNotification}
-            disabled={testing}
-            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
-            title="Probar envío de notificación"
-          >
-            <Radio className="w-3.5 h-3.5" />
-            <span>{testing ? 'Enviando...' : 'Probar Alerta'}</span>
-          </button>
-          
+          {isSubscribed && (
+            <button
+              type="button"
+              onClick={handleTestNotification}
+              disabled={testing}
+              className="px-3 py-1.5 rounded-xl bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 active:scale-98"
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span>{testing ? 'Enviando...' : 'Probar'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleToggleSubscribe}
             disabled={actionLoading}
-            title="Desactivar notificaciones push"
-            className="px-2.5 py-1.5 rounded-xl text-zinc-500 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all cursor-pointer text-xs font-semibold"
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              isSubscribed
+                ? 'bg-[#E5E5EA] dark:bg-[#2C2C2E] text-[#6E6E73] dark:text-[#98989D] hover:text-[#FF3B30]'
+                : 'bg-[#0071E3] text-white hover:bg-[#0077ED]'
+            }`}
           >
-            {actionLoading ? '...' : 'Desactivar'}
+            {actionLoading ? '...' : isSubscribed ? 'Desactivar' : 'Activar'}
           </button>
         </div>
 
         {feedback && (
-          <div
-            className={`w-full p-2.5 rounded-xl text-xs font-medium flex items-center gap-2 ${
-              feedback.type === 'success'
-                ? 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border border-emerald-500/30'
-                : 'bg-red-500/20 text-red-800 dark:text-red-200 border border-red-500/30'
-            }`}
-          >
-            {feedback.type === 'success' ? (
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-300" />
-            ) : (
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-600 dark:text-red-300" />
-            )}
-            <span>{feedback.text}</span>
+          <div className="w-full text-xs font-medium text-[#34C759] dark:text-[#30D158] pt-1">
+            {feedback.text}
           </div>
         )}
       </div>
     );
   }
 
+  // Expanded banner (subtle Apple HIG card with close button)
   return (
-    <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-sky-950 to-indigo-950 text-white border border-sky-500/30 shadow-xl relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/10 rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none" />
-      
-      <div className="relative z-10 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3.5">
-            <div className={`p-3 rounded-2xl shrink-0 ${isSubscribed ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30' : 'bg-sky-500/20 text-sky-300 border border-sky-400/30'}`}>
-              {isSubscribed ? <BellRing className="w-6 h-6 animate-pulse" /> : <Smartphone className="w-6 h-6" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="text-base font-black tracking-tight">
-                  Alertas Push para Supervisores
-                </h4>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                  isSubscribed 
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30' 
-                    : 'bg-zinc-500/20 text-zinc-300 border-zinc-400/30'
-                }`}>
-                  {isSubscribed ? '● Activas' : '○ Inactivas'}
-                </span>
-              </div>
-              <p className="text-xs text-zinc-300 mt-1 max-w-xl leading-relaxed">
-                Recibe alertas instantáneas en tu celular o escritorio en cuanto se reporte un <strong>Hallazgo Crítico</strong> en planta, permitiendo actuar de inmediato aunque la app esté cerrada.
-              </p>
-            </div>
+    <div className="p-4 sm:p-5 rounded-2xl md:rounded-3xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shadow-xs relative transition-colors">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3.5 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-[#0071E3]/12 text-[#0071E3] dark:text-[#0A84FF] flex items-center justify-center shrink-0">
+            <Bell className="w-5 h-5 stroke-[2.2]" />
           </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-            {isSubscribed && (
-              <button
-                type="button"
-                onClick={handleTestNotification}
-                disabled={testing}
-                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-              >
-                <Radio className="w-3.5 h-3.5 text-sky-300" />
-                <span>{testing ? 'Enviando...' : 'Probar Alerta'}</span>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleToggleSubscribe}
-              disabled={actionLoading}
-              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-md flex items-center gap-2 ${
-                isSubscribed
-                  ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/10'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/50'
-              }`}
-            >
-              {actionLoading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Procesando...</span>
-                </>
-              ) : isSubscribed ? (
-                <span>Desactivar</span>
-              ) : (
-                <>
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  <span>Activar Alertas</span>
-                </>
-              )}
-            </button>
+          <div className="min-w-0">
+            <h4 className="text-sm sm:text-base font-bold text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight">
+              Alertas Push en Terreno
+            </h4>
+            <p className="text-xs text-[#6E6E73] dark:text-[#98989D] mt-1 leading-relaxed max-w-xl">
+              Recibe avisos inmediatos en tu dispositivo cuando se reporte un <strong>Hallazgo Crítico</strong> en planta.
+            </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-white/10 text-xs">
-          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white/5 border border-white/5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="text-zinc-300">Funciona en segundo plano</span>
-          </div>
-          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white/5 border border-white/5">
-            <Radio className="w-4 h-4 text-sky-400 shrink-0" />
-            <span className="text-zinc-300">Entrega en tiempo real</span>
-          </div>
-          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white/5 border border-white/5">
-            <Volume2 className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="text-zinc-300">Aviso acústico y vibración</span>
-          </div>
-        </div>
-
-        {feedback && (
-          <div
-            className={`p-3 rounded-2xl text-xs font-medium flex items-start gap-2.5 transition-all ${
-              feedback.type === 'success'
-                ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30'
-                : 'bg-red-500/20 text-red-200 border border-red-500/30'
-            }`}
-          >
-            {feedback.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-300" />
-            ) : (
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-300" />
-            )}
-            <span>{feedback.text}</span>
-          </div>
-        )}
+        <button
+          onClick={handleDismiss}
+          className="w-7 h-7 rounded-full bg-[#E5E5EA]/60 dark:bg-[#2C2C2E] text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+          title="Descartar"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#D2D2D7]/30 dark:border-white/5">
+        <div className="flex items-center gap-4 text-xs text-[#6E6E73] dark:text-[#98989D]">
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-[#34C759]" />
+            Segundo plano
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Radio className="w-3.5 h-3.5 text-[#0071E3]" />
+            Tiempo real
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleToggleSubscribe}
+          disabled={actionLoading}
+          className="px-4 py-2 rounded-xl bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 active:scale-98 shadow-sm"
+        >
+          {actionLoading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <ShieldAlert className="w-3.5 h-3.5" />
+          )}
+          <span>Activar Alertas</span>
+        </button>
+      </div>
+
+      {feedback && (
+        <div className="mt-2 text-xs font-medium text-[#34C759] dark:text-[#30D158]">
+          {feedback.text}
+        </div>
+      )}
     </div>
   );
 };
