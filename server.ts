@@ -55,6 +55,23 @@ async function initAdmin() {
 const expressApp = express();
 expressApp.use(express.json({ limit: '1mb' }));
 
+// Serve Web App Manifest and Service Worker with optimal PWA headers
+expressApp.get('/manifest.json', (_req, res) => {
+  const manifestPath = path.join(process.cwd(), 'public', 'manifest.json');
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.sendFile(manifestPath);
+});
+
+expressApp.get('/sw.js', (_req, res) => {
+  const swPath = path.join(process.cwd(), 'public', 'sw.js');
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(swPath);
+});
+
 function pushUnavailable(res: express.Response) {
   return res.status(503).json({ error: 'Push notifications are not configured on the server' });
 }

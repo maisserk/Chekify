@@ -1,4 +1,4 @@
-const CACHE_NAME = 'checkify-v3';
+const CACHE_NAME = 'checkify-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -6,7 +6,15 @@ const ASSETS_TO_CACHE = [
   '/logo.png',
   '/logo_small.png',
   '/apple-touch-icon.png',
+  '/apple-touch-icon-precomposed.png',
+  '/pwa-48x48.png',
+  '/pwa-72x72.png',
+  '/pwa-96x96.png',
+  '/pwa-128x128.png',
+  '/pwa-144x144.png',
+  '/pwa-152x152.png',
   '/pwa-192x192.png',
+  '/pwa-384x384.png',
   '/pwa-512x512.png',
   '/pwa-maskable-192x192.png',
   '/pwa-maskable-512x512.png',
@@ -56,6 +64,22 @@ self.addEventListener('fetch', (event) => {
     url.pathname.includes('/@vite/') || 
     url.pathname.includes('node_modules')
   ) {
+    return;
+  }
+
+  // Manifest and service worker should always be network-first to get instant icon updates
+  if (url.pathname === '/manifest.json' || url.pathname === '/sw.js') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
+    );
     return;
   }
 
