@@ -1,10 +1,15 @@
-const CACHE_NAME = 'checkify-v2';
+const CACHE_NAME = 'checkify-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/favicon.png',
   '/logo.png',
   '/logo_small.png',
+  '/apple-touch-icon.png',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+  '/pwa-maskable-192x192.png',
+  '/pwa-maskable-512x512.png',
   '/manifest.json'
 ];
 
@@ -120,7 +125,7 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: '/logo.png',
+    icon: '/pwa-192x192.png',
     badge: '/favicon.png',
     tag: data.tag || 'critical-alert',
     renotify: true,

@@ -10909,8 +10909,8 @@ const AppLayout = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white flex-shrink-0">
-                        <Smartphone className="w-5 h-5 text-emerald-400" />
+                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800/80 flex items-center justify-center p-1.5 flex-shrink-0 shadow-xs overflow-hidden">
+                        <img src="/logo_small.png" alt="CheKify Logo" className="w-full h-full object-contain" />
                       </div>
                       <div>
                         <h4 className="font-extrabold text-xs tracking-wider text-zinc-100 uppercase">Instalar Checkify</h4>
@@ -10947,8 +10947,8 @@ const AppLayout = ({
                   >
                     <div className="flex justify-between items-start gap-2">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-900 dark:text-white flex-shrink-0">
-                          <Smartphone className="w-5 h-5 text-emerald-500" />
+                        <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 flex items-center justify-center p-1.5 flex-shrink-0 shadow-xs overflow-hidden">
+                          <img src="/logo_small.png" alt="CheKify Logo" className="w-full h-full object-contain" />
                         </div>
                         <div>
                           <h3 className="font-extrabold text-sm uppercase tracking-tight">Instalar en iOS</h3>
