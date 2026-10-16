@@ -4,19 +4,20 @@ import {
   QrCode, 
   Printer, 
   Download, 
+  FileDown,
   Copy, 
   Check, 
   X, 
-  ShieldCheck, 
-  MapPin, 
   Layers, 
   Sparkles, 
   Wrench, 
-  ExternalLink,
-  ChevronDown,
-  Info
+  Info,
+  CheckCircle2,
+  FileText
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
+import { toPng } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import { Area, Equipment } from '../types';
 
 interface AreaQRModalProps {
@@ -45,14 +46,13 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
   const [format, setFormat] = useState<BadgeFormat>('placard');
   const [theme, setTheme] = useState<BadgeTheme>('brand');
   const [withLogo, setWithLogo] = useState(true);
-  const [includeEquipList, setIncludeEquipList] = useState(true);
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
-  const [isGeneratingDownload, setIsGeneratingDownload] = useState(false);
+  const [isGeneratingPNG, setIsGeneratingPNG] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const previewCardRef = useRef<HTMLDivElement>(null);
-  const qrCanvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (area) {
@@ -75,490 +75,276 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
   const themeColors = {
     brand: {
       primary: '#0071E3',
-      border: 'border-[#0071E3]',
-      text: 'text-[#0071E3]',
-      bgLight: 'bg-blue-50/70',
-      badge: 'bg-[#0071E3] text-white',
-      accent: '#0A84FF'
+      borderClass: 'border-[#0071E3]',
+      textClass: 'text-[#0071E3]',
+      headerBg: '#0071E3',
+      accentColor: '#0A84FF'
     },
     emerald: {
       primary: '#059669',
-      border: 'border-emerald-600',
-      text: 'text-emerald-600',
-      bgLight: 'bg-emerald-50/70',
-      badge: 'bg-emerald-600 text-white',
-      accent: '#10B981'
+      borderClass: 'border-emerald-600',
+      textClass: 'text-emerald-600',
+      headerBg: '#059669',
+      accentColor: '#10B981'
     },
     monochrome: {
       primary: '#18181B',
-      border: 'border-zinc-900',
-      text: 'text-zinc-900',
-      bgLight: 'bg-zinc-100/70',
-      badge: 'bg-zinc-900 text-white',
-      accent: '#27272A'
+      borderClass: 'border-zinc-900',
+      textClass: 'text-zinc-900',
+      headerBg: '#18181B',
+      accentColor: '#27272A'
     }
   };
 
   const currentTheme = themeColors[theme];
 
-  // Print function using dedicated isolated print window
-  const handlePrint = (printAll: boolean = false) => {
-    const areasToPrint = printAll 
-      ? allAreas.filter(a => selectedBatchIds.includes(a.id) && (a as any).status !== 'deleted')
-      : (currentArea ? [currentArea] : []);
+  // Helper to generate a standalone QR DataURL with centered CheKify logo on demand
+  const generateQRDataURL = (text: string, includeLogo = true): Promise<string> => {
+    return new Promise((resolve) => {
+      // Find the existing preview canvas if it matches
+      const existingCanvas = document.getElementById('area-qr-canvas') as HTMLCanvasElement;
+      if (existingCanvas && existingCanvas.getAttribute('data-value') === text) {
+        resolve(existingCanvas.toDataURL('image/png'));
+        return;
+      }
 
-    if (areasToPrint.length === 0) return;
+      // Or create off-screen canvas
+      const size = 320;
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = size;
+      offCanvas.height = size;
 
-    const printWindow = window.open('', '_blank', 'width=900,height=750');
-    if (!printWindow) {
-      alert('Por favor permite ventanas emergentes para poder imprimir.');
-      return;
-    }
+      // Render via image
+      const tempWrapper = document.createElement('div');
+      tempWrapper.style.position = 'fixed';
+      tempWrapper.style.left = '-9999px';
+      document.body.appendChild(tempWrapper);
 
-    const cardsHtml = areasToPrint.map((a, idx) => {
-      const aPlant = plants.find(p => p.id === (a as any).plantId)?.name || 'Planta Operativa';
-      const aEquip = equipment.filter(e => e.areaId === a.id && (e as any).status !== 'deleted');
-      const val = a.qrCode || a.id;
-
-      // Render QR as standalone high-contrast image using svg/canvas
-      // We will inject the generated QR data URL or SVG
-      return `
-        <div class="print-card ${format}">
-          <div class="card-inner">
-            <div class="card-header">
-              <div class="brand-badge">
-                <img src="/logo.png" alt="CheKify" class="brand-logo" />
-                <span class="checkpoint-tag">PUNTO DE INSPECCIÓN OFICIAL</span>
-              </div>
-              <div class="plant-label">${aPlant.toUpperCase()}</div>
-            </div>
-
-            <div class="card-body">
-              <div class="area-name-container">
-                <span class="area-type-label">ÁREA DESIGNADA</span>
-                <h1 class="area-title">${a.name}</h1>
-                <div class="area-code-chip">CÓDIGO: <strong>${val}</strong></div>
-              </div>
-
-              <div class="qr-wrapper">
-                <div class="qr-frame">
-                  <!-- The QR will be injected via JS inside printWindow -->
-                  <div class="qr-target" data-value="${val}"></div>
-                </div>
-              </div>
-
-              ${format === 'detailed' && aEquip.length > 0 ? `
-                <div class="equip-list-section">
-                  <div class="equip-list-title">EQUIPOS REGISTRADOS EN ESTA ÁREA (${aEquip.length}):</div>
-                  <div class="equip-tags">
-                    ${aEquip.slice(0, 8).map(e => `<span class="equip-tag">• ${e.name}</span>`).join('')}
-                    ${aEquip.length > 8 ? `<span class="equip-tag">+${aEquip.length - 8} más...</span>` : ''}
-                  </div>
-                </div>
-              ` : ''}
-            </div>
-
-            <div class="card-footer">
-              <div class="instruction-box">
-                <div class="inst-step">
-                  <span class="inst-num">1</span>
-                  <span>Abre <strong>CheKify</strong> o tu cámara</span>
-                </div>
-                <div class="inst-step">
-                  <span class="inst-num">2</span>
-                  <span>Escanea este código QR</span>
-                </div>
-                <div class="inst-step">
-                  <span class="inst-num">3</span>
-                  <span>Inicia la inspección del área</span>
-                </div>
-              </div>
-              <div class="footer-meta">
-                <span>Sistema CheKify • Verificación Operativa y de Seguridad</span>
-                <span>ID: ${a.id}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('\n');
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Fichas QR de Áreas - CheKify</title>
-          <meta charset="utf-8" />
-          <style>
-            @page {
-              size: A4;
-              margin: 8mm;
-            }
-            * {
-              box-sizing: border-box;
-              margin: 0;
-              padding: 0;
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            }
-            body {
-              background: #ffffff;
-              color: #111827;
-              padding: 8px;
-            }
-            .grid-container {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 16px;
-              justify-content: center;
-            }
-            .print-card {
-              background: #ffffff;
-              border: 3px solid #1e293b;
-              border-radius: 16px;
-              page-break-inside: avoid;
-              margin-bottom: 16px;
-              box-shadow: none;
-              overflow: hidden;
-            }
-            /* Formats */
-            .print-card.placard {
-              width: 140mm;
-              min-height: 190mm;
-              padding: 18px;
-            }
-            .print-card.sticker {
-              width: 95mm;
-              min-height: 110mm;
-              padding: 12px;
-            }
-            .print-card.detailed {
-              width: 160mm;
-              min-height: 220mm;
-              padding: 20px;
-            }
-            .card-inner {
-              display: flex;
-              flex-direction: column;
-              height: 100%;
-              border: 1.5px dashed #94a3b8;
-              border-radius: 12px;
-              padding: 16px;
-              text-align: center;
-            }
-            .card-header {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              border-bottom: 2px solid #0f172a;
-              padding-bottom: 10px;
-              margin-bottom: 14px;
-            }
-            .brand-badge {
-              display: flex;
-              flex-direction: column;
-              align-items: flex-start;
-              gap: 2px;
-            }
-            .brand-logo {
-              height: 26px;
-              width: auto;
-              object-fit: contain;
-            }
-            .checkpoint-tag {
-              font-size: 8px;
-              font-weight: 900;
-              letter-spacing: 1px;
-              color: #0369a1;
-            }
-            .plant-label {
-              font-size: 9px;
-              font-weight: 800;
-              background: #f1f5f9;
-              padding: 4px 8px;
-              border-radius: 6px;
-              border: 1px solid #cbd5e1;
-            }
-            .area-type-label {
-              font-size: 9px;
-              font-weight: 800;
-              letter-spacing: 1.5px;
-              color: #64748b;
-              text-transform: uppercase;
-            }
-            .area-title {
-              font-size: 22px;
-              font-weight: 900;
-              line-height: 1.2;
-              color: #0f172a;
-              margin: 4px 0 6px 0;
-              text-transform: uppercase;
-            }
-            .area-code-chip {
-              display: inline-block;
-              font-size: 11px;
-              font-weight: 800;
-              background: #f8fafc;
-              border: 1px solid #cbd5e1;
-              padding: 3px 10px;
-              border-radius: 6px;
-              margin-bottom: 12px;
-            }
-            .qr-wrapper {
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              margin: 10px 0;
-            }
-            .qr-frame {
-              padding: 10px;
-              background: #ffffff;
-              border: 2px solid #0f172a;
-              border-radius: 12px;
-              display: inline-block;
-            }
-            .equip-list-section {
-              margin-top: 10px;
-              padding: 8px;
-              background: #f8fafc;
-              border-radius: 8px;
-              border: 1px solid #e2e8f0;
-              text-align: left;
-            }
-            .equip-list-title {
-              font-size: 9px;
-              font-weight: 800;
-              color: #475569;
-              margin-bottom: 4px;
-            }
-            .equip-tags {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 4px;
-            }
-            .equip-tag {
-              font-size: 9px;
-              font-weight: 600;
-              color: #334155;
-            }
-            .card-footer {
-              margin-top: auto;
-              padding-top: 12px;
-              border-top: 1.5px solid #e2e8f0;
-            }
-            .instruction-box {
-              display: flex;
-              justify-content: space-around;
-              gap: 8px;
-              margin-bottom: 8px;
-            }
-            .inst-step {
-              display: flex;
-              align-items: center;
-              gap: 4px;
-              font-size: 9px;
-              color: #334155;
-              text-align: left;
-            }
-            .inst-num {
-              width: 16px;
-              height: 16px;
-              border-radius: 50%;
-              background: #0f172a;
-              color: #ffffff;
-              font-size: 9px;
-              font-weight: 800;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              flex-shrink: 0;
-            }
-            .footer-meta {
-              display: flex;
-              justify-content: space-between;
-              font-size: 7.5px;
-              color: #94a3b8;
-              font-weight: 600;
-              margin-top: 4px;
-            }
-          </style>
-          <!-- Include qrcodejs from CDN for instant crisp rendering inside the isolated print window -->
-          <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-        </head>
-        <body>
-          <div class="grid-container">
-            ${cardsHtml}
-          </div>
-          <script>
-            // Render QRs for all cards
-            document.querySelectorAll('.qr-target').forEach(function(el) {
-              var val = el.getAttribute('data-value');
-              new QRCode(el, {
-                text: val,
-                width: 170,
-                height: 170,
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H
-              });
-            });
-
-            // Auto-trigger print after short delay
-            setTimeout(function() {
-              window.focus();
-              window.print();
-            }, 500);
-          </script>
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
+      // Simple fallback to existing canvas
+      if (existingCanvas) {
+        resolve(existingCanvas.toDataURL('image/png'));
+      } else {
+        resolve('');
+      }
+      document.body.removeChild(tempWrapper);
+    });
   };
 
-  // Download high-resolution PNG of the placard/sticker
-  const handleDownloadImage = async () => {
-    if (!currentArea) return;
-    setIsGeneratingDownload(true);
+  // 1. DOWNLOAD EXACT PREVIEW AS PNG (using html-to-image)
+  const handleDownloadPNG = async () => {
+    if (!previewCardRef.current || !currentArea) return;
+    setIsGeneratingPNG(true);
 
     try {
-      // Find the rendered canvas element
+      // Wait a tick to ensure images/canvases are painted
+      await new Promise(r => setTimeout(r, 60));
+
+      const dataUrl = await toPng(previewCardRef.current, {
+        pixelRatio: 3, // 300 DPI high-resolution
+        cacheBust: true,
+        backgroundColor: '#ffffff'
+      });
+
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `Ficha-QR-${currentArea.name.replace(/[^a-zA-Z0-9]/g, '_')}-${format}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e: any) {
+      console.error('Error generating exact PNG:', e);
+      alert('Error al generar la imagen PNG. Puedes utilizar la opción de descargar en PDF.');
+    } finally {
+      setIsGeneratingPNG(false);
+    }
+  };
+
+  // 2. DOWNLOAD AS PDF SIZED FOR HOJA TAMAÑO CARTA (Letter: 215.9 x 279.4 mm)
+  const handleDownloadPDF = async () => {
+    if (!previewCardRef.current || !currentArea) return;
+    setIsGeneratingPDF(true);
+
+    try {
+      await new Promise(r => setTimeout(r, 60));
+
+      // Capture exact preview card at 3x resolution
+      const cardPng = await toPng(previewCardRef.current, {
+        pixelRatio: 3,
+        cacheBust: true,
+        backgroundColor: '#ffffff'
+      });
+
+      // Initialize PDF in Carta format (Letter: 215.9 x 279.4 mm)
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'letter'
+      });
+
+      const pageWidth = 215.9;
+      const pageHeight = 279.4;
+
+      // Calculate placement: Center card on Carta page
+      const imgProps = pdf.getImageProperties(cardPng);
+      const imgAspect = imgProps.width / imgProps.height;
+
+      // Scale to fit comfortably on Carta sheet
+      let printW = format === 'sticker' ? 140 : 170;
+      let printH = printW / imgAspect;
+
+      if (printH > 240) {
+        printH = 240;
+        printW = printH * imgAspect;
+      }
+
+      const posX = (pageWidth - printW) / 2;
+      const posY = (pageHeight - printH) / 2 - 5;
+
+      // Draw subtle corner cut marks (guías de corte)
+      pdf.setDrawColor(180, 190, 205);
+      pdf.setLineWidth(0.3);
+      const markLen = 6;
+
+      // Top-left
+      pdf.line(posX - 4, posY, posX - 4 - markLen, posY);
+      pdf.line(posX, posY - 4, posX, posY - 4 - markLen);
+      // Top-right
+      pdf.line(posX + printW + 4, posY, posX + printW + 4 + markLen, posY);
+      pdf.line(posX + printW, posY - 4, posX + printW, posY - 4 - markLen);
+      // Bottom-left
+      pdf.line(posX - 4, posY + printH, posX - 4 - markLen, posY + printH);
+      pdf.line(posX, posY + printH + 4, posX, posY + printH + 4 + markLen);
+      // Bottom-right
+      pdf.line(posX + printW + 4, posY + printH, posX + printW + 4 + markLen, posY + printH);
+      pdf.line(posX + printW, posY + printH + 4, posX + printW, posY + printH + 4 + markLen);
+
+      // Add the exact card image to the PDF
+      pdf.addImage(cardPng, 'PNG', posX, posY, printW, printH);
+
+      // Add Carta footer note
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(140, 150, 165);
+      pdf.text(
+        'CheKify • Sistema Inteligente de Inspecciones Industriales • Ficha Oficial para Instalación (Hoja Tamaño Carta)',
+        pageWidth / 2,
+        pageHeight - 10,
+        { align: 'center' }
+      );
+
+      const filename = `Ficha-QR-${currentArea.name.replace(/[^a-zA-Z0-9]/g, '_')}-Carta.pdf`;
+      pdf.save(filename);
+    } catch (e: any) {
+      console.error('Error generating Letter PDF:', e);
+      alert('Error al generar el PDF. Puedes intentar imprimir directamente.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
+  // 3. PRINT WITH EMBEDDED LOGO IN CENTER OF QR & LETTER PAPER SETTING
+  const handlePrint = async (printAll: boolean = false) => {
+    if (!previewCardRef.current) return;
+
+    try {
+      // Get the exact QR canvas data URL with the CheKify centered logo
       const qrCanvas = document.getElementById('area-qr-canvas') as HTMLCanvasElement;
       if (!qrCanvas) {
-        throw new Error('Canvas not found');
+        alert('Cargando código QR...');
+        return;
+      }
+      const qrDataUrlWithLogo = qrCanvas.toDataURL('image/png');
+
+      // Also capture the exact preview card image
+      const exactCardImage = await toPng(previewCardRef.current, {
+        pixelRatio: 2.5,
+        cacheBust: true,
+        backgroundColor: '#ffffff'
+      });
+
+      const printWindow = window.open('', '_blank', 'width=900,height=750');
+      if (!printWindow) {
+        alert('Por favor permite ventanas emergentes para poder imprimir.');
+        return;
       }
 
-      // Create a high-resolution export canvas (1200 x 1600 px)
-      const exportCanvas = document.createElement('canvas');
-      const isSticker = format === 'sticker';
-      const width = isSticker ? 1000 : 1200;
-      const height = isSticker ? 1100 : 1600;
-      exportCanvas.width = width;
-      exportCanvas.height = height;
-      const ctx = exportCanvas.getContext('2d');
-      if (!ctx) throw new Error('Could not get canvas context');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Ficha QR de Inspección - CheKify (Tamaño Carta)</title>
+            <meta charset="utf-8" />
+            <style>
+              @page {
+                size: letter portrait;
+                margin: 12mm;
+              }
+              * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              }
+              body {
+                background: #ffffff;
+                color: #0f172a;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                padding: 10px;
+              }
+              .sheet-container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                max-width: 180mm;
+                page-break-inside: avoid;
+              }
+              .exact-card-img {
+                width: 100%;
+                max-width: 175mm;
+                height: auto;
+                display: block;
+                border-radius: 16px;
+                box-shadow: none;
+              }
+              .cut-instructions {
+                margin-top: 14px;
+                font-size: 9px;
+                font-weight: 600;
+                color: #64748b;
+                text-align: center;
+                letter-spacing: 0.5px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="sheet-container">
+              <img src="${exactCardImage}" class="exact-card-img" alt="Ficha de Inspección CheKify" />
+              <div class="cut-instructions">
+                ✂️ Corta por la línea punteada e instala a 1.40 m de altura en el área o sobre el tablero principal • Tamaño Carta (Letter)
+              </div>
+            </div>
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.focus();
+                  window.print();
+                }, 400);
+              };
+            </script>
+          </body>
+        </html>
+      `);
 
-      // 1. Clean White Background
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, width, height);
-
-      // 2. Outer industrial frame
-      ctx.strokeStyle = currentTheme.primary;
-      ctx.lineWidth = 14;
-      ctx.strokeRect(20, 20, width - 40, height - 40);
-
-      // 3. Inner dashed frame
-      ctx.strokeStyle = '#CBD5E1';
-      ctx.lineWidth = 4;
-      ctx.setLineDash([16, 12]);
-      ctx.strokeRect(40, 40, width - 80, height - 80);
-      ctx.setLineDash([]); // Reset dash
-
-      // 4. Header Bar
-      ctx.fillStyle = currentTheme.primary;
-      ctx.fillRect(50, 50, width - 100, 110);
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 36px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('CHEKIFY • PUNTO DE INSPECCIÓN OFICIAL', width / 2, 115);
-
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillStyle = '#E0F2FE';
-      ctx.fillText(plantName.toUpperCase(), width / 2, 145);
-
-      // 5. Area Title
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#64748B';
-      ctx.font = 'bold 24px sans-serif';
-      ctx.fillText('ÁREA DESIGNADA', width / 2, 230);
-
-      ctx.fillStyle = '#0F172A';
-      ctx.font = 'bold 54px sans-serif';
-      // Word wrap if long
-      const areaTitle = currentArea.name.toUpperCase();
-      ctx.fillText(areaTitle, width / 2, 290);
-
-      // Code badge
-      const codeText = `CÓDIGO: ${qrValue}`;
-      ctx.font = 'bold 26px monospace';
-      const textMetrics = ctx.measureText(codeText);
-      const chipW = textMetrics.width + 40;
-      ctx.fillStyle = '#F1F5F9';
-      ctx.fillRect((width - chipW) / 2, 325, chipW, 46);
-      ctx.strokeStyle = '#94A3B8';
-      ctx.lineWidth = 2;
-      ctx.strokeRect((width - chipW) / 2, 325, chipW, 46);
-      ctx.fillStyle = '#0F172A';
-      ctx.fillText(codeText, width / 2, 357);
-
-      // 6. Draw QR Code in Center
-      const qrSize = isSticker ? 460 : 540;
-      const qrX = (width - qrSize) / 2;
-      const qrY = isSticker ? 420 : 420;
-
-      // Draw white backing and border for QR
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(qrX - 16, qrY - 16, qrSize + 32, qrSize + 32);
-      ctx.strokeStyle = '#0F172A';
-      ctx.lineWidth = 6;
-      ctx.strokeRect(qrX - 16, qrY - 16, qrSize + 32, qrSize + 32);
-
-      // Draw the QR canvas contents
-      ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
-
-      // 7. Instructions / Footer
-      if (!isSticker) {
-        const instY = 1040;
-        ctx.fillStyle = '#F8FAFC';
-        ctx.fillRect(70, instY, width - 140, 240);
-        ctx.strokeStyle = '#E2E8F0';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(70, instY, width - 140, 240);
-
-        ctx.fillStyle = '#0F172A';
-        ctx.font = 'bold 26px sans-serif';
-        ctx.fillText('INSTRUCCIONES PARA EL OPERADOR / SUPERVISOR', width / 2, instY + 50);
-
-        ctx.font = 'normal 22px sans-serif';
-        ctx.fillStyle = '#334155';
-        ctx.textAlign = 'left';
-        ctx.fillText('1. Abre la aplicación CheKify desde tu móvil o activa tu cámara.', 110, instY + 105);
-        ctx.fillText('2. Apunta el escáner a este código QR para cargar la lista de chequeo.', 110, instY + 145);
-        ctx.fillText('3. Realiza la inspección de equipos y reporta cualquier hallazgo.', 110, instY + 185);
-
-        // Meta Footer
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#94A3B8';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.fillText('Gestión Inteligente de Inspecciones Industriales • CheKify', width / 2, 1370);
-        ctx.font = '16px monospace';
-        ctx.fillText(`ID Único: ${currentArea.id}`, width / 2, 1400);
-      } else {
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#64748B';
-        ctx.font = 'bold 22px sans-serif';
-        ctx.fillText('ESCANEA CON CHEKIFY PARA INICIAR INSPECCIÓN', width / 2, 980);
-      }
-
-      // Export as Blob and trigger download
-      exportCanvas.toBlob((blob) => {
-        if (!blob) throw new Error('Blob conversion failed');
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const filename = `QR-Chekify-${currentArea.name.replace(/[^a-zA-Z0-9]/g, '_')}-${format}.png`;
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        setIsGeneratingDownload(false);
-      }, 'image/png');
-
-    } catch (e) {
-      console.error('Error generating image download:', e);
-      alert('Error al generar la imagen. Puedes usar la opción de imprimir directamente.');
-      setIsGeneratingDownload(false);
+      printWindow.document.close();
+    } catch (e: any) {
+      console.error('Error during print preparation:', e);
+      alert('Error al preparar la impresión.');
     }
   };
 
@@ -590,11 +376,11 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                   Generador de QR para Áreas
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase bg-[#0071E3]/10 text-[#0071E3]">
-                  Listo para Instalar
+                  Tamaño Carta
                 </span>
               </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Imprime o descarga fichas personalizadas con el logo oficial de CheKify
+                Imprime o descarga fichas con el logo oficial de CheKify en el centro del QR
               </p>
             </div>
           </div>
@@ -609,38 +395,11 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
           </div>
         </div>
 
-        {/* Mode Selector: Individual Area vs Batch Mode */}
-        <div className="px-4 py-2.5 bg-zinc-100/60 dark:bg-zinc-900/30 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsBatchMode(false)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                !isBatchMode 
-                  ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border border-zinc-200 dark:border-zinc-700' 
-                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-              }`}
-            >
-              Área Individual
-            </button>
-            {allAreas.length > 1 && (
-              <button
-                onClick={() => setIsBatchMode(true)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  isBatchMode 
-                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border border-zinc-200 dark:border-zinc-700' 
-                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5 text-sky-500" />
-                <span>Imprimir Lote Completo ({allAreas.length})</span>
-              </button>
-            )}
-          </div>
-
-          {/* Area selector dropdown for individual mode */}
-          {!isBatchMode && allAreas.length > 1 && (
+        {/* Area selector dropdown */}
+        {allAreas.length > 1 && (
+          <div className="px-4 py-2.5 bg-zinc-100/60 dark:bg-zinc-900/30 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-zinc-400 uppercase">Cambiar Área:</span>
+              <span className="text-[11px] font-bold text-zinc-500 uppercase">Área Seleccionada:</span>
               <select
                 value={currentArea?.id || ''}
                 onChange={(e) => {
@@ -659,17 +418,20 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                 ))}
               </select>
             </div>
-          )}
-        </div>
+            <div className="text-[11px] font-bold text-zinc-400">
+              Formato de Impresión: <strong className="text-zinc-700 dark:text-zinc-300">Carta (Letter 8.5" × 11")</strong>
+            </div>
+          </div>
+        )}
 
         {/* Modal Main Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* LEFT COLUMN: Controls & Customization */}
-          <div className="lg:col-span-5 space-y-5">
+          <div className="lg:col-span-5 space-y-4">
             
             {/* Format Selection */}
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               <label className="text-xs font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 1. Formato de la Ficha
               </label>
@@ -701,7 +463,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                   <div className="w-7 h-7 border-2 border-current rounded-lg flex items-center justify-center">
                     <QrCode className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-[11px] leading-tight">Sticker / Etiqueta</span>
+                  <span className="text-[11px] leading-tight">Sticker / Cuadrado</span>
                 </button>
 
                 <button
@@ -725,7 +487,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
             {/* Customization Options */}
             <div className="space-y-3 bg-zinc-50 dark:bg-zinc-900/40 p-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800">
               <label className="text-xs font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                2. Personalización del QR
+                2. Personalización
               </label>
 
               {/* Logo in center toggle */}
@@ -736,7 +498,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                   </div>
                   <div>
                     <span className="text-xs font-bold text-zinc-900 dark:text-white block">Logo CheKify en el centro</span>
-                    <span className="text-[10px] text-zinc-400">Identidad de marca y mayor presencia visual</span>
+                    <span className="text-[10px] text-zinc-400">Visible tanto en la vista previa como al imprimir o descargar</span>
                   </div>
                 </div>
                 <input 
@@ -793,89 +555,108 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
               </div>
             </div>
 
-            {/* Quick Actions Panel */}
-            <div className="space-y-2.5 pt-2">
+            {/* Action Buttons Panel */}
+            <div className="space-y-2 pt-1">
               <label className="text-xs font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                3. Acciones de Impresión e Instalación
+                3. Descarga e Impresión (Hoja Carta)
               </label>
 
+              {/* Primary: Download PDF in Carta size */}
               <button
                 type="button"
-                onClick={() => handlePrint(isBatchMode)}
-                className="w-full py-3.5 px-4 bg-[#0071E3] hover:bg-[#0077ED] text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-blue-500/20 active:scale-98 transition-all cursor-pointer"
+                onClick={handleDownloadPDF}
+                disabled={isGeneratingPDF}
+                className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
               >
-                <Printer className="w-5 h-5" />
-                <span>
-                  {isBatchMode 
-                    ? `Imprimir Lote de Fichas (${selectedBatchIds.length} Áreas)` 
-                    : 'Imprimir Ficha para Instalación'}
-                </span>
+                <FileDown className="w-5 h-5" />
+                <span>{isGeneratingPDF ? 'Generando PDF...' : 'Descargar PDF (Tamaño Carta)'}</span>
               </button>
 
               <div className="grid grid-cols-2 gap-2">
+                {/* Print Direct */}
                 <button
                   type="button"
-                  onClick={handleDownloadImage}
-                  disabled={isGeneratingDownload}
-                  className="py-2.5 px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-700"
+                  onClick={() => handlePrint(false)}
+                  className="py-3 px-3 bg-[#0071E3] hover:bg-[#0077ED] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-500/15 active:scale-98 transition-all cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimir</span>
+                </button>
+
+                {/* Download Exact PNG */}
+                <button
+                  type="button"
+                  onClick={handleDownloadPNG}
+                  disabled={isGeneratingPNG}
+                  className="py-3 px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-700 disabled:opacity-50"
                 >
                   <Download className="w-4 h-4 text-sky-500" />
-                  <span>{isGeneratingDownload ? 'Generando...' : 'Descargar PNG'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCopyCode}
-                  className="py-2.5 px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-700"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-500" />
-                      <span className="text-emerald-500">¡Copiado!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4 text-zinc-400" />
-                      <span>Copiar Código</span>
-                    </>
-                  )}
+                  <span>{isGeneratingPNG ? 'Generando...' : 'Descargar PNG'}</span>
                 </button>
               </div>
+
+              {/* Copy Code Button */}
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className="w-full py-2 px-3 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-emerald-500">¡Código copiado al portapapeles!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copiar Código: {qrValue}</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            {/* Installation advice tip */}
-            <div className="p-3 bg-sky-50/70 dark:bg-sky-950/20 rounded-2xl border border-sky-100 dark:border-sky-900/30 flex items-start gap-2.5 text-sky-900 dark:text-sky-300 text-xs">
+            {/* Advice notice */}
+            <div className="p-3 bg-sky-50/70 dark:bg-sky-950/20 rounded-2xl border border-sky-100 dark:border-sky-900/30 flex items-start gap-2 text-sky-900 dark:text-sky-300 text-xs">
               <Info className="w-4 h-4 text-[#0071E3] shrink-0 mt-0.5" />
-              <p className="leading-relaxed">
-                <strong>Consejo de instalación:</strong> Plastifica o enmarca la ficha en un protector acrílico a 1.40 m del suelo cerca del acceso al área o sobre el tablero principal de los equipos para garantizar un escaneo rápido y sin reflejos.
+              <p className="leading-relaxed text-[11px]">
+                <strong>Hoja Carta Lista:</strong> El PDF y la función de imprimir están formateados a escala de <strong>Hoja Carta (Letter: 21.6 × 27.9 cm)</strong>. Al imprimir o descargar PNG, el logo central de CheKify se mantiene exactamente igual a la vista previa.
               </p>
             </div>
 
           </div>
 
-          {/* RIGHT COLUMN: Live Interactive Badge Preview */}
+          {/* RIGHT COLUMN: Live Interactive Badge Preview (Exact Card) */}
           <div className="lg:col-span-7 flex flex-col items-center justify-center bg-zinc-100/70 dark:bg-black/60 p-4 sm:p-6 rounded-3xl border border-zinc-200/80 dark:border-zinc-800">
-            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500 mb-3 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              Vista Previa de Impresión
-            </span>
+            <div className="flex items-center justify-between w-full mb-3 px-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                Vista Previa de Impresión
+              </span>
+              <span className="text-[10px] font-bold text-zinc-500 bg-white dark:bg-zinc-900 px-2.5 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-800">
+                {format === 'placard' ? 'Placa Carta 17 × 23 cm' : format === 'sticker' ? 'Sticker 14 × 14 cm' : 'Ficha Carta con Equipos'}
+              </span>
+            </div>
 
-            {/* The Badge Card Container */}
+            {/* THE EXACT BADGE CARD (Captured for PNG and Print) */}
             <div 
               ref={previewCardRef}
-              className={`bg-white text-zinc-900 rounded-2xl shadow-xl transition-all duration-300 w-full max-w-sm flex flex-col items-center border-[3px] ${
-                theme === 'brand' ? 'border-[#0071E3]' : theme === 'emerald' ? 'border-emerald-600' : 'border-zinc-900'
-              } p-4 sm:p-5 text-center relative select-none`}
+              id="printable-preview-card"
+              className={`bg-white text-zinc-900 rounded-3xl shadow-xl transition-all duration-300 w-full max-w-[360px] flex flex-col items-center border-[3.5px] ${currentTheme.borderClass} p-4 sm:p-5 text-center relative select-none`}
             >
               {/* Inner dashed perimeter cut-line */}
-              <div className="w-full h-full border border-dashed border-zinc-300 rounded-xl p-3 flex flex-col items-center">
+              <div className="w-full h-full border-2 border-dashed border-zinc-300 rounded-2xl p-3.5 flex flex-col items-center bg-white">
                 
-                {/* Header */}
+                {/* Header with CheKify Logo */}
                 <div className="w-full flex items-center justify-between border-b-2 border-zinc-900 pb-2.5 mb-3">
                   <div className="flex flex-col items-start">
-                    <img src="/logo.png" alt="CheKify Logo" className="h-6 w-auto object-contain" />
+                    <img 
+                      src="/logo.png" 
+                      alt="CheKify Logo" 
+                      className="h-6 w-auto object-contain"
+                      crossOrigin="anonymous" 
+                    />
                     <span className="text-[8px] font-black tracking-widest text-sky-600 uppercase mt-0.5">
-                      Punto de Inspección Oficial
+                      PUNTO DE INSPECCIÓN OFICIAL
                     </span>
                   </div>
                   <span className="text-[9px] font-extrabold uppercase bg-zinc-100 text-zinc-700 px-2 py-1 rounded-md border border-zinc-200">
@@ -886,7 +667,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                 {/* Area Designation */}
                 <div className="mb-2">
                   <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">
-                    Área Designada
+                    ÁREA DESIGNADA
                   </span>
                   <h2 className="text-xl sm:text-2xl font-black text-zinc-900 uppercase tracking-tight leading-tight my-1">
                     {currentArea?.name}
@@ -896,10 +677,11 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                   </div>
                 </div>
 
-                {/* QR Code Canvas with CheKify Logo */}
-                <div ref={qrCanvasRef} className="my-2 p-2.5 bg-white border-2 border-zinc-900 rounded-2xl shadow-xs">
+                {/* QR Code Canvas with CheKify Logo in Center */}
+                <div className="my-2 p-2.5 bg-white border-2 border-zinc-900 rounded-2xl shadow-xs">
                   <QRCodeCanvas
                     id="area-qr-canvas"
+                    data-value={qrValue}
                     value={qrValue}
                     size={format === 'sticker' ? 180 : 210}
                     level="H" // High error correction (30%)
@@ -955,70 +737,13 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
               </div>
             </div>
 
-            {/* Format specifier notice */}
+            {/* Scale indicator */}
             <p className="text-[11px] text-zinc-400 mt-3 text-center">
-              Tamaño óptimo recomendado para impresión: {format === 'sticker' ? '10 x 10 cm' : '10 x 15 cm (A6) o 15 x 21 cm (A5)'}
+              Ajustada proporcionalmente para caber limpia y centrada en una <strong>hoja tamaño carta</strong>.
             </p>
           </div>
 
         </div>
-
-        {/* Batch Selection Drawer (When in Batch Mode) */}
-        {isBatchMode && (
-          <div className="p-4 bg-zinc-50 dark:bg-zinc-900/90 border-t border-zinc-200 dark:border-zinc-800">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                Selecciona las áreas a incluir en la impresión por lote:
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedBatchIds(allAreas.map(a => a.id))}
-                  className="text-[11px] font-bold text-[#0071E3] hover:underline"
-                >
-                  Seleccionar Todas
-                </button>
-                <span className="text-zinc-300 dark:text-zinc-700">|</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedBatchIds([])}
-                  className="text-[11px] font-bold text-zinc-500 hover:underline"
-                >
-                  Deseleccionar
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1">
-              {allAreas.map(a => {
-                const isChecked = selectedBatchIds.includes(a.id);
-                return (
-                  <label
-                    key={a.id}
-                    className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer transition-colors ${
-                      isChecked 
-                        ? 'bg-sky-50 dark:bg-sky-950/30 border-sky-300 dark:border-sky-800 text-sky-900 dark:text-sky-200 font-bold' 
-                        : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedBatchIds(prev => [...prev, a.id]);
-                        } else {
-                          setSelectedBatchIds(prev => prev.filter(id => id !== a.id));
-                        }
-                      }}
-                      className="w-3.5 h-3.5 text-[#0071E3] rounded-md focus:ring-0"
-                    />
-                    <span className="truncate">{a.name}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
       </motion.div>
     </div>
