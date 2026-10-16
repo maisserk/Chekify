@@ -11,7 +11,7 @@ export const Logo: React.FC<LogoProps> = ({ className = "h-10", isCollapsed = fa
       <img 
         src={isCollapsed ? "/logo_small.png" : "/logo.png"} 
         alt="CheKify Logo" 
-        className="h-full w-auto object-contain transition-all duration-200 dark:brightness-0 dark:invert"
+        className={`h-full w-auto object-contain transition-all duration-200 ${isCollapsed ? '' : 'dark:brightness-0 dark:invert'}`}
         referrerPolicy="no-referrer"
       />
     </div>
