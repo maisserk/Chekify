@@ -303,7 +303,7 @@ const validateAndCompressImage = (source: File | Blob | string, minWidth = 150, 
       }
 
       try {
-        const compressed = await compressImage(source, 1024, 1024, 0.65);
+        const compressed = await compressImage(source, 800, 800, 0.6);
         resolve(compressed);
       } catch (err) {
         if (typeof source === 'string') resolve(source);
@@ -849,7 +849,6 @@ const VOSOExecutionCategory = ({
                               const file = e.target.files?.[0];
                               if (file) {
                                 if (itemPhotos.length >= 3) {
-                                  alert("Límite alcanzado: máximo 3 fotos por hallazgo.");
                                   e.target.value = '';
                                   return;
                                 }
@@ -860,7 +859,6 @@ const VOSOExecutionCategory = ({
                                   e.target.value = '';
                                 } catch (err: any) {
                                   console.error("Checklist image processing error:", err);
-                                  alert(err.message || "Error al procesar la imagen.");
                                   e.target.value = '';
                                 }
                               }
@@ -965,51 +963,7 @@ const OperatorDashboard = ({
   const [duplicateFinding, setDuplicateFinding] = useState<Finding | null>(null);
   const [showInAppCameraModal, setShowInAppCameraModal] = useState(false);
 
-  // Auto-restore active inspection draft if the mobile browser was reloaded or activity suspended
-  useEffect(() => {
-    try {
-      const savedDraft = sessionStorage.getItem('chekify_active_inspection_draft');
-      if (savedDraft) {
-        const parsed = JSON.parse(savedDraft);
-        if (parsed.selectedArea) {
-          setSelectedArea(parsed.selectedArea);
-          if (typeof parsed.currentEquipmentIndex === 'number') setCurrentEquipmentIndex(parsed.currentEquipmentIndex);
-          if (parsed.showFindingForm) setShowFindingForm(true);
-          if (parsed.findingDescription) setFindingDescription(parsed.findingDescription);
-          if (parsed.findingCategory) setFindingCategory(parsed.findingCategory);
-          if (parsed.findingSubcat) setFindingSubcat(parsed.findingSubcat);
-          if (Array.isArray(parsed.findingPhotos) && parsed.findingPhotos.length > 0) setFindingPhotos(parsed.findingPhotos);
-          if (parsed.immediateSolution) setImmediateSolution(parsed.immediateSolution);
-        }
-      }
-    } catch (e) {
-      console.warn("Could not restore inspection draft", e);
-    }
-  }, []);
 
-  // Auto-save active inspection draft to sessionStorage
-  useEffect(() => {
-    if (selectedArea) {
-      try {
-        const draft = {
-          selectedArea,
-          currentEquipmentIndex,
-          showFindingForm,
-          findingDescription,
-          findingCategory,
-          findingSubcat,
-          findingPhotos,
-          immediateSolution,
-          savedAt: Date.now()
-        };
-        sessionStorage.setItem('chekify_active_inspection_draft', JSON.stringify(draft));
-      } catch (e) {
-        // Ignore quota limits
-      }
-    } else {
-      sessionStorage.removeItem('chekify_active_inspection_draft');
-    }
-  }, [selectedArea, currentEquipmentIndex, showFindingForm, findingDescription, findingCategory, findingSubcat, findingPhotos, immediateSolution]);
   
   // Collapsible areas and inspection tracking
   const [expandedAreaIds, setExpandedAreaIds] = useState<Record<string, boolean>>({});
@@ -1088,6 +1042,77 @@ const OperatorDashboard = ({
     }
     return `${displayMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Robust auto-restore active inspection draft from localStorage to prevent loss if mobile camera restarts browser
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem('chekify_active_inspection_draft_v2') || sessionStorage.getItem('chekify_active_inspection_draft');
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.selectedArea) {
+          setSelectedArea(parsed.selectedArea);
+          if (typeof parsed.currentEquipmentIndex === 'number') setCurrentEquipmentIndex(parsed.currentEquipmentIndex);
+          if (parsed.showFindingForm) setShowFindingForm(true);
+          if (parsed.findingDescription) setFindingDescription(parsed.findingDescription);
+          if (parsed.findingCategory) setFindingCategory(parsed.findingCategory);
+          if (parsed.findingSubcat) setFindingSubcat(parsed.findingSubcat);
+          if (Array.isArray(parsed.findingPhotos) && parsed.findingPhotos.length > 0) setFindingPhotos(parsed.findingPhotos);
+          if (parsed.immediateSolution) setImmediateSolution(parsed.immediateSolution);
+          if (parsed.inspectionResults) setInspectionResults(parsed.inspectionResults);
+          if (parsed.checkItemStates) setCheckItemStates(parsed.checkItemStates);
+          if (parsed.vosoResponses) setVosoResponses(parsed.vosoResponses);
+          if (parsed.equipmentOperatingStatus) setEquipmentOperatingStatus(parsed.equipmentOperatingStatus);
+          if (typeof parsed.inspectionTimerSeconds === 'number') setInspectionTimerSeconds(parsed.inspectionTimerSeconds);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not restore inspection draft", e);
+    }
+  }, []);
+
+  // Robust auto-save active inspection draft to localStorage
+  useEffect(() => {
+    if (selectedArea) {
+      try {
+        const draft = {
+          selectedArea,
+          currentEquipmentIndex,
+          showFindingForm,
+          findingDescription,
+          findingCategory,
+          findingSubcat,
+          findingPhotos: (findingPhotos || []).slice(0, 3),
+          immediateSolution,
+          inspectionResults,
+          checkItemStates,
+          vosoResponses,
+          equipmentOperatingStatus,
+          inspectionTimerSeconds,
+          savedAt: Date.now()
+        };
+        localStorage.setItem('chekify_active_inspection_draft_v2', JSON.stringify(draft));
+      } catch (e) {
+        // Ignore quota limits
+      }
+    } else {
+      localStorage.removeItem('chekify_active_inspection_draft_v2');
+      sessionStorage.removeItem('chekify_active_inspection_draft');
+    }
+  }, [
+    selectedArea, 
+    currentEquipmentIndex, 
+    showFindingForm, 
+    findingDescription, 
+    findingCategory, 
+    findingSubcat, 
+    findingPhotos, 
+    immediateSolution, 
+    inspectionResults, 
+    checkItemStates, 
+    vosoResponses, 
+    equipmentOperatingStatus,
+    inspectionTimerSeconds
+  ]);
 
   // Scroll back to the top of the view when the equipment index, selected area, or summary state changes
   useEffect(() => {
@@ -10598,9 +10623,9 @@ const AppLayout = ({
 
                   {/* Header Actions & Weather Summary Pill */}
                   <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                    {/* View Switcher for Admins & Supervisors - Apple HIG Segmented Control */}
+                    {/* View Switcher for Admins & Supervisors - Apple HIG Segmented Control (Desktop Only) */}
                     {(user.role === 'Administrador' || user.role === 'Supervisor') && (
-                      <div className="flex items-center bg-[#E5E5EA]/70 dark:bg-[#2C2C2E]/70 p-1 rounded-xl shrink-0">
+                      <div className="hidden md:flex items-center bg-[#E5E5EA]/70 dark:bg-[#2C2C2E]/70 p-1 rounded-xl shrink-0">
                         <button
                           type="button"
                           onClick={() => {
@@ -10692,6 +10717,18 @@ const AppLayout = ({
                       )}
                     </button>
                     <button 
+                      onClick={() => setIsMobileMoreOpen(true)}
+                      className="md:hidden text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs relative"
+                      title="Menú"
+                    >
+                      <Menu className="w-4 h-4" />
+                      {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-0.5 rounded-full bg-[#FF3B30] text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                          {unreadCount}
+                        </span>
+                      )}
+                    </button>
+                    <button 
                       onClick={() => signOut(auth)}
                       className="text-[#FF3B30] hover:bg-[#FF3B30]/10 transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
                       title="Cerrar Sesión"
@@ -10702,7 +10739,7 @@ const AppLayout = ({
                 </div>
 
                 {/* Mobile Sub-Header: Active Module Title & Time Bar */}
-                <div className="md:hidden flex items-center justify-between pt-2 border-t border-[#D2D2D7]/30 dark:border-white/5 min-w-0">
+                <div className="md:hidden flex items-center justify-between pt-1.5 border-t border-[#D2D2D7]/30 dark:border-white/5 min-w-0">
                   <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#0071E3] shrink-0" />
                     <h1 className="text-[#1D1D1F] dark:text-[#F5F5F7] font-bold text-xs tracking-tight truncate">
@@ -10714,21 +10751,7 @@ const AppLayout = ({
                       </span>
                     )}
                   </div>
-                  {(user.role === 'Administrador' || user.role === 'Supervisor') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = effectiveRole === 'Operador' ? user.role : 'Operador';
-                        setActiveRoleView(next);
-                        if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', next);
-                      }}
-                      className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center gap-1 shrink-0 cursor-pointer"
-                    >
-                      <HardHat className="w-2.5 h-2.5" />
-                      <span>{effectiveRole === 'Operador' ? 'Ver Admin' : 'Ver Operador'}</span>
-                    </button>
-                  )}
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold shrink-0 ml-1.5">
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold shrink-0 ml-1.5 tabular-nums">
                     {format(currentTime, "HH:mm:ss", { locale: es })}
                   </span>
                 </div>
@@ -10889,58 +10912,41 @@ const AppLayout = ({
                   <span className="text-[10px] font-semibold tracking-tight leading-none">Historial</span>
                 </button>
 
-                {/* 4. Perfil */}
+                {/* 4. Notificaciones */}
                 <button 
-                  onClick={() => { setShowProfileModal(true); setIsMobileMoreOpen(false); }}
-                  className="flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]"
-                  title="Ver perfil"
+                  onClick={() => { setShowNotificationCenter(true); setIsMobileMoreOpen(false); }}
+                  className="flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] relative"
+                  title="Notificaciones"
                 >
-                  <div className="p-1 rounded-xl">
-                    <UserCheck className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                  <div className="p-1 rounded-xl relative">
+                    <Bell className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-[#FF3B30] text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                        {unreadCount}
+                      </span>
+                    )}
                   </div>
-                  <span className="text-[10px] font-semibold tracking-tight leading-none">Perfil</span>
+                  <span className="text-[10px] font-semibold tracking-tight leading-none">Alertas</span>
                 </button>
 
-                {/* 5. If Non-Admin -> Help */}
-                {user.role !== 'Administrador' && (
-                  <button 
-                    onClick={() => { setActiveTab('Help'); setIsMobileMoreOpen(false); }}
-                    className={`flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 ${
-                      activeTab === 'Help' 
-                        ? 'text-[#0071E3] dark:text-[#0A84FF]' 
-                        : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
-                    }`}
-                  >
-                    <div className={`p-1 rounded-xl transition-colors ${activeTab === 'Help' ? 'bg-[#0071E3]/12' : ''}`}>
-                      <HelpCircle className="w-5 h-5 shrink-0 stroke-[2.2]" />
-                    </div>
-                    <span className="text-[10px] font-semibold tracking-tight leading-none">Ayuda</span>
-                  </button>
-                )}
-
-                {/* 5. If Admin -> More / Admin Sheet trigger */}
-                {user.role === 'Administrador' && (
-                  <button 
-                    onClick={() => setIsMobileMoreOpen(!isMobileMoreOpen)}
-                    className={`flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 relative ${
-                      ['Admin', 'Notifications', 'PDFConfig', 'Help'].includes(activeTab) || isMobileMoreOpen
-                        ? 'text-[#0071E3] dark:text-[#0A84FF]' 
-                        : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
-                    }`}
-                  >
-                    <div className={`p-1 rounded-xl relative transition-colors ${(['Admin', 'Notifications', 'PDFConfig', 'Help'].includes(activeTab) || isMobileMoreOpen) ? 'bg-[#0071E3]/12' : ''}`}>
-                      <Menu className="w-5 h-5 shrink-0 stroke-[2.2]" />
-                      {unreadCount > 0 && (
-                        <span className="absolute 1 top-0.5 right-0.5 w-2 h-2 bg-[#FF3B30] rounded-full" />
-                      )}
-                    </div>
-                    <span className="text-[10px] font-semibold tracking-tight leading-none">Más</span>
-                  </button>
-                )}
+                {/* 5. Menú Móvil (Para todos los roles) */}
+                <button 
+                  onClick={() => setIsMobileMoreOpen(!isMobileMoreOpen)}
+                  className={`flex-1 py-1 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 relative ${
+                    ['Admin', 'Notifications', 'PDFConfig', 'Help'].includes(activeTab) || isMobileMoreOpen
+                      ? 'text-[#0071E3] dark:text-[#0A84FF]' 
+                      : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]'
+                  }`}
+                >
+                  <div className={`p-1 rounded-xl relative transition-colors ${(['Admin', 'Notifications', 'PDFConfig', 'Help'].includes(activeTab) || isMobileMoreOpen) ? 'bg-[#0071E3]/12' : ''}`}>
+                    <Menu className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-tight leading-none">Menú</span>
+                </button>
               </div>
             </nav>
 
-            {/* Mobile "Más" Slide-Up Sheet for Admins / Extra links */}
+            {/* Mobile Slide-Up Sheet: Navigation & Role Switcher */}
             <AnimatePresence>
               {isMobileMoreOpen && (
                 <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
@@ -10961,28 +10967,97 @@ const AppLayout = ({
                     transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                     className="relative bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 rounded-t-3xl p-5 shadow-2xl z-10 space-y-4 max-h-[85vh] overflow-y-auto"
                   >
+                    {/* Drawer Header */}
                     <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-900">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-black text-sm uppercase tracking-tight text-zinc-900 dark:text-white">Menú de Control</h3>
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
-                            {user.role}
-                          </span>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-full bg-[#0071E3] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs overflow-hidden border border-white/20">
+                          {user.avatarUrl ? (
+                            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                          ) : (
+                            user.name?.charAt(0) || user.email.charAt(0)
+                          )}
                         </div>
-                        <p className="text-[10px] text-zinc-400 font-semibold mt-0.5">Opciones avanzadas y configuración</p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-black text-sm uppercase tracking-tight text-zinc-900 dark:text-white truncate max-w-[170px]">
+                              {user.name || 'Usuario'}
+                            </h3>
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                              {user.role}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-400 font-semibold truncate max-w-[200px]">
+                            {user.email} • {plants.find(p => p.id === user.plantId)?.name || 'Planta General'}
+                          </p>
+                        </div>
                       </div>
                       <button 
                         onClick={() => setIsMobileMoreOpen(false)}
-                        className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                        className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
                       >
                         <X className="w-4 h-4" />
                       </button>
                     </div>
 
+                    {/* Mode Switcher for Admins & Supervisors in Mobile Menu */}
+                    {(user.role === 'Administrador' || user.role === 'Supervisor') && (
+                      <div className="p-3.5 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-sky-500/10 border border-sky-500/20 dark:border-sky-500/30 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-sky-700 dark:text-sky-300 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-sky-500" />
+                            Modo de Vista (Rol Activo)
+                          </span>
+                          <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-700 dark:text-sky-300">
+                            Activo: {effectiveRole}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 bg-white/90 dark:bg-zinc-900/90 p-1 rounded-xl border border-zinc-200/80 dark:border-white/10">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveRoleView('Operador');
+                              if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', 'Operador');
+                              setIsMobileMoreOpen(false);
+                            }}
+                            className={`py-2 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                              effectiveRole === 'Operador'
+                                ? 'bg-[#0071E3] text-white shadow-sm'
+                                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                            }`}
+                          >
+                            <HardHat className="w-4 h-4" />
+                            <span>Operador</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveRoleView(user.role);
+                              if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', user.role);
+                              setIsMobileMoreOpen(false);
+                            }}
+                            className={`py-2 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                              effectiveRole !== 'Operador'
+                                ? 'bg-[#0071E3] text-white shadow-sm'
+                                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                            }`}
+                          >
+                            <Briefcase className="w-4 h-4" />
+                            <span>{user.role}</span>
+                          </button>
+                        </div>
+                        <p className="text-[9.5px] text-zinc-500 dark:text-zinc-400 text-center font-medium leading-tight">
+                          {effectiveRole === 'Operador'
+                            ? 'Inspecciones en terreno, listas de verificación y escaneo QR'
+                            : `Gestión y control de ${user.role}, reportes y estadísticas`}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Navigation Options Grid */}
                     <div className="grid grid-cols-2 gap-2.5">
                       <button 
                         onClick={() => { setShowProfileModal(true); setIsMobileMoreOpen(false); }}
-                        className="p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all bg-sky-50 dark:bg-sky-500/10 border-sky-200/60 dark:border-sky-500/20 text-zinc-800 dark:text-zinc-200 hover:bg-sky-100 dark:hover:bg-sky-500/20"
+                        className="p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all bg-sky-50/70 dark:bg-sky-500/10 border-sky-200/60 dark:border-sky-500/20 text-zinc-800 dark:text-zinc-200 hover:bg-sky-100 dark:hover:bg-sky-500/20 cursor-pointer"
                       >
                         <UserCheck className="w-5 h-5 text-sky-500" />
                         <div>
@@ -10991,28 +11066,26 @@ const AppLayout = ({
                         </div>
                       </button>
 
-                      <button 
-                        onClick={() => { setActiveTab('Admin'); setIsMobileMoreOpen(false); }}
-                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all ${
-                          activeTab === 'Admin'
-                            ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-                            : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                        }`}
-                      >
-                        <Users className="w-5 h-5 text-sky-500" />
-                        <div>
-                          <p className="text-xs font-extrabold uppercase tracking-tight">Administración</p>
-                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Gestión de usuarios y plantas</p>
-                        </div>
-                      </button>
+                      {user.role === 'Administrador' && (
+                        <button 
+                          onClick={() => { setActiveTab('Admin'); setIsMobileMoreOpen(false); }}
+                          className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all cursor-pointer ${
+                            activeTab === 'Admin'
+                              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                              : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                          }`}
+                        >
+                          <Users className="w-5 h-5 text-sky-500" />
+                          <div>
+                            <p className="text-xs font-extrabold uppercase tracking-tight">Administración</p>
+                            <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Áreas con QR, equipos y usuarios</p>
+                          </div>
+                        </button>
+                      )}
 
                       <button 
-                        onClick={() => { setActiveTab('Notifications'); setIsMobileMoreOpen(false); }}
-                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all relative ${
-                          activeTab === 'Notifications'
-                            ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-                            : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                        }`}
+                        onClick={() => { setShowNotificationCenter(true); setIsMobileMoreOpen(false); }}
+                        className="p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all relative bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
                       >
                         <div className="flex items-center justify-between">
                           <Bell className="w-5 h-5 text-amber-500" />
@@ -11024,28 +11097,30 @@ const AppLayout = ({
                         </div>
                         <div>
                           <p className="text-xs font-extrabold uppercase tracking-tight">Notificaciones</p>
-                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Mensajes del sistema</p>
+                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Bandeja de avisos y alertas</p>
                         </div>
                       </button>
 
-                      <button 
-                        onClick={() => { setActiveTab('PDFConfig'); setIsMobileMoreOpen(false); }}
-                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all ${
-                          activeTab === 'PDFConfig'
-                            ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-                            : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                        }`}
-                      >
-                        <Shield className="w-5 h-5 text-emerald-500" />
-                        <div>
-                          <p className="text-xs font-extrabold uppercase tracking-tight">Config. PDF</p>
-                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Encabezados e imágenes</p>
-                        </div>
-                      </button>
+                      {user.role === 'Administrador' && (
+                        <button 
+                          onClick={() => { setActiveTab('PDFConfig'); setIsMobileMoreOpen(false); }}
+                          className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all cursor-pointer ${
+                            activeTab === 'PDFConfig'
+                              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                              : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                          }`}
+                        >
+                          <Shield className="w-5 h-5 text-emerald-500" />
+                          <div>
+                            <p className="text-xs font-extrabold uppercase tracking-tight">Config. PDF</p>
+                            <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Encabezados y reportes</p>
+                          </div>
+                        </button>
+                      )}
 
                       <button 
                         onClick={() => { setActiveTab('Help'); setIsMobileMoreOpen(false); }}
-                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all ${
+                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all cursor-pointer ${
                           activeTab === 'Help'
                             ? 'bg-brand-blue text-white border-brand-blue shadow-md'
                             : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -11062,7 +11137,7 @@ const AppLayout = ({
                     <div className="pt-2 flex items-center gap-2">
                       <button 
                         onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                        className="flex-1 py-3 px-4 rounded-xl bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-zinc-200/50 dark:border-white/5"
+                        className="flex-1 py-3 px-4 rounded-xl bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-zinc-200/50 dark:border-white/5 cursor-pointer"
                       >
                         {theme === 'light' ? <Moon className="w-4 h-4 text-indigo-500" /> : <Sun className="w-4 h-4 text-amber-500" />}
                         <span>Modo {theme === 'light' ? 'Oscuro' : 'Claro'}</span>
@@ -11070,7 +11145,7 @@ const AppLayout = ({
 
                       <button 
                         onClick={() => signOut(auth)}
-                        className="flex-1 py-3 px-4 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-red-200/50 dark:border-red-500/20"
+                        className="flex-1 py-3 px-4 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-red-200/50 dark:border-red-500/20 cursor-pointer"
                       >
                         <LogOut className="w-4 h-4" />
                         <span>Salir</span>

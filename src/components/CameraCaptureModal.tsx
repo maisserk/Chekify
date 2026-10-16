@@ -52,12 +52,12 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         throw new Error("Tu navegador no soporta captura de cámara en tiempo real.");
       }
 
-      // Constraints optimized for fluid preview and low memory footprint
+      // Constraints optimized for fluid preview and low memory footprint on mobile
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: mode },
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 }
+          width: { ideal: 960, max: 1280 },
+          height: { ideal: 720, max: 960 }
         },
         audio: false
       };
@@ -181,7 +181,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     } catch (e: any) {
       console.error("Shutter capture error:", e);
       setIsCapturing(false);
-      alert("Error al capturar la imagen. Intenta nuevamente.");
+      setError("Error al procesar la captura de la foto. Intenta nuevamente.");
     }
   };
 

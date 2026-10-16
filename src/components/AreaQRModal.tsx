@@ -4,7 +4,7 @@ import {
   QrCode, 
   Printer, 
   Download, 
-  FileDown,
+  FileDown, 
   Copy, 
   Check, 
   X, 
@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   FileText
 } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeCanvas, QRCodeSVG } from 'qrcode.react';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { Area, Equipment } from '../types';
@@ -32,6 +32,35 @@ interface AreaQRModalProps {
 
 type BadgeFormat = 'placard' | 'sticker' | 'detailed';
 type BadgeTheme = 'brand' | 'emerald' | 'monochrome';
+
+// Cache for base64 converted logo to prevent foreignObject CORS / taint issues
+let cachedLogoDataUrl: string | null = null;
+const loadLogoAsDataUrl = async (): Promise<string> => {
+  if (cachedLogoDataUrl) return cachedLogoDataUrl;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 120;
+        canvas.height = img.naturalHeight || 120;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          cachedLogoDataUrl = canvas.toDataURL('image/png');
+          resolve(cachedLogoDataUrl);
+          return;
+        }
+      } catch (e) {
+        console.warn('Canvas export error for logo:', e);
+      }
+      resolve('/logo_small.png');
+    };
+    img.onerror = () => resolve('/logo_small.png');
+    img.src = '/logo_small.png';
+  });
+};
 
 export const AreaQRModal: React.FC<AreaQRModalProps> = ({
   isOpen,
@@ -51,8 +80,20 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [isGeneratingPNG, setIsGeneratingPNG] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [logoDataUrl, setLogoDataUrl] = useState<string>('/logo_small.png');
+  const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const previewCardRef = useRef<HTMLDivElement>(null);
+
+  // Preload base64 logo on mount/open
+  useEffect(() => {
+    let isMounted = true;
+    loadLogoAsDataUrl().then((dataUri) => {
+      if (isMounted) setLogoDataUrl(dataUri);
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   useEffect(() => {
     if (area) {
@@ -60,6 +101,13 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
       setSelectedBatchIds(allAreas.map(a => a.id));
     }
   }, [area, allAreas]);
+
+  useEffect(() => {
+    if (feedbackMsg) {
+      const timer = setTimeout(() => setFeedbackMsg(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [feedbackMsg]);
 
   if (!isOpen || (!currentArea && !isBatchMode)) return null;
 
@@ -78,66 +126,40 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
       borderClass: 'border-[#0071E3]',
       textClass: 'text-[#0071E3]',
       headerBg: '#0071E3',
-      accentColor: '#0A84FF'
+      accentColor: '#0A84FF',
+      hexBorder: '#0071E3',
+      hexBg: '#F0F7FF'
     },
     emerald: {
       primary: '#059669',
       borderClass: 'border-emerald-600',
       textClass: 'text-emerald-600',
       headerBg: '#059669',
-      accentColor: '#10B981'
+      accentColor: '#10B981',
+      hexBorder: '#059669',
+      hexBg: '#ECFDF5'
     },
     monochrome: {
       primary: '#18181B',
       borderClass: 'border-zinc-900',
       textClass: 'text-zinc-900',
       headerBg: '#18181B',
-      accentColor: '#27272A'
+      accentColor: '#27272A',
+      hexBorder: '#18181B',
+      hexBg: '#F4F4F5'
     }
   };
 
   const currentTheme = themeColors[theme];
 
-  // Helper to generate a standalone QR DataURL with centered CheKify logo on demand
-  const generateQRDataURL = (text: string, includeLogo = true): Promise<string> => {
-    return new Promise((resolve) => {
-      // Find the existing preview canvas if it matches
-      const existingCanvas = document.getElementById('area-qr-canvas') as HTMLCanvasElement;
-      if (existingCanvas && existingCanvas.getAttribute('data-value') === text) {
-        resolve(existingCanvas.toDataURL('image/png'));
-        return;
-      }
-
-      // Or create off-screen canvas
-      const size = 320;
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = size;
-      offCanvas.height = size;
-
-      // Render via image
-      const tempWrapper = document.createElement('div');
-      tempWrapper.style.position = 'fixed';
-      tempWrapper.style.left = '-9999px';
-      document.body.appendChild(tempWrapper);
-
-      // Simple fallback to existing canvas
-      if (existingCanvas) {
-        resolve(existingCanvas.toDataURL('image/png'));
-      } else {
-        resolve('');
-      }
-      document.body.removeChild(tempWrapper);
-    });
-  };
-
-  // 1. DOWNLOAD EXACT PREVIEW AS PNG (using html-to-image)
+  // 1. DOWNLOAD EXACT PREVIEW AS PNG
   const handleDownloadPNG = async () => {
     if (!previewCardRef.current || !currentArea) return;
     setIsGeneratingPNG(true);
 
     try {
-      // Wait a tick to ensure images/canvases are painted
-      await new Promise(r => setTimeout(r, 60));
+      // Ensure all images are loaded
+      await new Promise(r => setTimeout(r, 100));
 
       const dataUrl = await toPng(previewCardRef.current, {
         pixelRatio: 3, // 300 DPI high-resolution
@@ -151,9 +173,10 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      setFeedbackMsg({ text: 'Imagen PNG descargada idéntica a la vista previa', type: 'success' });
     } catch (e: any) {
       console.error('Error generating exact PNG:', e);
-      alert('Error al generar la imagen PNG. Puedes utilizar la opción de descargar en PDF.');
+      setFeedbackMsg({ text: 'Error al generar la imagen PNG. Puedes descargar el PDF.', type: 'error' });
     } finally {
       setIsGeneratingPNG(false);
     }
@@ -165,7 +188,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
     setIsGeneratingPDF(true);
 
     try {
-      await new Promise(r => setTimeout(r, 60));
+      await new Promise(r => setTimeout(r, 100));
 
       // Capture exact preview card at 3x resolution
       const cardPng = await toPng(previewCardRef.current, {
@@ -234,45 +257,55 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
 
       const filename = `Ficha-QR-${currentArea.name.replace(/[^a-zA-Z0-9]/g, '_')}-Carta.pdf`;
       pdf.save(filename);
+      setFeedbackMsg({ text: 'PDF en Hoja Tamaño Carta descargado correctamente', type: 'success' });
     } catch (e: any) {
       console.error('Error generating Letter PDF:', e);
-      alert('Error al generar el PDF. Puedes intentar imprimir directamente.');
+      setFeedbackMsg({ text: 'Error al generar el PDF.', type: 'error' });
     } finally {
       setIsGeneratingPDF(false);
     }
   };
 
-  // 3. PRINT WITH EMBEDDED LOGO IN CENTER OF QR & LETTER PAPER SETTING
-  const handlePrint = async (printAll: boolean = false) => {
-    if (!previewCardRef.current) return;
+  // 3. PRINT USING HIDDEN IFRAME (No window.open, keeps logo in QR center & Letter format)
+  const handlePrint = async () => {
+    if (!previewCardRef.current || !currentArea) return;
+    setIsPrinting(true);
 
     try {
-      // Get the exact QR canvas data URL with the CheKify centered logo
-      const qrCanvas = document.getElementById('area-qr-canvas') as HTMLCanvasElement;
-      if (!qrCanvas) {
-        alert('Cargando código QR...');
-        return;
-      }
-      const qrDataUrlWithLogo = qrCanvas.toDataURL('image/png');
+      await new Promise(r => setTimeout(r, 100));
 
-      // Also capture the exact preview card image
-      const exactCardImage = await toPng(previewCardRef.current, {
-        pixelRatio: 2.5,
+      // Generate exact high-res PNG of the card
+      const cardPng = await toPng(previewCardRef.current, {
+        pixelRatio: 3,
         cacheBust: true,
         backgroundColor: '#ffffff'
       });
 
-      const printWindow = window.open('', '_blank', 'width=900,height=750');
-      if (!printWindow) {
-        alert('Por favor permite ventanas emergentes para poder imprimir.');
-        return;
+      // Use a hidden iframe for 100% reliable printing without window.open or popup blockers
+      const existingIframe = document.getElementById('chekify-print-frame');
+      if (existingIframe) existingIframe.remove();
+
+      const printIframe = document.createElement('iframe');
+      printIframe.id = 'chekify-print-frame';
+      printIframe.style.position = 'fixed';
+      printIframe.style.right = '0';
+      printIframe.style.bottom = '0';
+      printIframe.style.width = '0';
+      printIframe.style.height = '0';
+      printIframe.style.border = '0';
+      document.body.appendChild(printIframe);
+
+      const iframeDoc = printIframe.contentWindow?.document;
+      if (!iframeDoc) {
+        throw new Error('No se pudo inicializar el servicio de impresión.');
       }
 
-      printWindow.document.write(`
+      iframeDoc.open();
+      iframeDoc.write(`
         <!DOCTYPE html>
         <html>
           <head>
-            <title>Ficha QR de Inspección - CheKify (Tamaño Carta)</title>
+            <title>Ficha QR - ${currentArea.name} (Tamaño Carta)</title>
             <meta charset="utf-8" />
             <style>
               @page {
@@ -294,6 +327,8 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                 justify-content: center;
                 min-height: 100vh;
                 padding: 10px;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
               }
               .sheet-container {
                 display: flex;
@@ -314,8 +349,8 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
               }
               .cut-instructions {
                 margin-top: 14px;
-                font-size: 9px;
-                font-weight: 600;
+                font-size: 10px;
+                font-weight: 700;
                 color: #64748b;
                 text-align: center;
                 letter-spacing: 0.5px;
@@ -324,27 +359,28 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
           </head>
           <body>
             <div class="sheet-container">
-              <img src="${exactCardImage}" class="exact-card-img" alt="Ficha de Inspección CheKify" />
+              <img src="${cardPng}" class="exact-card-img" alt="Ficha QR CheKify" />
               <div class="cut-instructions">
                 ✂️ Corta por la línea punteada e instala a 1.40 m de altura en el área o sobre el tablero principal • Tamaño Carta (Letter)
               </div>
             </div>
-            <script>
-              window.onload = function() {
-                setTimeout(function() {
-                  window.focus();
-                  window.print();
-                }, 400);
-              };
-            </script>
           </body>
         </html>
       `);
+      iframeDoc.close();
 
-      printWindow.document.close();
+      // Wait for image in iframe to load then trigger print
+      setTimeout(() => {
+        printIframe.contentWindow?.focus();
+        printIframe.contentWindow?.print();
+        setIsPrinting(false);
+        setTimeout(() => printIframe.remove(), 2000);
+      }, 350);
+
     } catch (e: any) {
       console.error('Error during print preparation:', e);
-      alert('Error al preparar la impresión.');
+      setFeedbackMsg({ text: 'Error al preparar la impresión.', type: 'error' });
+      setIsPrinting(false);
     }
   };
 
@@ -394,6 +430,20 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Feedback Alert if any */}
+        {feedbackMsg && (
+          <div className={`px-4 py-2 text-xs font-bold flex items-center justify-between ${
+            feedbackMsg.type === 'success' 
+              ? 'bg-emerald-500 text-white' 
+              : 'bg-red-500 text-white'
+          }`}>
+            <span>{feedbackMsg.text}</span>
+            <button onClick={() => setFeedbackMsg(null)} className="opacity-80 hover:opacity-100">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Area selector dropdown */}
         {allAreas.length > 1 && (
@@ -448,7 +498,8 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                   <div className="w-6 h-8 border-2 border-current rounded-sm flex items-center justify-center">
                     <QrCode className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-[11px] leading-tight">Placa de Pared</span>
+                  <span className="text-[11px] font-bold">Placa Carta</span>
+                  <span className="text-[9px] opacity-75">17 × 23 cm</span>
                 </button>
 
                 <button
@@ -460,10 +511,11 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                       : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-400'
                   }`}
                 >
-                  <div className="w-7 h-7 border-2 border-current rounded-lg flex items-center justify-center">
+                  <div className="w-7 h-7 border-2 border-current rounded-md flex items-center justify-center">
                     <QrCode className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-[11px] leading-tight">Sticker / Cuadrado</span>
+                  <span className="text-[11px] font-bold">Sticker Carta</span>
+                  <span className="text-[9px] opacity-75">14 × 14 cm</span>
                 </button>
 
                 <button
@@ -475,44 +527,45 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                       : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-400'
                   }`}
                 >
-                  <div className="w-6 h-8 border-2 border-current rounded-sm flex flex-col items-center justify-center gap-0.5">
+                  <div className="w-6 h-8 border-2 border-current rounded-sm flex flex-col items-center justify-around p-0.5">
                     <QrCode className="w-2.5 h-2.5" />
-                    <div className="w-3 h-0.5 bg-current" />
+                    <div className="w-4 h-0.5 bg-current rounded-full" />
                   </div>
-                  <span className="text-[11px] leading-tight">Ficha con Equipos</span>
+                  <span className="text-[11px] font-bold">Con Equipos</span>
+                  <span className="text-[9px] opacity-75">Hoja Carta</span>
                 </button>
               </div>
             </div>
 
             {/* Customization Options */}
-            <div className="space-y-3 bg-zinc-50 dark:bg-zinc-900/40 p-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800">
-              <label className="text-xs font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <div className="space-y-3 p-3.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+              <label className="text-xs font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400 block">
                 2. Personalización
               </label>
 
-              {/* Logo in center toggle */}
-              <label className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 cursor-pointer">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center p-1 overflow-hidden">
-                    <img src="/logo_small.png" alt="CheKify Logo" className="w-full h-full object-contain" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-zinc-900 dark:text-white block">Logo CheKify en el centro</span>
-                    <span className="text-[10px] text-zinc-400">Visible tanto en la vista previa como al imprimir o descargar</span>
-                  </div>
+              {/* Logo in QR switch */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Logo CheKify en QR</p>
+                  <p className="text-[10px] text-zinc-500">Centrado con corrección de errores nivel H (30%)</p>
                 </div>
-                <input 
-                  type="checkbox" 
-                  checked={withLogo} 
-                  onChange={(e) => setWithLogo(e.target.checked)}
-                  className="w-4 h-4 text-[#0071E3] rounded-md focus:ring-0 cursor-pointer"
-                />
-              </label>
+                <button
+                  type="button"
+                  onClick={() => setWithLogo(!withLogo)}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    withLogo ? 'bg-[#0071E3]' : 'bg-zinc-300 dark:bg-zinc-700'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                    withLogo ? 'translate-x-5' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
 
-              {/* Theme color */}
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300">Color de Marco & Acento:</span>
-                <div className="flex gap-2">
+              {/* Theme Selector */}
+              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Estilo de Color:</span>
+                <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setTheme('brand')}
@@ -522,8 +575,8 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                         : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
                     }`}
                   >
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-                    <span>Azul CheKify</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#0071E3] inline-block" />
+                    <span>Azul</span>
                   </button>
 
                   <button
@@ -536,7 +589,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                     }`}
                   >
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-                    <span>Seguridad</span>
+                    <span>Verde</span>
                   </button>
 
                   <button
@@ -576,11 +629,12 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                 {/* Print Direct */}
                 <button
                   type="button"
-                  onClick={() => handlePrint(false)}
-                  className="py-3 px-3 bg-[#0071E3] hover:bg-[#0077ED] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-500/15 active:scale-98 transition-all cursor-pointer"
+                  onClick={handlePrint}
+                  disabled={isPrinting}
+                  className="py-3 px-3 bg-[#0071E3] hover:bg-[#0077ED] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-500/15 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>Imprimir</span>
+                  <span>{isPrinting ? 'Imprimiendo...' : 'Imprimir Ficha'}</span>
                 </button>
 
                 {/* Download Exact PNG */}
@@ -619,7 +673,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
             <div className="p-3 bg-sky-50/70 dark:bg-sky-950/20 rounded-2xl border border-sky-100 dark:border-sky-900/30 flex items-start gap-2 text-sky-900 dark:text-sky-300 text-xs">
               <Info className="w-4 h-4 text-[#0071E3] shrink-0 mt-0.5" />
               <p className="leading-relaxed text-[11px]">
-                <strong>Hoja Carta Lista:</strong> El PDF y la función de imprimir están formateados a escala de <strong>Hoja Carta (Letter: 21.6 × 27.9 cm)</strong>. Al imprimir o descargar PNG, el logo central de CheKify se mantiene exactamente igual a la vista previa.
+                <strong>Hoja Carta Lista:</strong> El PDF y la función de imprimir están adaptados para <strong>Hoja Tamaño Carta (Letter: 21.6 × 27.9 cm)</strong>. Al imprimir o descargar en PNG, el logo central de CheKify se mantiene exactamente igual a la vista previa.
               </p>
             </div>
 
@@ -650,7 +704,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                 <div className="w-full flex items-center justify-between border-b-2 border-zinc-900 pb-2.5 mb-3">
                   <div className="flex flex-col items-start">
                     <img 
-                      src="/logo.png" 
+                      src={logoDataUrl || "/logo.png"} 
                       alt="CheKify Logo" 
                       className="h-6 w-auto object-contain"
                       crossOrigin="anonymous" 
@@ -677,8 +731,8 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                   </div>
                 </div>
 
-                {/* QR Code Canvas with CheKify Logo in Center */}
-                <div className="my-2 p-2.5 bg-white border-2 border-zinc-900 rounded-2xl shadow-xs">
+                {/* QR Code Canvas with Guaranteed CheKify Centered Logo */}
+                <div className="my-2 p-2.5 bg-white border-2 border-zinc-900 rounded-2xl shadow-xs relative flex items-center justify-center">
                   <QRCodeCanvas
                     id="area-qr-canvas"
                     data-value={qrValue}
@@ -687,12 +741,26 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                     level="H" // High error correction (30%)
                     marginSize={1}
                     imageSettings={withLogo ? {
-                      src: "/logo_small.png",
+                      src: logoDataUrl || "/logo_small.png",
                       height: 48,
                       width: 48,
                       excavate: true,
                     } : undefined}
                   />
+
+                  {/* DOM Centered Logo Overlay: Guarantees logo is NEVER missing in live preview, prints, or exports */}
+                  {withLogo && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-12 h-12 bg-white rounded-xl shadow-xs border-2 border-white flex items-center justify-center p-1">
+                        <img 
+                          src={logoDataUrl || "/logo_small.png"} 
+                          alt="Logo QR" 
+                          className="w-full h-full object-contain"
+                          crossOrigin="anonymous" 
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Optional Detailed Equipments Section */}
