@@ -143,6 +143,8 @@ import { useAppUsers } from './hooks/useAppUsers';
 import { getFindingDate, getFindingClosedDate, formatToDatetimeLocal, getCalculatedMTTRText, parseAnyDate } from './utils/dateUtils';
 import { getCachedAreas, cacheAreas, getCachedEquipment, cacheEquipment, clearAllCaches } from './utils/offlineCache';
 import { SplashScreen } from './components/SplashScreen';
+import { AreaQRModal } from './components/AreaQRModal';
+import { CameraCaptureModal } from './components/CameraCaptureModal';
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
@@ -200,65 +202,126 @@ const DEFAULT_VOSO: VOSOInspection = {
 };
 import { motion, AnimatePresence } from 'motion/react';
 
-// Utility to compress images before saving to Firestore
-const compressImage = (base64Str: string): Promise<string> => {
-  return new Promise((resolve) => {
+// Memory-safe image compressor that processes directly from File, Blob, or String without allocating massive memory buffers
+const compressImage = (source: File | Blob | string, maxWidth = 1024, maxHeight = 1024, quality = 0.65): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    let objectUrl: string | null = null;
     const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 800; // Reduced slightly for better optimization
-      const MAX_HEIGHT = 800;
-      let width = img.width;
-      let height = img.height;
 
-      if (width > height) {
-        if (width > MAX_WIDTH) {
-          height *= MAX_WIDTH / width;
-          width = MAX_WIDTH;
-        }
-      } else {
-        if (height > MAX_HEIGHT) {
-          width *= MAX_HEIGHT / height;
-          height = MAX_HEIGHT;
-        }
+    const cleanup = () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
       }
+    };
 
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
-      
-      // Use webp for better compression if supported
-      // Fallback to jpeg 0.7 if webp is not supported (handled by toDataURL internally)
-      resolve(canvas.toDataURL('image/webp', 0.6)); // 0.6 quality for webp is usually excellent and very small
+    img.onload = () => {
+      try {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+        
+        if (!ctx) {
+          cleanup();
+          if (typeof source === 'string') resolve(source);
+          else reject(new Error('No se pudo inicializar el procesador de imagen.'));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        cleanup();
+
+        let result: string;
+        try {
+          result = canvas.toDataURL('image/webp', quality);
+          if (!result.startsWith('data:image/webp')) {
+            result = canvas.toDataURL('image/jpeg', quality);
+          }
+        } catch (e) {
+          result = canvas.toDataURL('image/jpeg', quality);
+        }
+        resolve(result);
+      } catch (err) {
+        cleanup();
+        if (typeof source === 'string') resolve(source);
+        else reject(err);
+      }
     };
+
     img.onerror = () => {
-      resolve(base64Str); // Return original if compression fails
+      cleanup();
+      if (typeof source === 'string') resolve(source);
+      else reject(new Error('El archivo seleccionado no es una imagen válida o está dañado.'));
     };
+
+    if (typeof source === 'string') {
+      img.src = source;
+    } else {
+      objectUrl = URL.createObjectURL(source);
+      img.src = objectUrl;
+    }
   });
 };
 
-// Utility to validate image dimensions and compress
-const validateAndCompressImage = (base64Str: string, minWidth = 300, minHeight = 300): Promise<string> => {
+// Memory-safe image validator and compressor directly from File, Blob, or Base64
+const validateAndCompressImage = (source: File | Blob | string, minWidth = 150, minHeight = 150): Promise<string> => {
   return new Promise((resolve, reject) => {
+    let objectUrl: string | null = null;
     const img = new Image();
-    img.src = base64Str;
+
+    const cleanup = () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+      }
+    };
+
     img.onload = async () => {
-      if (img.width < minWidth || img.height < minHeight) {
-        reject(new Error(`La imagen debe tener al menos ${minWidth}x${minHeight} píxeles de resolución (actual: ${img.width}x${img.height}px).`));
+      const origW = img.width;
+      const origH = img.height;
+      cleanup();
+
+      if (origW < minWidth || origH < minHeight) {
+        reject(new Error(`La imagen debe tener al menos ${minWidth}x${minHeight} píxeles de resolución (actual: ${origW}x${origH}px).`));
         return;
       }
+
       try {
-        const compressed = await compressImage(base64Str);
+        const compressed = await compressImage(source, 1024, 1024, 0.65);
         resolve(compressed);
       } catch (err) {
-        resolve(base64Str); // Fallback
+        if (typeof source === 'string') resolve(source);
+        else reject(err);
       }
     };
+
     img.onerror = () => {
+      cleanup();
       reject(new Error('El archivo seleccionado no es una imagen válida o está dañado.'));
     };
+
+    if (typeof source === 'string') {
+      img.src = source;
+    } else {
+      objectUrl = URL.createObjectURL(source);
+      img.src = objectUrl;
+    }
   });
 };
 
@@ -780,10 +843,9 @@ const VOSOExecutionCategory = ({
                           <input 
                             type="file" 
                             accept="image/*" 
-                            capture="environment" 
                             className="hidden" 
                             id={`photo-${item.id}`}
-                            onChange={(e) => {
+                            onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (file) {
                                 if (itemPhotos.length >= 3) {
@@ -791,21 +853,16 @@ const VOSOExecutionCategory = ({
                                   e.target.value = '';
                                   return;
                                 }
-                                const reader = new FileReader();
-                                reader.onloadend = async () => {
-                                  const base64 = reader.result as string;
-                                  try {
-                                    const compressed = await validateAndCompressImage(base64, 300, 300);
-                                    const updated = [...itemPhotos, compressed].slice(0, 3);
-                                    onUpdate(item.id, res.status, res.comment, updated, res.solvedByOperator);
-                                    e.target.value = '';
-                                  } catch (err: any) {
-                                    console.error("Checklist image validation error:", err);
-                                    alert(err.message || "Error al validar la imagen.");
-                                    e.target.value = '';
-                                  }
-                                };
-                                reader.readAsDataURL(file);
+                                try {
+                                  const compressed = await validateAndCompressImage(file, 150, 150);
+                                  const updated = [...itemPhotos, compressed].slice(0, 3);
+                                  onUpdate(item.id, res.status, res.comment, updated, res.solvedByOperator);
+                                  e.target.value = '';
+                                } catch (err: any) {
+                                  console.error("Checklist image processing error:", err);
+                                  alert(err.message || "Error al procesar la imagen.");
+                                  e.target.value = '';
+                                }
                               }
                             }}
                           />
@@ -906,6 +963,53 @@ const OperatorDashboard = ({
   const [areaSearchQuery, setAreaSearchQuery] = useState('');
   const [allActiveFindings, setAllActiveFindings] = useState<Finding[]>([]);
   const [duplicateFinding, setDuplicateFinding] = useState<Finding | null>(null);
+  const [showInAppCameraModal, setShowInAppCameraModal] = useState(false);
+
+  // Auto-restore active inspection draft if the mobile browser was reloaded or activity suspended
+  useEffect(() => {
+    try {
+      const savedDraft = sessionStorage.getItem('chekify_active_inspection_draft');
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.selectedArea) {
+          setSelectedArea(parsed.selectedArea);
+          if (typeof parsed.currentEquipmentIndex === 'number') setCurrentEquipmentIndex(parsed.currentEquipmentIndex);
+          if (parsed.showFindingForm) setShowFindingForm(true);
+          if (parsed.findingDescription) setFindingDescription(parsed.findingDescription);
+          if (parsed.findingCategory) setFindingCategory(parsed.findingCategory);
+          if (parsed.findingSubcat) setFindingSubcat(parsed.findingSubcat);
+          if (Array.isArray(parsed.findingPhotos) && parsed.findingPhotos.length > 0) setFindingPhotos(parsed.findingPhotos);
+          if (parsed.immediateSolution) setImmediateSolution(parsed.immediateSolution);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not restore inspection draft", e);
+    }
+  }, []);
+
+  // Auto-save active inspection draft to sessionStorage
+  useEffect(() => {
+    if (selectedArea) {
+      try {
+        const draft = {
+          selectedArea,
+          currentEquipmentIndex,
+          showFindingForm,
+          findingDescription,
+          findingCategory,
+          findingSubcat,
+          findingPhotos,
+          immediateSolution,
+          savedAt: Date.now()
+        };
+        sessionStorage.setItem('chekify_active_inspection_draft', JSON.stringify(draft));
+      } catch (e) {
+        // Ignore quota limits
+      }
+    } else {
+      sessionStorage.removeItem('chekify_active_inspection_draft');
+    }
+  }, [selectedArea, currentEquipmentIndex, showFindingForm, findingDescription, findingCategory, findingSubcat, findingPhotos, immediateSolution]);
   
   // Collapsible areas and inspection tracking
   const [expandedAreaIds, setExpandedAreaIds] = useState<Record<string, boolean>>({});
@@ -1027,6 +1131,7 @@ const OperatorDashboard = ({
     setVosoResponses({});
     setEquipmentOperatingStatus({});
     setShowEquipmentSummary(false);
+    try { sessionStorage.removeItem('chekify_active_inspection_draft'); } catch(e) {}
   };
   
   const saveCurrentToResults = () => {
@@ -1293,7 +1398,20 @@ const OperatorDashboard = ({
         const config = { fps: 10, qrbox: { width: 250, height: 250 } };
         
         const onScanSuccess = (decodedText: string) => {
-          const area = areas.find(a => a.id === decodedText || a.qrCode === decodedText);
+          const raw = (decodedText || '').trim();
+          const lower = raw.toLowerCase();
+          const area = areas.find(a => {
+            const aId = (a.id || '').trim();
+            const aQr = (a.qrCode || '').trim();
+            return (
+              aId === raw || 
+              aQr === raw ||
+              aId.toLowerCase() === lower ||
+              (aQr && aQr.toLowerCase() === lower) ||
+              (lower.includes('area=') && lower.includes(aId.toLowerCase())) ||
+              (aQr && lower.includes('qr=') && lower.includes(aQr.toLowerCase()))
+            );
+          });
           if (area) {
             startAreaInspection(area);
             scanner.stop().then(() => {
@@ -2998,7 +3116,6 @@ const OperatorDashboard = ({
                 <input 
                   type="file" 
                   accept="image/*" 
-                  capture="environment"
                   id="findingPhotoInput"
                   className="hidden" 
                   onChange={async (e) => {
@@ -3010,37 +3127,45 @@ const OperatorDashboard = ({
                         return;
                       }
                       setFormValidationError(null);
-                      const reader = new FileReader();
-                      reader.onloadend = async () => {
-                        const base64 = reader.result as string;
-                        try {
-                          const compressed = await validateAndCompressImage(base64, 300, 300);
-                          setFindingPhotos(prev => [...prev, compressed].slice(0, 3));
-                          e.target.value = '';
-                        } catch (err: any) {
-                          console.error("Manual finding validation/compression error:", err);
-                          setFormValidationError(err.message || "Error al validar la foto del hallazgo");
-                          setMessage({ text: err.message || "Error al validar la foto del hallazgo", type: 'error' });
-                          e.target.value = ''; // Reset file input
-                        }
-                      };
-                      reader.readAsDataURL(file);
+                      try {
+                        const compressed = await validateAndCompressImage(file, 150, 150);
+                        setFindingPhotos(prev => [...prev, compressed].slice(0, 3));
+                        e.target.value = '';
+                      } catch (err: any) {
+                        console.error("Manual finding validation/compression error:", err);
+                        setFormValidationError(err.message || "Error al procesar la foto del hallazgo");
+                        setMessage({ text: err.message || "Error al procesar la foto del hallazgo", type: 'error' });
+                        e.target.value = '';
+                      }
                     }
                   }}
                 />
                 
                 {findingPhotos.length < 3 && (
-                  <label 
-                    htmlFor="findingPhotoInput"
-                    className={`w-20 h-20 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95 text-[10px] font-bold gap-1 ${
-                      findingPhotos.length === 0 
-                        ? 'bg-red-50 dark:bg-red-950/30 border-2 border-red-500 text-red-600 dark:text-red-400 animate-pulse' 
-                        : 'bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-400 hover:text-brand-blue hover:border-brand-blue'
-                    }`}
-                  >
-                    <Camera className="w-6 h-6" />
-                    <span>{findingPhotos.length === 0 ? '+ Foto *' : `${findingPhotos.length}/3`}</span>
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowInAppCameraModal(true)}
+                      className={`h-20 px-3.5 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95 text-[10px] font-bold gap-1 shadow-xs ${
+                        findingPhotos.length === 0 
+                          ? 'bg-red-50 dark:bg-red-950/30 border-2 border-red-500 text-red-600 dark:text-red-400 animate-pulse' 
+                          : 'bg-zinc-900 dark:bg-white text-white dark:text-black border border-transparent'
+                      }`}
+                      title="Tomar foto con cámara en vivo sin salir de la app"
+                    >
+                      <Camera className="w-5 h-5 text-sky-400" />
+                      <span className="whitespace-nowrap">📷 Cámara</span>
+                    </button>
+
+                    <label 
+                      htmlFor="findingPhotoInput"
+                      className="h-20 px-3 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95 text-[10px] font-bold gap-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-400 hover:text-sky-600 hover:border-sky-500"
+                      title="Subir foto desde galería o archivos"
+                    >
+                      <Upload className="w-5 h-5" />
+                      <span className="whitespace-nowrap">📁 Galería</span>
+                    </label>
+                  </div>
                 )}
 
                 {findingPhotos.map((photo, pIdx) => (
@@ -3612,6 +3737,20 @@ const OperatorDashboard = ({
         isOpen={showQuickHelp}
         onClose={() => setShowQuickHelp(false)}
         moduleKey="Inspeccion"
+      />
+      <CameraCaptureModal
+        isOpen={showInAppCameraModal}
+        onClose={() => setShowInAppCameraModal(false)}
+        onCapture={async (blobOrData) => {
+          try {
+            const compressed = await validateAndCompressImage(blobOrData, 150, 150);
+            setFindingPhotos(prev => [...prev, compressed].slice(0, 3));
+          } catch (e: any) {
+            console.error("Camera capture error:", e);
+            setFormValidationError(e.message || "Error al procesar la foto tomada");
+          }
+        }}
+        title="Foto de Evidencia del Hallazgo"
       />
     </div>
   );
@@ -7230,7 +7369,7 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
 
       {activeSubTab === 'Users' && <AdminUserManagement plants={plants} />}
       {activeSubTab === 'Plants' && <AdminPlantManagement plants={plants} />}
-      {activeSubTab === 'Areas' && <AdminAreaManagement plants={plants} areas={areas} />}
+      {activeSubTab === 'Areas' && <AdminAreaManagement plants={plants} areas={areas} equipment={equipmentList} />}
       {activeSubTab === 'Equipment' && <AdminEquipmentManagement plants={plants} areas={areas} equipment={equipmentList} />}
     </div>
   );
@@ -7470,12 +7609,14 @@ const AdminPlantManagement = ({ plants }: { plants: Plant[] }) => {
   );
 };
 
-const AdminAreaManagement = ({ plants, areas }: { plants: {id: string, name: string}[], areas: Area[] }) => {
+const AdminAreaManagement = ({ plants, areas, equipment = [] }: { plants: {id: string, name: string}[], areas: Area[], equipment?: Equipment[] }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [formData, setFormData] = useState({ name: '', plantId: '', qrCode: '' });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+  const [qrModalArea, setQrModalArea] = useState<Area | null>(null);
+  const [showQRModal, setShowQRModal] = useState(false);
 
   useEffect(() => {
     if (message) {
@@ -7512,9 +7653,35 @@ const AdminAreaManagement = ({ plants, areas }: { plants: {id: string, name: str
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-zinc-900 dark:text-white">Áreas de Inspección</h3>
-        <button onClick={() => { setEditingArea(null); setFormData({name:'', plantId:'', qrCode:''}); setShowForm(true); }} className="p-2 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"><Plus className="w-4 h-4" /></button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-zinc-900 dark:text-white">Áreas de Inspección</h3>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Gestiona zonas e imprime códigos QR oficiales con logo CheKify para instalación en planta</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {areas.filter(a => (a as any).status !== 'deleted').length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setQrModalArea(areas.find(a => (a as any).status !== 'deleted') || null);
+                setShowQRModal(true);
+              }}
+              title="Generar e imprimir fichas o stickers QR de áreas"
+              className="px-3 py-2 bg-[#0071E3]/10 hover:bg-[#0071E3]/20 text-[#0071E3] dark:text-[#0A84FF] border border-[#0071E3]/25 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <QrCode className="w-4 h-4" />
+              <span>Imprimir Fichas QR</span>
+            </button>
+          )}
+          <button 
+            type="button"
+            onClick={() => { setEditingArea(null); setFormData({name:'', plantId:'', qrCode:''}); setShowForm(true); }} 
+            className="p-2 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
+            title="Crear Nueva Área"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <BulkUpload 
@@ -7531,10 +7698,21 @@ const AdminAreaManagement = ({ plants, areas }: { plants: {id: string, name: str
               <p className="font-bold text-zinc-900 dark:text-white">{a.name}</p>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-bold">Planta: {plants.find(p => p.id === (a as any).plantId)?.name || (a as any).plantId}</p>
             </div>
-            <div className="flex gap-2 items-center">
-              <span className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-bold mr-2 tracking-wider">QR: {a.qrCode}</span>
-              <button onClick={() => { setEditingArea(a); setFormData({name: a.name, plantId: (a as any).plantId, qrCode: a.qrCode}); setShowForm(true); }} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white transition-colors"><FileText className="w-4 h-4" /></button>
-              <button onClick={() => setConfirmDeleteId(a.id)} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+            <div className="flex gap-1.5 items-center">
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase font-bold mr-1 tracking-wider">QR: {a.qrCode}</span>
+              <button 
+                type="button"
+                onClick={() => {
+                  setQrModalArea(a);
+                  setShowQRModal(true);
+                }} 
+                title="Generar e imprimir código QR con logo CheKify"
+                className="p-2 text-[#0071E3] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-colors cursor-pointer"
+              >
+                <QrCode className="w-4 h-4" />
+              </button>
+              <button onClick={() => { setEditingArea(a); setFormData({name: a.name, plantId: (a as any).plantId, qrCode: a.qrCode}); setShowForm(true); }} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer" title="Editar"><FileText className="w-4 h-4" /></button>
+              <button onClick={() => setConfirmDeleteId(a.id)} className="p-2 text-zinc-400 dark:text-zinc-600 hover:text-red-500 transition-colors cursor-pointer" title="Eliminar"><X className="w-4 h-4" /></button>
             </div>
           </div>
         ))}
@@ -7601,6 +7779,16 @@ const AdminAreaManagement = ({ plants, areas }: { plants: {id: string, name: str
           </div>
         )}
       </AnimatePresence>
+
+      <AreaQRModal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        area={qrModalArea}
+        allAreas={areas.filter(a => (a as any).status !== 'deleted')}
+        plants={plants}
+        equipment={equipment}
+        onSelectArea={(a) => setQrModalArea(a)}
+      />
     </div>
   );
 };
