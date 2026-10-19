@@ -33,33 +33,45 @@ interface AreaQRModalProps {
 type BadgeFormat = 'placard' | 'sticker' | 'detailed';
 type BadgeTheme = 'brand' | 'emerald' | 'monochrome';
 
-// Cache for base64 converted logo to prevent foreignObject CORS / taint issues
-let cachedLogoDataUrl: string | null = null;
-const loadLogoAsDataUrl = async (): Promise<string> => {
-  if (cachedLogoDataUrl) return cachedLogoDataUrl;
+// Cache for base64 converted logos to prevent foreignObject CORS / taint issues
+let cachedFullLogoDataUrl: string | null = null;
+let cachedSmallLogoDataUrl: string | null = null;
+
+const convertImgToDataUrl = (src: string, targetWidth: number, targetHeight: number): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || 120;
-        canvas.height = img.naturalHeight || 120;
+        canvas.width = img.naturalWidth || targetWidth;
+        canvas.height = img.naturalHeight || targetHeight;
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0);
-          cachedLogoDataUrl = canvas.toDataURL('image/png');
-          resolve(cachedLogoDataUrl);
+          resolve(canvas.toDataURL('image/png'));
           return;
         }
       } catch (e) {
         console.warn('Canvas export error for logo:', e);
       }
-      resolve('/logo_small.png');
+      resolve(src);
     };
-    img.onerror = () => resolve('/logo_small.png');
-    img.src = '/logo_small.png';
+    img.onerror = () => resolve(src);
+    img.src = src;
   });
+};
+
+const loadFullLogoAsDataUrl = async (): Promise<string> => {
+  if (cachedFullLogoDataUrl) return cachedFullLogoDataUrl;
+  cachedFullLogoDataUrl = await convertImgToDataUrl('/logo.png', 1536, 400);
+  return cachedFullLogoDataUrl;
+};
+
+const loadSmallLogoAsDataUrl = async (): Promise<string> => {
+  if (cachedSmallLogoDataUrl) return cachedSmallLogoDataUrl;
+  cachedSmallLogoDataUrl = await convertImgToDataUrl('/logo_small.png', 120, 120);
+  return cachedSmallLogoDataUrl;
 };
 
 export const AreaQRModal: React.FC<AreaQRModalProps> = ({
@@ -81,16 +93,20 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
   const [isGeneratingPNG, setIsGeneratingPNG] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [logoDataUrl, setLogoDataUrl] = useState<string>('/logo_small.png');
+  const [fullLogoDataUrl, setFullLogoDataUrl] = useState<string>('/logo.png');
+  const [smallLogoDataUrl, setSmallLogoDataUrl] = useState<string>('/logo_small.png');
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const previewCardRef = useRef<HTMLDivElement>(null);
 
-  // Preload base64 logo on mount/open
+  // Preload base64 logos on mount/open
   useEffect(() => {
     let isMounted = true;
-    loadLogoAsDataUrl().then((dataUri) => {
-      if (isMounted) setLogoDataUrl(dataUri);
+    Promise.all([loadFullLogoAsDataUrl(), loadSmallLogoAsDataUrl()]).then(([fullUri, smallUri]) => {
+      if (isMounted) {
+        setFullLogoDataUrl(fullUri);
+        setSmallLogoDataUrl(smallUri);
+      }
     });
     return () => { isMounted = false; };
   }, []);
@@ -701,19 +717,19 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
               <div className="w-full h-full border-2 border-dashed border-zinc-300 rounded-2xl p-3.5 flex flex-col items-center bg-white">
                 
                 {/* Header with CheKify Logo */}
-                <div className="w-full flex items-center justify-between border-b-2 border-zinc-900 pb-2.5 mb-3">
+                <div className="w-full flex items-center justify-between border-b-2 border-zinc-900 pb-2.5 mb-3 gap-2">
                   <div className="flex flex-col items-start">
                     <img 
-                      src={logoDataUrl || "/logo.png"} 
+                      src={fullLogoDataUrl || "/logo.png"} 
                       alt="CheKify Logo" 
-                      className="h-6 w-auto object-contain"
+                      className="h-8 sm:h-9 w-auto max-w-[170px] sm:max-w-[210px] object-contain object-left"
                       crossOrigin="anonymous" 
                     />
                     <span className="text-[8px] font-black tracking-widest text-sky-600 uppercase mt-0.5">
                       PUNTO DE INSPECCIÓN OFICIAL
                     </span>
                   </div>
-                  <span className="text-[9px] font-extrabold uppercase bg-zinc-100 text-zinc-700 px-2 py-1 rounded-md border border-zinc-200">
+                  <span className="text-[9px] font-extrabold uppercase bg-zinc-100 text-zinc-700 px-2 py-1 rounded-md border border-zinc-200 shrink-0">
                     {plantName}
                   </span>
                 </div>
@@ -741,7 +757,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                     level="H" // High error correction (30%)
                     marginSize={1}
                     imageSettings={withLogo ? {
-                      src: logoDataUrl || "/logo_small.png",
+                      src: smallLogoDataUrl || "/logo_small.png",
                       height: 48,
                       width: 48,
                       excavate: true,
@@ -753,7 +769,7 @@ export const AreaQRModal: React.FC<AreaQRModalProps> = ({
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="w-12 h-12 bg-white rounded-xl shadow-xs border-2 border-white flex items-center justify-center p-1">
                         <img 
-                          src={logoDataUrl || "/logo_small.png"} 
+                          src={smallLogoDataUrl || "/logo_small.png"} 
                           alt="Logo QR" 
                           className="w-full h-full object-contain"
                           crossOrigin="anonymous" 

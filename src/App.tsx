@@ -689,6 +689,7 @@ const VOSOExecutionCategory = ({
   items, 
   responses, 
   onUpdate,
+  onRequestCamera,
   colorClass 
 }: { 
   title: string, 
@@ -696,6 +697,7 @@ const VOSOExecutionCategory = ({
   items: VOSOItem[], 
   responses: Record<string, VOSOResponse>,
   onUpdate: (id: string, status: any, comment?: string, photo?: string | string[], solved?: boolean) => void,
+  onRequestCamera?: (itemId: string) => void,
   colorClass: string
 }) => {
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
@@ -865,20 +867,38 @@ const VOSOExecutionCategory = ({
                             }}
                           />
 
-                          <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-2.5">
                             {itemPhotos.length < 3 && (
-                              <button 
-                                type="button"
-                                onClick={() => document.getElementById(`photo-${item.id}`)?.click()}
-                                className={`flex-1 min-w-[160px] py-3 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer ${
-                                  isPhotoMissing 
-                                    ? 'bg-red-600 dark:bg-red-500 text-white border-2 border-red-400 animate-pulse shadow-lg shadow-red-200 dark:shadow-none' 
-                                    : 'bg-zinc-900 dark:bg-white text-white dark:text-black shadow-lg shadow-zinc-200 dark:shadow-none'
-                                }`}
-                              >
-                                <Camera className="w-4 h-4" />
-                                {itemPhotos.length === 0 ? '📷 CAPTURAR FOTO (OBLIGATORIO *)' : `AÑADIR OTRA FOTO (${itemPhotos.length}/3)`}
-                              </button>
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    if (onRequestCamera) {
+                                      onRequestCamera(item.id);
+                                    } else {
+                                      document.getElementById(`photo-${item.id}`)?.click();
+                                    }
+                                  }}
+                                  className={`flex-1 sm:flex-initial py-3 px-4 rounded-2xl text-[11px] font-black uppercase tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-md ${
+                                    isPhotoMissing 
+                                      ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-500/25 animate-pulse' 
+                                      : 'bg-[#0071E3] hover:bg-[#0077ED] text-white shadow-blue-500/20'
+                                  }`}
+                                  title="Tomar foto directamente con la cámara de la aplicación"
+                                >
+                                  <Camera className="w-4 h-4 shrink-0" />
+                                  <span>{itemPhotos.length === 0 ? '📷 Tomar Foto (Cámara)' : `+ Foto (${itemPhotos.length}/3)`}</span>
+                                </button>
+
+                                <label 
+                                  htmlFor={`photo-${item.id}`}
+                                  className="py-3 px-3.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-2xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-700 active:scale-95 shrink-0"
+                                  title="Subir foto desde la galería o archivos del dispositivo"
+                                >
+                                  <Upload className="w-4 h-4 shrink-0" />
+                                  <span>Galería</span>
+                                </label>
+                              </div>
                             )}
 
                             {itemPhotos.map((pUrl, pIdx) => (
@@ -961,7 +981,12 @@ const OperatorDashboard = ({
   const [areaSearchQuery, setAreaSearchQuery] = useState('');
   const [allActiveFindings, setAllActiveFindings] = useState<Finding[]>([]);
   const [duplicateFinding, setDuplicateFinding] = useState<Finding | null>(null);
-  const [showInAppCameraModal, setShowInAppCameraModal] = useState(false);
+  const [cameraCaptureTarget, setCameraCaptureTarget] = useState<
+    | { type: 'finding' }
+    | { type: 'voso'; itemId: string }
+    | null
+  >(null);
+  const showInAppCameraModal = cameraCaptureTarget !== null;
 
 
   
@@ -2910,6 +2935,7 @@ const OperatorDashboard = ({
                     responses={vosoResponses}
                     colorClass="bg-sky-50/80"
                     onUpdate={handleSetVOSOResponse}
+                    onRequestCamera={(itemId) => setCameraCaptureTarget({ type: 'voso', itemId })}
                   />
                   <VOSOExecutionCategory 
                     title="👂 Oír" 
@@ -2918,6 +2944,7 @@ const OperatorDashboard = ({
                     responses={vosoResponses}
                     colorClass="bg-indigo-50/80"
                     onUpdate={handleSetVOSOResponse}
+                    onRequestCamera={(itemId) => setCameraCaptureTarget({ type: 'voso', itemId })}
                   />
                   <VOSOExecutionCategory 
                     title="✋ Sentir" 
@@ -2926,6 +2953,7 @@ const OperatorDashboard = ({
                     responses={vosoResponses}
                     colorClass="bg-emerald-50/80"
                     onUpdate={handleSetVOSOResponse}
+                    onRequestCamera={(itemId) => setCameraCaptureTarget({ type: 'voso', itemId })}
                   />
                   <VOSOExecutionCategory 
                     title="👃 Oler" 
@@ -2934,6 +2962,7 @@ const OperatorDashboard = ({
                     responses={vosoResponses}
                     colorClass="bg-orange-50/80"
                     onUpdate={handleSetVOSOResponse}
+                    onRequestCamera={(itemId) => setCameraCaptureTarget({ type: 'voso', itemId })}
                   />
                   <VOSOExecutionCategory 
                     title="✨ Orden y Limpieza" 
@@ -2942,6 +2971,7 @@ const OperatorDashboard = ({
                     responses={vosoResponses}
                     colorClass="bg-purple-50/80"
                     onUpdate={handleSetVOSOResponse}
+                    onRequestCamera={(itemId) => setCameraCaptureTarget({ type: 'voso', itemId })}
                   />
                 </div>
               </div>
@@ -3170,7 +3200,7 @@ const OperatorDashboard = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowInAppCameraModal(true)}
+                      onClick={() => setCameraCaptureTarget({ type: 'finding' })}
                       className={`h-20 px-3.5 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95 text-[10px] font-bold gap-1 shadow-xs ${
                         findingPhotos.length === 0 
                           ? 'bg-red-50 dark:bg-red-950/30 border-2 border-red-500 text-red-600 dark:text-red-400 animate-pulse' 
@@ -3764,18 +3794,40 @@ const OperatorDashboard = ({
         moduleKey="Inspeccion"
       />
       <CameraCaptureModal
-        isOpen={showInAppCameraModal}
-        onClose={() => setShowInAppCameraModal(false)}
+        isOpen={cameraCaptureTarget !== null}
+        onClose={() => setCameraCaptureTarget(null)}
         onCapture={async (blobOrData) => {
           try {
             const compressed = await validateAndCompressImage(blobOrData, 150, 150);
-            setFindingPhotos(prev => [...prev, compressed].slice(0, 3));
+            if (cameraCaptureTarget?.type === 'finding') {
+              setFindingPhotos(prev => [...prev, compressed].slice(0, 3));
+            } else if (cameraCaptureTarget?.type === 'voso') {
+              const itemId = cameraCaptureTarget.itemId;
+              const current = vosoResponses[itemId];
+              const existingPhotos = current?.photoUrls && current.photoUrls.length > 0
+                ? current.photoUrls
+                : (current?.photoUrl ? [current.photoUrl] : []);
+              const updatedPhotos = [...existingPhotos, compressed].slice(0, 3);
+              handleSetVOSOResponse(
+                itemId, 
+                current?.status || 'Observación', 
+                current?.comment || '', 
+                updatedPhotos, 
+                current?.solvedByOperator
+              );
+            }
           } catch (e: any) {
             console.error("Camera capture error:", e);
             setFormValidationError(e.message || "Error al procesar la foto tomada");
+          } finally {
+            setCameraCaptureTarget(null);
           }
         }}
-        title="Foto de Evidencia del Hallazgo"
+        title={
+          cameraCaptureTarget?.type === 'voso'
+            ? "Foto de Evidencia del Hallazgo VOSO"
+            : "Foto de Evidencia del Hallazgo"
+        }
       />
     </div>
   );
@@ -10664,7 +10716,7 @@ const AppLayout = ({
                     {/* Compact Weather Summary Pill in Header */}
                     <button
                       onClick={() => setIsWeatherExpanded(true)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 text-xs font-medium transition-all shadow-xs shrink-0 cursor-pointer hover:bg-[#F2F2F7] dark:hover:bg-[#2C2C2E] active:scale-98"
+                      className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 text-xs font-medium transition-all shadow-xs shrink-0 cursor-pointer hover:bg-[#F2F2F7] dark:hover:bg-[#2C2C2E] active:scale-98"
                       title="Ver condiciones meteorológicas detalladas"
                     >
                       {loadingWeather ? (
@@ -10697,13 +10749,16 @@ const AppLayout = ({
 
                     <div className="h-4 w-px bg-[#D2D2D7]/50 dark:bg-white/10 hidden sm:block mx-0.5" />
 
+                    {/* Theme Toggle (Hidden on extra small mobile, accessible in mobile drawer) */}
                     <button
                       onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                      className="text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
+                      className="hidden sm:flex text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
                       title={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
                     >
                       {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                     </button>
+
+                    {/* Notification Center Trigger */}
                     <button 
                       onClick={() => setShowNotificationCenter(true)}
                       className="relative text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
@@ -10716,10 +10771,12 @@ const AppLayout = ({
                         </span>
                       )}
                     </button>
+
+                    {/* Mobile Menu Button with Indicator */}
                     <button 
                       onClick={() => setIsMobileMoreOpen(true)}
                       className="md:hidden text-[#6E6E73] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7] transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs relative"
-                      title="Menú"
+                      title="Menú Móvil"
                     >
                       <Menu className="w-4 h-4" />
                       {unreadCount > 0 && (
@@ -10728,9 +10785,11 @@ const AppLayout = ({
                         </span>
                       )}
                     </button>
+
+                    {/* Logout Button (Desktop only in header, mobile has it in drawer) */}
                     <button 
                       onClick={() => signOut(auth)}
-                      className="text-[#FF3B30] hover:bg-[#FF3B30]/10 transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
+                      className="hidden md:flex text-[#FF3B30] hover:bg-[#FF3B30]/10 transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
                       title="Cerrar Sesión"
                     >
                       <LogOut className="w-4 h-4" />
@@ -11019,13 +11078,13 @@ const AppLayout = ({
                               if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', 'Operador');
                               setIsMobileMoreOpen(false);
                             }}
-                            className={`py-2 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                            className={`py-2.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                               effectiveRole === 'Operador'
                                 ? 'bg-[#0071E3] text-white shadow-sm'
                                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                             }`}
                           >
-                            <HardHat className="w-4 h-4" />
+                            <HardHat className="w-4 h-4 shrink-0" />
                             <span>Operador</span>
                           </button>
                           <button
@@ -11035,13 +11094,13 @@ const AppLayout = ({
                               if (typeof window !== 'undefined') localStorage.setItem('chekify_active_role_view', user.role);
                               setIsMobileMoreOpen(false);
                             }}
-                            className={`py-2 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                            className={`py-2.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                               effectiveRole !== 'Operador'
                                 ? 'bg-[#0071E3] text-white shadow-sm'
                                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                             }`}
                           >
-                            <Briefcase className="w-4 h-4" />
+                            <Briefcase className="w-4 h-4 shrink-0" />
                             <span>{user.role}</span>
                           </button>
                         </div>
@@ -11053,84 +11112,167 @@ const AppLayout = ({
                       </div>
                     )}
 
-                    {/* Navigation Options Grid */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button 
-                        onClick={() => { setShowProfileModal(true); setIsMobileMoreOpen(false); }}
-                        className="p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all bg-sky-50/70 dark:bg-sky-500/10 border-sky-200/60 dark:border-sky-500/20 text-zinc-800 dark:text-zinc-200 hover:bg-sky-100 dark:hover:bg-sky-500/20 cursor-pointer"
-                      >
-                        <UserCheck className="w-5 h-5 text-sky-500" />
-                        <div>
-                          <p className="text-xs font-extrabold uppercase tracking-tight">Mi Perfil</p>
-                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Editar foto y datos personales</p>
-                        </div>
-                      </button>
-
-                      {user.role === 'Administrador' && (
+                    {/* Section 1: Módulos Principales de Inspección */}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500 px-1">
+                        Módulos de Inspección
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* VOSO */}
                         <button 
-                          onClick={() => { setActiveTab('Admin'); setIsMobileMoreOpen(false); }}
-                          className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all cursor-pointer ${
-                            activeTab === 'Admin'
-                              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                          onClick={() => { setActiveTab('Home'); setIsMobileMoreOpen(false); }}
+                          className={`p-3 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${
+                            activeTab === 'Home'
+                              ? 'bg-[#0071E3] text-white border-[#0071E3] shadow-md'
                               : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                           }`}
                         >
-                          <Users className="w-5 h-5 text-sky-500" />
-                          <div>
-                            <p className="text-xs font-extrabold uppercase tracking-tight">Administración</p>
-                            <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Áreas con QR, equipos y usuarios</p>
+                          <div className="flex items-center gap-2">
+                            <LayoutDashboard className={`w-4 h-4 ${activeTab === 'Home' ? 'text-white' : 'text-[#0071E3]'}`} />
+                            <p className="text-xs font-black uppercase tracking-tight">VOSO</p>
                           </div>
+                          <p className={`text-[9px] font-medium leading-tight ${activeTab === 'Home' ? 'text-white/80' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                            Inspección en terreno
+                          </p>
                         </button>
-                      )}
 
-                      <button 
-                        onClick={() => { setShowNotificationCenter(true); setIsMobileMoreOpen(false); }}
-                        className="p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all relative bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between">
-                          <Bell className="w-5 h-5 text-amber-500" />
-                          {unreadCount > 0 && (
-                            <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[8px] font-black">
-                              {unreadCount}
-                            </span>
+                        {/* 5S Orden y Limpieza */}
+                        <button 
+                          onClick={() => { setActiveTab('OrdenLimpieza'); setIsMobileMoreOpen(false); }}
+                          className={`p-3 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${
+                            activeTab === 'OrdenLimpieza'
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                              : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Sparkles className={`w-4 h-4 ${activeTab === 'OrdenLimpieza' ? 'text-white' : 'text-purple-500'}`} />
+                            <p className="text-xs font-black uppercase tracking-tight">5S Limpieza</p>
+                          </div>
+                          <p className={`text-[9px] font-medium leading-tight ${activeTab === 'OrdenLimpieza' ? 'text-white/80' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                            Orden y limpieza
+                          </p>
+                        </button>
+
+                        {/* Historial */}
+                        <button 
+                          onClick={() => { setActiveTab('History'); setIsMobileMoreOpen(false); }}
+                          className={`p-3 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${
+                            activeTab === 'History'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                              : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <History className={`w-4 h-4 ${activeTab === 'History' ? 'text-white' : 'text-emerald-500'}`} />
+                            <p className="text-xs font-black uppercase tracking-tight">Historial</p>
+                          </div>
+                          <p className={`text-[9px] font-medium leading-tight ${activeTab === 'History' ? 'text-white/80' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                            Registros y reportes
+                          </p>
+                        </button>
+
+                        {/* Notificaciones */}
+                        <button 
+                          onClick={() => { setShowNotificationCenter(true); setIsMobileMoreOpen(false); }}
+                          className="p-3 rounded-2xl border text-left flex flex-col gap-1.5 transition-all relative bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Bell className="w-4 h-4 text-amber-500" />
+                              <p className="text-xs font-black uppercase tracking-tight">Alertas</p>
+                            </div>
+                            {unreadCount > 0 && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[8px] font-black">
+                                {unreadCount}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[9px] text-zinc-500 dark:text-zinc-400 font-medium leading-tight">
+                            Bandeja de avisos
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Section 2: Administración y Ajustes (Si es Admin o Supervisor) */}
+                    {(user.role === 'Administrador' || user.role === 'Supervisor') && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500 px-1">
+                          Gestión y Configuración
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {user.role === 'Administrador' && (
+                            <button 
+                              onClick={() => { setActiveTab('Admin'); setIsMobileMoreOpen(false); }}
+                              className={`p-3 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${
+                                activeTab === 'Admin'
+                                  ? 'bg-[#0071E3] text-white border-[#0071E3] shadow-md'
+                                  : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <Users className={`w-4 h-4 ${activeTab === 'Admin' ? 'text-white' : 'text-sky-500'}`} />
+                                <p className="text-xs font-black uppercase tracking-tight">Administración</p>
+                              </div>
+                              <p className={`text-[9px] font-medium leading-tight ${activeTab === 'Admin' ? 'text-white/80' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                                Áreas QR, plantas y equipos
+                              </p>
+                            </button>
+                          )}
+
+                          {user.role === 'Administrador' && (
+                            <button 
+                              onClick={() => { setActiveTab('PDFConfig'); setIsMobileMoreOpen(false); }}
+                              className={`p-3 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${
+                                activeTab === 'PDFConfig'
+                                  ? 'bg-[#0071E3] text-white border-[#0071E3] shadow-md'
+                                  : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <Shield className={`w-4 h-4 ${activeTab === 'PDFConfig' ? 'text-white' : 'text-emerald-500'}`} />
+                                <p className="text-xs font-black uppercase tracking-tight">Config. PDF</p>
+                              </div>
+                              <p className={`text-[9px] font-medium leading-tight ${activeTab === 'PDFConfig' ? 'text-white/80' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                                Encabezados de reportes
+                              </p>
+                            </button>
                           )}
                         </div>
-                        <div>
-                          <p className="text-xs font-extrabold uppercase tracking-tight">Notificaciones</p>
-                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Bandeja de avisos y alertas</p>
-                        </div>
-                      </button>
+                      </div>
+                    )}
 
-                      {user.role === 'Administrador' && (
-                        <button 
-                          onClick={() => { setActiveTab('PDFConfig'); setIsMobileMoreOpen(false); }}
-                          className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all cursor-pointer ${
-                            activeTab === 'PDFConfig'
-                              ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-                              : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                          }`}
-                        >
-                          <Shield className="w-5 h-5 text-emerald-500" />
-                          <div>
-                            <p className="text-xs font-extrabold uppercase tracking-tight">Config. PDF</p>
-                            <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Encabezados y reportes</p>
-                          </div>
-                        </button>
-                      )}
+                    {/* Section 3: Perfil y Ayuda */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => { setShowProfileModal(true); setIsMobileMoreOpen(false); }}
+                        className="p-3 rounded-2xl border text-left flex flex-col gap-1.5 transition-all bg-sky-50/70 dark:bg-sky-500/10 border-sky-200/60 dark:border-sky-500/20 text-zinc-800 dark:text-zinc-200 hover:bg-sky-100 dark:hover:bg-sky-500/20 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <UserCheck className="w-4 h-4 text-sky-500" />
+                          <p className="text-xs font-black uppercase tracking-tight">Mi Perfil</p>
+                        </div>
+                        <p className="text-[9px] opacity-70 font-medium leading-tight">
+                          Foto y credenciales
+                        </p>
+                      </button>
 
                       <button 
                         onClick={() => { setActiveTab('Help'); setIsMobileMoreOpen(false); }}
-                        className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all cursor-pointer ${
+                        className={`p-3 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${
                           activeTab === 'Help'
-                            ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                            ? 'bg-[#0071E3] text-white border-[#0071E3] shadow-md'
                             : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/60 dark:border-white/5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                         }`}
                       >
-                        <HelpCircle className="w-5 h-5 text-indigo-500" />
-                        <div>
-                          <p className="text-xs font-extrabold uppercase tracking-tight">Ayuda</p>
-                          <p className="text-[9px] opacity-70 font-medium leading-tight mt-0.5">Manuales e instructivos</p>
+                        <div className="flex items-center gap-2">
+                          <HelpCircle className={`w-4 h-4 ${activeTab === 'Help' ? 'text-white' : 'text-indigo-500'}`} />
+                          <p className="text-xs font-black uppercase tracking-tight">Ayuda</p>
                         </div>
+                        <p className={`text-[9px] font-medium leading-tight ${activeTab === 'Help' ? 'text-white/80' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                          Manuales e instructivos
+                        </p>
                       </button>
                     </div>
 
