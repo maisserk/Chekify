@@ -55,6 +55,20 @@ async function initAdmin() {
 const expressApp = express();
 expressApp.use(express.json({ limit: '1mb' }));
 
+// Prevent browser from serving stale Vite chunks with outdated browserHashes
+expressApp.use((_req, res, next) => {
+  if (process.env.NODE_ENV !== 'production') {
+    const originalSetHeader = res.setHeader;
+    res.setHeader = function (name: string, value: any) {
+      if (typeof name === 'string' && name.toLowerCase() === 'cache-control') {
+        return originalSetHeader.call(this, name, 'no-cache, no-store, must-revalidate');
+      }
+      return originalSetHeader.call(this, name, value);
+    };
+  }
+  next();
+});
+
 // Serve Web App Manifest and Service Worker with optimal PWA headers
 expressApp.get('/manifest.json', (_req, res) => {
   const manifestPath = path.join(process.cwd(), 'public', 'manifest.json');

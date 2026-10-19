@@ -1,4 +1,4 @@
-const CACHE_NAME = 'checkify-v5';
+const CACHE_NAME = 'checkify-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -62,7 +62,8 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('identitytoolkit.googleapis.com') ||
     url.hostname.includes('open-meteo.com') ||
     url.pathname.includes('/@vite/') || 
-    url.pathname.includes('node_modules')
+    url.pathname.includes('node_modules') ||
+    url.pathname.includes('/src/')
   ) {
     return;
   }

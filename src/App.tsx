@@ -90,6 +90,8 @@ import {
   FileSearch,
   Sparkles,
   Copy,
+  Maximize2,
+  Minimize2,
   GripVertical,
   PanelLeftClose,
   PanelLeftOpen,
@@ -988,11 +990,42 @@ const OperatorDashboard = ({
   >(null);
   const showInAppCameraModal = cameraCaptureTarget !== null;
 
+  // Focus Mode (100% full-screen distraction-free inspection view)
+  const [isFocusInspectionMode, setIsFocusInspectionMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFocusInspectionMode) {
+        setIsFocusInspectionMode(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFocusInspectionMode]);
+
+  const toggleFocusMode = async () => {
+    const nextState = !isFocusInspectionMode;
+    setIsFocusInspectionMode(nextState);
+
+    // Optional native fullscreen toggle with safety try-catch
+    try {
+      if (nextState) {
+        if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+          await document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else {
+        if (document.exitFullscreen && document.fullscreenElement) {
+          await document.exitFullscreen().catch(() => {});
+        }
+      }
+    } catch {}
+  };
+
 
   
   // Collapsible areas and inspection tracking
   const [expandedAreaIds, setExpandedAreaIds] = useState<Record<string, boolean>>({});
-  const [todayInspections, setTodayInspections] = useState<any[]>([]);
+  const [allInspections, setAllInspections] = useState<any[]>([]);
 
   const toggleAreaExpand = (areaId: string) => {
     setExpandedAreaIds(prev => ({ ...prev, [areaId]: !prev[areaId] }));
@@ -1009,7 +1042,7 @@ const OperatorDashboard = ({
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const isDone = todayInspections.some((insp: any) => {
+    const isDone = allInspections.some((insp: any) => {
       if (insp.areaId !== areaId) return false;
 
       let inspDate: Date | null = null;
@@ -1353,7 +1386,11 @@ const OperatorDashboard = ({
 
     // Listen for inspections
     const unsubInspections = onSnapshot(collection(db, 'inspections'), (snapshot) => {
-      setTodayInspections(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const allDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const filtered = (user.role === 'Administrador' || !user.plantId)
+        ? allDocs
+        : allDocs.filter((insp: any) => !insp.plantId || insp.plantId === user.plantId);
+      setAllInspections(filtered);
     }, (error) => {
       console.error("Error listening to inspections:", error);
     });
@@ -2183,26 +2220,118 @@ const OperatorDashboard = ({
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Header Banner Card for Inspección Primaria - Clean, minimal iOS design */}
-      <div className="bg-gradient-to-r from-sky-950 via-blue-900 to-zinc-950 p-5 sm:p-6 md:p-7 rounded-3xl md:rounded-[2.25rem] border border-sky-500/20 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-sky-500/10 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
-          <div className="space-y-2 min-w-0 flex-1">
+      {/* Header Banner Card for Inspección Primaria - Modern, Adaptive Industrial Design */}
+      <div className="relative overflow-hidden rounded-3xl sm:rounded-[2rem] border border-sky-500/25 bg-gradient-to-br from-[#0B1528] via-[#0F2347] to-[#0A1220] p-5 sm:p-6 lg:p-7 text-white shadow-xl shadow-sky-950/30">
+        {/* Ambient Glows */}
+        <div className="absolute -top-24 -right-24 w-80 h-80 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+        
+        {/* Subtle Industrial Grid Pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6 min-w-0">
+          {/* Main Info */}
+          <div className="space-y-3 min-w-0 flex-1">
+            {/* Badges / Chips Row */}
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2.5 py-0.5 bg-sky-500/25 border border-sky-400/30 text-sky-200 rounded-full text-[10px] sm:text-xs font-semibold tracking-wide flex items-center gap-1.5 shrink-0">
-                <ShieldCheck className="w-3.5 h-3.5 text-sky-300" />
-                Módulo Inspección Primaria
+              {selectedArea ? (
+                <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 rounded-full text-[10px] sm:text-xs font-bold tracking-wide flex items-center gap-1.5 shadow-xs shrink-0 animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                  <span>En Ruta: {selectedArea.name}</span>
+                </span>
+              ) : (
+                <span className="px-3 py-1 bg-sky-500/20 border border-sky-400/30 text-sky-200 rounded-full text-[10px] sm:text-xs font-bold tracking-wide flex items-center gap-1.5 shadow-xs shrink-0">
+                  <ShieldCheck className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                  <span>Módulo Inspección Primaria</span>
+                </span>
+              )}
+
+              <span className="px-2.5 py-1 bg-white/10 border border-white/15 text-white/90 rounded-full text-[10px] font-semibold tracking-wide flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-sky-300 shrink-0" />
+                <span>{plant?.name || user.plantId || 'Planta Operativa'}</span>
               </span>
-              <span className="px-2.5 py-0.5 bg-white/10 border border-white/10 text-white/90 rounded-full text-[10px] font-medium tracking-wide">
-                {user.plantId || 'Planta General'}
+
+              <span className="hidden sm:inline-flex px-2.5 py-1 bg-white/5 border border-white/10 text-sky-200/80 rounded-full text-[10px] font-medium tracking-wide items-center gap-1">
+                <HardHat className="w-3 h-3 text-amber-400 shrink-0" />
+                <span>{user.name?.split(' ')[0] || user.name || 'Operador'}</span>
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white leading-tight break-words">
-              Inspección Primaria de Planta
-            </h2>
-            <p className="text-xs sm:text-sm text-sky-100/85 font-normal max-w-xl leading-relaxed">
-              Transformando inspecciones en decisiones operacionales.
-            </p>
+
+            {/* Title & Description */}
+            <div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white leading-tight break-normal">
+                Inspección Primaria de Planta
+              </h2>
+              <p className="text-xs sm:text-sm text-sky-100/80 font-normal max-w-xl leading-relaxed mt-1">
+                Transformando inspecciones en decisiones operacionales con metodología VOSO y trazabilidad digital en terreno.
+              </p>
+            </div>
+
+            {/* Active inspection progression notice if area is selected */}
+            {selectedArea && areaEquipment.length > 0 && (
+              <div className="pt-1 flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-xl border border-white/15 text-[11px] font-bold text-sky-200">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Progreso: Equipo {Math.min(currentEquipmentIndex + 1, areaEquipment.length)} de {areaEquipment.length}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleFocusMode}
+                  className="px-2.5 py-1 bg-sky-500/25 hover:bg-sky-500/40 border border-sky-400/35 rounded-xl text-[11px] font-bold text-white flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs"
+                  title="Expandir inspección a 100% de la pantalla (Modo Enfoque sin distracciones)"
+                >
+                  <Maximize2 className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                  <span>Modo Enfoque 100%</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Adaptable Telemetry / KPI Cards Container */}
+          <div className="w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-white/10">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {/* Telemetry Tile 1: Áreas */}
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/15 text-center flex flex-col items-center justify-center min-w-[85px] sm:min-w-[105px] shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-300/90 block mb-0.5">
+                  Áreas
+                </span>
+                <span className="text-lg sm:text-2xl font-black text-white tabular-nums">
+                  {areas.length}
+                </span>
+                <span className="text-[9px] text-zinc-300/80 font-medium">
+                  disponibles
+                </span>
+              </div>
+
+              {/* Telemetry Tile 2: Equipos */}
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/15 text-center flex flex-col items-center justify-center min-w-[85px] sm:min-w-[105px] shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-300/90 block mb-0.5">
+                  Equipos
+                </span>
+                <span className="text-lg sm:text-2xl font-black text-white tabular-nums">
+                  {equipment.length}
+                </span>
+                <span className="text-[9px] text-zinc-300/80 font-medium">
+                  en planta
+                </span>
+              </div>
+
+              {/* Telemetry Tile 3: Inspecciones Totales */}
+              <div 
+                className="p-3 sm:p-3.5 rounded-2xl bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/15 text-center flex flex-col items-center justify-center min-w-[85px] sm:min-w-[105px] shadow-sm"
+                title={`${allInspections.length} inspecciones totales registradas`}
+              >
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-300/90 block mb-0.5">
+                  Inspecciones
+                </span>
+                <span className="text-lg sm:text-2xl font-black text-white tabular-nums">
+                  {allInspections.length}
+                </span>
+                <span className="text-[9px] text-zinc-300/80 font-medium">
+                  totales
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2645,76 +2774,153 @@ const OperatorDashboard = ({
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6"
+          className={
+            isFocusInspectionMode
+              ? "fixed inset-0 z-50 overflow-y-auto bg-slate-100/95 dark:bg-zinc-950/95 backdrop-blur-md p-3 sm:p-6 md:p-8 space-y-6"
+              : "bg-white dark:bg-black rounded-3xl p-4 sm:p-6 border border-zinc-100 dark:border-white/10 shadow-sm dark:shadow-none space-y-6"
+          }
         >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-50 dark:border-white/5 pb-4 gap-3">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-brand-blue to-brand-green rounded-2xl flex items-center justify-center shadow-md dark:shadow-none flex-shrink-0">
-                <MapPin className="text-white w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Área Seleccionada</p>
-                <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{selectedArea.name}</h3>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-              {/* Inspection Live Timer Badge */}
-              <div className={`px-3 py-1.5 rounded-2xl border flex items-center gap-2 transition-all ${
-                isInspectionPaused
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
-                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-              }`}>
-                <Timer className={`w-4 h-4 ${isInspectionPaused ? 'text-amber-500' : 'text-emerald-500 animate-pulse'}`} />
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 leading-none">
-                    {isInspectionPaused ? 'Pausado' : 'Tiempo Área'}
-                  </span>
-                  <span className="text-xs font-mono font-black leading-tight">
-                    {formatTimer(inspectionTimerSeconds)}
-                  </span>
+          {/* Top Focus Bar when 100% Focus Mode is active */}
+          {isFocusInspectionMode && (
+            <div className="sticky top-0 z-40 -mt-1 sm:-mt-2 mb-4 bg-zinc-900/95 dark:bg-black/95 backdrop-blur-xl border border-white/15 text-white px-4 sm:px-6 py-3 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-wrap items-center justify-between gap-3 max-w-5xl mx-auto w-full">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <span className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/20 border border-sky-400/40 text-sky-300 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping shrink-0" />
+                  Modo Enfoque 100%
+                </span>
+                <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-300 font-bold">
+                  <span className="text-white">{selectedArea.name}</span>
+                  {currentEquipment && (
+                    <>
+                      <span className="text-zinc-500">•</span>
+                      <span className="text-sky-300">{currentEquipment.name}</span>
+                      {areaEquipment.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-lg bg-white/10 text-[10px] font-mono text-zinc-300">
+                          {currentEquipmentIndex + 1}/{areaEquipment.length}
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Pause / Resume Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  saveCurrentToResults();
-                  if (!isInspectionPaused) {
-                    setIsInspectionPaused(true);
-                    setIsPauseModalOpen(true);
-                  } else {
-                    setIsInspectionPaused(false);
-                    setIsPauseModalOpen(false);
-                  }
-                }}
-                className={`px-3.5 py-2 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer ${
-                  isInspectionPaused
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
-                    : 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-700 dark:text-amber-300'
-                }`}
-              >
-                {isInspectionPaused ? (
-                  <>
-                    <Play className="w-4 h-4 fill-current text-white" />
-                    <span>Reanudar</span>
-                  </>
-                ) : (
-                  <>
-                    <Pause className="w-4 h-4 fill-current" />
-                    <span>Pausar</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="px-3 py-1.5 bg-white/10 rounded-xl border border-white/15 text-xs font-mono font-black text-emerald-400 flex items-center gap-1.5">
+                  <Timer className="w-3.5 h-3.5 animate-pulse" />
+                  <span>{formatTimer(inspectionTimerSeconds)}</span>
+                </div>
 
-              <FlashlightWidget variant="compact" />
+                <FlashlightWidget variant="compact" />
 
-              <button onClick={() => setSelectedArea(null)} className="p-2 bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer" title="Cerrar Área">
-                <X className="w-5 h-5" />
-              </button>
+                <button
+                  type="button"
+                  onClick={toggleFocusMode}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-95 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-md shadow-sky-500/20 border border-sky-400/30 flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Restaurar vista normal (Esc)"
+                >
+                  <Minimize2 className="w-3.5 h-3.5 text-white shrink-0" />
+                  <span className="hidden sm:inline">Restaurar Vista (Esc)</span>
+                  <span className="sm:hidden">Salir</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          <div className={isFocusInspectionMode ? "max-w-5xl mx-auto w-full space-y-6 pb-24" : "space-y-6"}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-50 dark:border-white/5 pb-4 gap-3">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-brand-blue to-brand-green rounded-2xl flex items-center justify-center shadow-md dark:shadow-none flex-shrink-0">
+                  <MapPin className="text-white w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Área Seleccionada</p>
+                  <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{selectedArea.name}</h3>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                {/* Inspection Live Timer Badge */}
+                <div className={`px-3 py-1.5 rounded-2xl border flex items-center gap-2 transition-all ${
+                  isInspectionPaused
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  <Timer className={`w-4 h-4 ${isInspectionPaused ? 'text-amber-500' : 'text-emerald-500 animate-pulse'}`} />
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 leading-none">
+                      {isInspectionPaused ? 'Pausado' : 'Tiempo Área'}
+                    </span>
+                    <span className="text-xs font-mono font-black leading-tight">
+                      {formatTimer(inspectionTimerSeconds)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pause / Resume Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveCurrentToResults();
+                    if (!isInspectionPaused) {
+                      setIsInspectionPaused(true);
+                      setIsPauseModalOpen(true);
+                    } else {
+                      setIsInspectionPaused(false);
+                      setIsPauseModalOpen(false);
+                    }
+                  }}
+                  className={`px-3.5 py-2 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer ${
+                    isInspectionPaused
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                      : 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-700 dark:text-amber-300'
+                  }`}
+                >
+                  {isInspectionPaused ? (
+                    <>
+                      <Play className="w-4 h-4 fill-current text-white" />
+                      <span>Reanudar</span>
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="w-4 h-4 fill-current" />
+                      <span>Pausar</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Focus Mode 100% Toggle Button */}
+                <button
+                  type="button"
+                  onClick={toggleFocusMode}
+                  className={`px-3 py-2 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer ${
+                    isFocusInspectionMode
+                      ? 'bg-sky-600 text-white shadow-sky-600/20'
+                      : 'bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-700 dark:text-sky-300'
+                  }`}
+                  title={isFocusInspectionMode ? "Restaurar vista normal (Esc)" : "Expandir inspección al 100% de la pantalla (Modo Enfoque sin distracciones)"}
+                >
+                  {isFocusInspectionMode ? (
+                    <>
+                      <Minimize2 className="w-4 h-4 text-white shrink-0" />
+                      <span className="hidden sm:inline">Restaurar</span>
+                      <span className="sm:hidden">Normal</span>
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 className="w-4 h-4 text-sky-500 shrink-0" />
+                      <span className="hidden sm:inline">Enfoque 100%</span>
+                      <span className="sm:hidden">100%</span>
+                    </>
+                  )}
+                </button>
+
+                <FlashlightWidget variant="compact" />
+
+                <button onClick={() => { setIsFocusInspectionMode(false); setSelectedArea(null); }} className="p-2 bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer" title="Cerrar Área">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
 
           <div className="space-y-8">
             <AnimatePresence mode="wait" custom={slideDirection}>
@@ -3085,7 +3291,8 @@ const OperatorDashboard = ({
               </button>
             </div>
           </div>
-        </motion.div>
+        </div>
+      </motion.div>
       )}
 
       {showFindingForm && (
@@ -4425,54 +4632,95 @@ const SupervisorDashboard = ({
     <div className="space-y-6">
       <div className="space-y-4">
       <PushNotificationWidget user={user} />
-      {/* Header Banner Card for Panel VOSO Administrador */}
-      <div className="bg-gradient-to-r from-slate-950 via-emerald-950 to-zinc-950 p-5 sm:p-7 md:p-8 rounded-3xl md:rounded-[2.5rem] border border-emerald-500/20 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6 min-w-0">
-          <div className="space-y-2.5 min-w-0 flex-1">
+      {/* Header Banner Card for Panel VOSO Administrador - Responsive & Adaptable Design */}
+      <div className="relative overflow-hidden rounded-3xl sm:rounded-[2rem] border border-emerald-500/30 bg-gradient-to-br from-[#061810] via-[#0B251A] to-[#04120B] p-5 sm:p-6 lg:p-7 text-white shadow-xl shadow-emerald-950/25 transition-all">
+        {/* Ambient Lights & Tech Grid */}
+        <div className="absolute -top-24 -right-24 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-6 min-w-0">
+          {/* Main Info Column */}
+          <div className="space-y-3 min-w-0 flex-1">
+            {/* Badges / Context Pills */}
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 bg-emerald-500/25 border border-emerald-400/30 text-emerald-200 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0">
-                <Activity className="w-3.5 h-3.5 text-emerald-300" />
+              <span className="px-3 py-1 bg-emerald-500/25 border border-emerald-400/35 text-emerald-200 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0 shadow-xs">
+                <Activity className="w-3.5 h-3.5 text-emerald-300 animate-pulse shrink-0" />
                 Módulo VOSO Admin
               </span>
-              <span className="px-2.5 py-1 bg-white/10 border border-white/10 text-white/90 rounded-full text-[10px] font-bold uppercase tracking-wider">
+              <span className="px-2.5 py-1 bg-white/10 border border-white/15 text-white/95 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0">
+                <MapPin className="w-3 h-3 text-emerald-300 shrink-0" />
                 {user.plantId || 'Todas las Plantas'}
               </span>
+              <span className="hidden sm:inline-flex px-2.5 py-1 bg-white/5 border border-white/10 text-emerald-200/80 rounded-full text-[10px] font-semibold tracking-wide items-center gap-1 shrink-0">
+                <Shield className="w-3 h-3 text-amber-400 shrink-0" />
+                {user.role}
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-400/20 text-emerald-300 text-[10px] font-bold rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                Monitoreo Activo
+              </span>
             </div>
-            <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black uppercase tracking-tight text-white leading-tight break-words">
-              Panel VOSO (Ver, Oír, Sentir, Oler)
-            </h2>
-            <p className="text-xs sm:text-sm md:text-base text-emerald-100/90 font-medium max-w-2xl leading-relaxed">
-              Consolidador de hallazgos en terreno, indicadores, gestión de criticidades y seguimiento de acciones correctivas.
-            </p>
+
+            {/* Title & Methodology */}
+            <div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-black uppercase tracking-tight text-white leading-tight break-normal">
+                Panel VOSO <span className="text-emerald-400 font-extrabold text-base sm:text-xl lg:text-2xl tracking-normal normal-case ml-1.5 opacity-90">(Ver • Oír • Sentir • Oler)</span>
+              </h2>
+              <p className="text-xs sm:text-sm text-emerald-100/80 font-normal max-w-2xl leading-relaxed mt-1">
+                Consolidador de hallazgos en terreno, indicadores de criticidad y seguimiento de acciones correctivas en tiempo real.
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-emerald-500/20">
-            {onStartOperatorInspection && (
-              <button
-                type="button"
-                onClick={onStartOperatorInspection}
-                className="px-4 py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-black uppercase tracking-wider rounded-2xl shadow-lg shadow-sky-500/30 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-                title="Cambiar a Vista de Operador Mantenedor para realizar la ronda de inspección"
-              >
-                <HardHat className="w-4 h-4 text-white" />
-                <span>Ronda de Inspección (Modo Operador)</span>
-              </button>
-            )}
-            <button
-              onClick={() => setShowQuickHelp(true)}
-              className="px-3.5 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl border border-white/20 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer whitespace-nowrap shadow-sm flex-1 sm:flex-initial"
-            >
-              <HelpCircle className="w-4 h-4 text-emerald-300 shrink-0" />
-              <span>Ayuda rápida</span>
-            </button>
-            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center sm:text-right min-w-[120px] flex-1 sm:flex-initial">
-              <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">Registros</p>
-              <p className="text-xs font-black text-white">{activeModuleFindings.length} Hallazgos</p>
+          {/* Adaptable Right Column: Telemetry & Actions */}
+          <div className="w-full xl:w-auto shrink-0 flex flex-col sm:flex-row xl:flex-col items-stretch sm:items-center xl:items-end justify-between xl:justify-center gap-3 pt-4 xl:pt-0 border-t xl:border-t-0 border-emerald-500/20">
+            {/* Quick Metrics / Telemetry Badges */}
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+              <div className="px-3 sm:px-3.5 py-2 sm:py-2.5 bg-white/10 dark:bg-black/40 hover:bg-white/15 dark:hover:bg-black/50 backdrop-blur-md rounded-2xl border border-white/15 flex items-center gap-2.5 shadow-xs transition-colors min-w-0 sm:min-w-[130px]">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/25 border border-emerald-400/30 text-emerald-300 flex items-center justify-center shrink-0 shadow-xs">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[9px] font-black uppercase text-emerald-300/90 tracking-wider block leading-none truncate">Registros</span>
+                  <span className="text-xs sm:text-sm font-black text-white leading-none mt-1 inline-block truncate">{activeModuleFindings.length} Hallazgos</span>
+                </div>
+              </div>
+
+              <div className="px-3 sm:px-3.5 py-2 sm:py-2.5 bg-white/10 dark:bg-black/40 hover:bg-white/15 dark:hover:bg-black/50 backdrop-blur-md rounded-2xl border border-white/15 flex items-center gap-2.5 shadow-xs transition-colors min-w-0 sm:min-w-[130px]">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center shrink-0 shadow-xs">
+                  <HardHat className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[9px] font-black uppercase text-emerald-300/90 tracking-wider block leading-none truncate">Administrador</span>
+                  <span className="text-xs sm:text-sm font-black text-white leading-none mt-1 inline-block truncate max-w-[160px]" title={user.name}>{user.name}</span>
+                </div>
+              </div>
             </div>
-            <div className="px-3.5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center sm:text-right min-w-[120px] flex-1 sm:flex-initial">
-              <p className="text-[9px] font-black uppercase text-emerald-300 tracking-wider">ADMINISTRADOR</p>
-              <p className="text-xs font-black text-white truncate max-w-[140px] mx-auto sm:ml-auto">{user.name}</p>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+              {onStartOperatorInspection && (
+                <button
+                  type="button"
+                  onClick={onStartOperatorInspection}
+                  className="flex-1 sm:flex-initial h-10 sm:h-11 px-3.5 sm:px-4.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 active:scale-95 text-white text-xs sm:text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-sky-500/25 border border-sky-400/30 flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap group"
+                  title="Cambiar a Vista de Operador Mantenedor para realizar la ronda de inspección"
+                >
+                  <HardHat className="w-4 h-4 text-white shrink-0 group-hover:rotate-6 transition-transform" />
+                  <span className="sm:hidden">Ronda Inspección</span>
+                  <span className="hidden sm:inline">Ronda de Inspección (Modo Operador)</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowQuickHelp(true)}
+                className="h-10 sm:h-11 px-3 sm:px-3.5 bg-white/10 hover:bg-white/20 active:scale-95 backdrop-blur-md rounded-xl border border-white/20 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow-xs shrink-0"
+                title="Ayuda rápida del módulo"
+              >
+                <HelpCircle className="w-4 h-4 text-emerald-300 shrink-0" />
+                <span className="hidden sm:inline">Ayuda rápida</span>
+                <span className="sm:hidden">Ayuda</span>
+              </button>
             </div>
           </div>
         </div>
