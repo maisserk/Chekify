@@ -43,7 +43,9 @@ export function resolveRecaptchaSiteKey(propKey?: string): string {
     return propKey.trim();
   }
 
-  const envKey = import.meta.env?.VITE_RECAPTCHA_SITE_KEY;
+  const envKey = (typeof import.meta !== 'undefined' && import.meta.env)
+    ? import.meta.env.VITE_RECAPTCHA_SITE_KEY
+    : undefined;
   if (typeof envKey === 'string' && envKey.trim().length > 0) {
     return envKey.trim();
   }

@@ -693,7 +693,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
 
                 {/* Google reCAPTCHA Verification */}
                 <RecaptchaWidget
-                  siteKey={import.meta.env?.VITE_RECAPTCHA_SITE_KEY}
+                  siteKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
                   onVerify={(token) => {
                     setRecaptchaToken(token);
                     setError('');
