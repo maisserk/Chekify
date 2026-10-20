@@ -328,6 +328,7 @@ const validateAndCompressImage = (source: File | Blob | string, minWidth = 150, 
 };
 
 import { Logo } from './components/Logo';
+import { RecaptchaWidget } from './components/RecaptchaWidget';
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -386,6 +387,8 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
   const [error, setError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [recaptchaResetCount, setRecaptchaResetCount] = useState(0);
 
   // Progressive real startup indicators
   useEffect(() => {
@@ -528,13 +531,46 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoggingIn) return;
+
+    // Check reCAPTCHA verification when online
+    if (navigator.onLine && !recaptchaToken) {
+      setError("Por favor, completa la verificación de seguridad (reCAPTCHA) para continuar.");
+      return;
+    }
+
     setIsLoggingIn(true);
     setError('');
+
     try {
+      // Optional backend token verification
+      if (navigator.onLine && recaptchaToken && recaptchaToken !== 'offline-bypass-token' && recaptchaToken !== 'manual-fallback-token') {
+        try {
+          const verifyRes = await fetch('/api/verify-recaptcha', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: recaptchaToken }),
+          });
+          const verifyData = await verifyRes.json();
+          if (verifyData && verifyData.success === false) {
+            setError("La verificación de reCAPTCHA no fue válida. Por favor, resuelve nuevamente la casilla de seguridad.");
+            setRecaptchaToken(null);
+            setRecaptchaResetCount(prev => prev + 1);
+            setIsLoggingIn(false);
+            return;
+          }
+        } catch (vErr) {
+          console.warn("reCAPTCHA endpoint verification skipped:", vErr);
+        }
+      }
+
       const loginEmail = email.includes('@') ? email : `${email}@chekify.local`;
       await signInWithEmailAndPassword(auth, loginEmail, password);
     } catch (err: any) {
       console.error("Password login failed", err);
+      // Reset reCAPTCHA so a fresh check is required on the next attempt
+      setRecaptchaToken(null);
+      setRecaptchaResetCount(prev => prev + 1);
+
       if (err.code === 'auth/network-request-failed') {
         setError("Error de red: No se pudo conectar con el servidor. Revisa tu conexión a internet.");
       } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
@@ -625,6 +661,21 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
                     </button>
                   </div>
                 </div>
+
+                {/* Google reCAPTCHA Verification */}
+                <RecaptchaWidget
+                  onVerify={(token) => {
+                    setRecaptchaToken(token);
+                    setError('');
+                  }}
+                  onExpire={() => setRecaptchaToken(null)}
+                  onError={() => {
+                    console.warn('reCAPTCHA error reported');
+                  }}
+                  resetCount={recaptchaResetCount}
+                  isDark={document.documentElement.classList.contains('dark')}
+                />
+
                 <button
                   type="submit"
                   disabled={isLoggingIn}
