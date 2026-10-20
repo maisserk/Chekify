@@ -542,24 +542,35 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     setError('');
 
     try {
-      // Optional backend token verification
-      if (navigator.onLine && recaptchaToken && recaptchaToken !== 'offline-bypass-token' && recaptchaToken !== 'manual-fallback-token') {
+      // Strict server token verification
+      if (navigator.onLine) {
+        if (!recaptchaToken) {
+          setError("Por favor, completa la verificación de seguridad (reCAPTCHA) para continuar.");
+          setIsLoggingIn(false);
+          return;
+        }
+
         try {
           const verifyRes = await fetch('/api/verify-recaptcha', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: recaptchaToken }),
           });
-          const verifyData = await verifyRes.json();
-          if (verifyData && verifyData.success === false) {
-            setError("La verificación de reCAPTCHA no fue válida. Por favor, resuelve nuevamente la casilla de seguridad.");
+          const verifyData = await verifyRes.json().catch(() => null);
+          if (!verifyRes.ok || !verifyData || verifyData.success !== true) {
+            setError(verifyData?.error || "La verificación de reCAPTCHA no fue válida. Por favor, resuelve nuevamente la casilla de seguridad.");
             setRecaptchaToken(null);
             setRecaptchaResetCount(prev => prev + 1);
             setIsLoggingIn(false);
             return;
           }
         } catch (vErr) {
-          console.warn("reCAPTCHA endpoint verification skipped:", vErr);
+          console.error("Error al validar reCAPTCHA con el servidor:", vErr);
+          setError("No se pudo conectar con el servidor para validar reCAPTCHA. Comprueba tu conexión.");
+          setRecaptchaToken(null);
+          setRecaptchaResetCount(prev => prev + 1);
+          setIsLoggingIn(false);
+          return;
         }
       }
 
@@ -689,7 +700,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
                   }}
                   onExpire={() => setRecaptchaToken(null)}
                   onError={() => {
-                    console.warn('reCAPTCHA error reported');
+                    setRecaptchaToken(null);
                   }}
                   resetCount={recaptchaResetCount}
                   isDark={document.documentElement.classList.contains('dark')}
@@ -2996,16 +3007,20 @@ const OperatorDashboard = ({
             <AnimatePresence mode="wait" custom={slideDirection}>
               <motion.div
                 key={currentEquipment?.id || 'general'}
-                custom={slideDirection}
-                initial={(dir: 'next' | 'prev') => ({
-                  opacity: 0,
-                  x: dir === 'next' ? 120 : -120
-                })}
-                animate={{ opacity: 1, x: 0 }}
-                exit={(dir: 'next' | 'prev') => ({
-                  opacity: 0,
-                  x: dir === 'next' ? -120 : 120
-                })}
+                variants={{
+                  initial: (dir: 'next' | 'prev') => ({
+                    opacity: 0,
+                    x: dir === 'next' ? 120 : -120
+                  }),
+                  animate: { opacity: 1, x: 0 },
+                  exit: (dir: 'next' | 'prev') => ({
+                    opacity: 0,
+                    x: dir === 'next' ? -120 : 120
+                  })
+                }}
+                initial="initial"
+                animate="animate"
+                exit="exit"
                 transition={{ type: "spring", stiffness: 280, damping: 28 }}
                 className="space-y-8"
               >
@@ -9000,6 +9015,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                             setEditingEquip(e); 
                             setFormData({
                               name: e.name, 
+                              tag: e.tag || '',
                               areaId: e.areaId, 
                               plantId: e.plantId || '', 
                               inspectionOrder: e.inspectionOrder || 0,
@@ -9014,6 +9030,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
                             setEditingEquip(null); 
                             setFormData({
                               name: `${e.name} (Copia)`, 
+                              tag: e.tag ? `${e.tag}-Copia` : '',
                               areaId: e.areaId, 
                               plantId: e.plantId || '', 
                               inspectionOrder: (e.inspectionOrder || 0) + 1,

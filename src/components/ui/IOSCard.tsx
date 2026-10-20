@@ -77,7 +77,7 @@ export const IOSGroupedList: React.FC<IOSGroupedListProps> = ({
   );
 };
 
-export interface IOSGroupedRowProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface IOSGroupedRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
   icon?: React.ReactNode;
   iconBgColor?: string;
   title: React.ReactNode;

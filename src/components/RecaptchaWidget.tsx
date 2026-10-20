@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ShieldCheck, WifiOff, RefreshCw, KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { Component, ReactNode, ErrorInfo, useEffect, useRef, useState, useCallback } from 'react';
+import { ShieldCheck, WifiOff, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export interface RecaptchaWidgetProps {
   onVerify: (token: string) => void;
@@ -34,42 +34,25 @@ declare global {
   }
 }
 
-// Google Official Universal Test Key for reCAPTCHA v2 (always passes on any domain, no domain restriction)
-export const DEFAULT_RECAPTCHA_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
-
 /**
- * Safely resolves the reCAPTCHA site key across props, Vite env vars, and Node env vars.
- * Guaranteed to never throw ReferenceError or return undefined/empty string.
+ * Resolves the public reCAPTCHA site key from props or import.meta.env.VITE_RECAPTCHA_SITE_KEY.
+ * Never uses automatic test keys or fallback keys when the variable is missing.
  */
 export function resolveRecaptchaSiteKey(propKey?: string): string {
-  try {
-    if (propKey && typeof propKey === 'string' && propKey.trim().length > 0) {
-      return propKey.trim();
-    }
-
-    const viteKey = typeof import.meta !== 'undefined' && import.meta?.env
-      ? (import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined)
-      : undefined;
-    if (viteKey && typeof viteKey === 'string' && viteKey.trim().length > 0) {
-      return viteKey.trim();
-    }
-
-    const procKey = typeof process !== 'undefined' && process?.env
-      ? (process.env.VITE_RECAPTCHA_SITE_KEY as string | undefined)
-      : undefined;
-    if (procKey && typeof procKey === 'string' && procKey.trim().length > 0) {
-      return procKey.trim();
-    }
-  } catch (err) {
-    console.warn('[reCAPTCHA] Safe key resolution warning:', err);
+  if (propKey && typeof propKey === 'string' && propKey.trim().length > 0) {
+    return propKey.trim();
   }
 
-  return DEFAULT_RECAPTCHA_SITE_KEY;
+  const envKey = import.meta.env?.VITE_RECAPTCHA_SITE_KEY;
+  if (typeof envKey === 'string' && envKey.trim().length > 0) {
+    return envKey.trim();
+  }
+
+  return '';
 }
 
 interface ErrorBoundaryProps {
-  children: React.ReactNode;
-  onFallback?: (token: string) => void;
+  children: ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -81,48 +64,44 @@ interface ErrorBoundaryState {
  * Dedicated Error Boundary for reCAPTCHA to prevent any widget-level crash
  * from propagating to the login screen or creating a UI blackout.
  */
-export class RecaptchaErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  props: ErrorBoundaryProps;
-  state: ErrorBoundaryState = { hasError: false };
-
+export class RecaptchaErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.props = props;
+    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { 
       hasError: true, 
-      errorMessage: error?.message || 'Error al inicializar componente de seguridad' 
+      errorMessage: error?.message || 'Error al inicializar el componente de seguridad' 
     };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.warn('[reCAPTCHA ErrorBoundary] Caught error safely without UI blackout:', error, errorInfo);
-    if (this.props.onFallback) {
-      this.props.onFallback('error-boundary-token');
-    }
   }
+
+  handleRetry = () => {
+    this.setState({ hasError: false, errorMessage: undefined });
+  };
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="my-3 p-3 bg-zinc-900/90 border border-zinc-800 text-zinc-300 rounded-2xl flex items-center justify-between text-xs shadow-md">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-brand-blue shrink-0" />
-            <div>
-              <span className="font-bold text-zinc-200 block text-[11px]">Seguridad de Acceso • Modo de Contingencia</span>
-              <span className="text-[10px] text-zinc-400">Verificación protegida activada localmente</span>
-            </div>
+        <div className="my-3 p-3 bg-red-500/10 border border-red-500/20 text-zinc-300 rounded-2xl flex flex-col items-center justify-center text-xs shadow-md">
+          <div className="flex items-center gap-1.5 text-red-500 font-bold text-[11px] mb-1">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>Error en reCAPTCHA</span>
           </div>
+          <p className="text-[10px] text-zinc-400 text-center mb-2">
+            Ocurrió un error inesperado al renderizar el widget de seguridad.
+          </p>
           <button
             type="button"
-            onClick={() => {
-              if (this.props.onFallback) this.props.onFallback('manual-fallback-token');
-            }}
-            className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 transition cursor-pointer"
+            onClick={this.handleRetry}
+            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-[10px] font-medium transition cursor-pointer"
           >
-            Validado ✓
+            Reintentar
           </button>
         </div>
       );
@@ -146,38 +125,35 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
   const [loadError, setLoadError] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  const [useUniversalKey, setUseUniversalKey] = useState(false);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
-  // Safe site key calculation
-  const resolvedConfigKey = resolveRecaptchaSiteKey(propSiteKey);
-  const activeSiteKey = useUniversalKey ? DEFAULT_RECAPTCHA_SITE_KEY : resolvedConfigKey;
+  // Read public site key exclusively from prop or import.meta.env.VITE_RECAPTCHA_SITE_KEY
+  const activeSiteKey = resolveRecaptchaSiteKey(propSiteKey);
 
   // Handle offline / online connectivity
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => {
       setIsOffline(true);
-      setIsVerified(true);
-      onVerify('offline-bypass-token');
+      setIsVerified(false);
+      if (onExpire) onExpire();
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    if (!navigator.onLine) {
-      setIsVerified(true);
-      onVerify('offline-bypass-token');
-    }
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [onVerify]);
+  }, [onExpire]);
 
-  // Load Google reCAPTCHA v2 script
+  // Load Google reCAPTCHA v2 script and mount widget
   useEffect(() => {
-    if (isOffline) return;
+    // If offline or siteKey is not configured, do not attempt to load script
+    if (isOffline || !activeSiteKey) {
+      return;
+    }
 
     let isSubscribed = true;
 
@@ -215,6 +191,7 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
             console.warn('[reCAPTCHA] Domain or key error reported by Google:', err);
             if (isSubscribed) {
               setLoadError(true);
+              setIsVerified(false);
               if (onError) onError(err);
             }
           },
@@ -229,6 +206,7 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
         console.warn('[reCAPTCHA] Failed to render widget safely:', err);
         if (isSubscribed) {
           setLoadError(true);
+          setIsVerified(false);
           if (onError) onError(err);
         }
       }
@@ -236,7 +214,9 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
 
     if (window.grecaptcha && window.grecaptcha.render) {
       window.grecaptcha.ready(renderWidget);
-      return;
+      return () => {
+        isSubscribed = false;
+      };
     }
 
     const existingScript = document.getElementById('google-recaptcha-script');
@@ -253,7 +233,7 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
       script.async = true;
       script.defer = true;
       script.onerror = () => {
-        console.warn('[reCAPTCHA] Failed to load Google script (Network restriction or adblocker)');
+        console.warn('[reCAPTCHA] Failed to load Google script (network restriction or adblocker)');
         if (isSubscribed) setLoadError(true);
       };
       document.head.appendChild(script);
@@ -267,8 +247,10 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
 
       const timeout = setTimeout(() => {
         clearInterval(checkInterval);
-        if (isSubscribed && !isLoaded) setLoadError(true);
-      }, 4000);
+        if (isSubscribed && !isLoaded && widgetIdRef.current === null) {
+          setLoadError(true);
+        }
+      }, 5000);
 
       return () => {
         isSubscribed = false;
@@ -280,7 +262,7 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
     return () => {
       isSubscribed = false;
     };
-  }, [activeSiteKey, isDark, isOffline, onError, onExpire, onVerify]);
+  }, [activeSiteKey, isDark, isOffline, onError, onExpire, onVerify, retryTrigger]);
 
   // Handle programmatic reset (e.g. after failed login)
   useEffect(() => {
@@ -296,14 +278,21 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
     }
   }, [resetCount]);
 
+  const handleRetry = useCallback(() => {
+    setLoadError(false);
+    setIsVerified(false);
+    setIsLoaded(false);
+    widgetIdRef.current = null;
+    setRetryTrigger((prev) => prev + 1);
+  }, []);
+
   if (isOffline) {
     return (
-      <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-2xl flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300">
+      <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-2xl flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 w-full my-3">
         <div className="flex items-center gap-2">
           <WifiOff className="w-4 h-4 text-amber-500 shrink-0" />
-          <span>Modo sin conexión • Verificación reCAPTCHA omitida</span>
+          <span>Modo sin conexión • Se requiere internet para validar reCAPTCHA</span>
         </div>
-        <span className="font-bold text-[10px] text-emerald-500 uppercase">Activo</span>
       </div>
     );
   }
@@ -322,61 +311,52 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
           </span>
         ) : (
           <span className="text-[10px] font-medium text-zinc-400">
-            Completa la casilla
+            {activeSiteKey ? 'Completa la casilla' : 'Configuración requerida'}
           </span>
         )}
       </div>
 
       <div className="w-full flex flex-col items-center justify-center min-h-[78px] bg-zinc-50 dark:bg-zinc-950/50 p-2 rounded-2xl border border-zinc-200 dark:border-zinc-800 transition-colors">
-        {/* If user clicked validate or completed verification */}
-        {isVerified ? (
+        {!activeSiteKey ? (
+          /* Inform about missing configuration without marking as verified */
+          <div className="w-full flex flex-col items-center justify-center p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center text-xs">
+            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold mb-1">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>reCAPTCHA no configurado</span>
+            </div>
+            <p className="text-[11px] text-zinc-600 dark:text-zinc-400 max-w-xs leading-snug">
+              Falta configurar la variable pública <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 rounded text-[10px] font-mono text-zinc-800 dark:text-zinc-200">VITE_RECAPTCHA_SITE_KEY</code> en las variables de entorno.
+            </p>
+          </div>
+        ) : isVerified ? (
+          /* Verification success */
           <div className="flex items-center gap-2.5 py-3 px-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-semibold w-full justify-center">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
             <span>Identidad verificada correctamente. Puedes ingresar.</span>
           </div>
         ) : loadError ? (
-          /* Graceful fallback UI for domain mismatch, key issues, or script blockers */
-          <div className="flex flex-col items-center gap-2.5 p-2 text-center text-xs text-zinc-600 dark:text-zinc-300 w-full">
-            <div className="flex items-center gap-1.5 text-amber-500 font-bold text-[11px]">
+          /* Error notice without bypass or fictitious tokens */
+          <div className="flex flex-col items-center gap-2 p-3 text-center text-xs bg-red-500/10 border border-red-500/20 rounded-xl w-full">
+            <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 font-bold text-[11px]">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>Verificación con restricciones de dominio o red</span>
+              <span>No se pudo cargar Google reCAPTCHA</span>
             </div>
             
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug max-w-xs">
-              Tu clave personalizada requiere autorizar el dominio actual o usar la clave universal de pruebas para este entorno.
+            <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-snug max-w-xs">
+              Verifica tu conexión a internet o comprueba que este dominio esté autorizado en la consola de Google reCAPTCHA para la clave configurada.
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center gap-2 w-full pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setUseUniversalKey(true);
-                  setLoadError(false);
-                  setIsLoaded(false);
-                  widgetIdRef.current = null;
-                }}
-                className="w-full sm:flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-xl text-[11px] font-semibold transition border border-zinc-200 dark:border-zinc-700 cursor-pointer"
-              >
-                <KeyRound className="w-3.5 h-3.5 text-sky-500" />
-                Usar clave universal en este dominio
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setLoadError(false);
-                  setIsVerified(true);
-                  onVerify('manual-fallback-token');
-                }}
-                className="w-full sm:flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-brand-blue to-brand-green text-white rounded-xl text-[11px] font-bold hover:opacity-90 transition shadow-sm cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Validar acceso y continuar
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-xl text-[11px] font-semibold transition border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Reintentar carga
+            </button>
           </div>
         ) : (
-          /* Normal reCAPTCHA container */
+          /* Normal Google reCAPTCHA container */
           <div 
             ref={containerRef} 
             className="recaptcha-box-wrapper overflow-hidden rounded-md min-w-[304px] min-h-[78px]" 
@@ -389,7 +369,7 @@ export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
 
 export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = (props) => {
   return (
-    <RecaptchaErrorBoundary onFallback={props.onVerify}>
+    <RecaptchaErrorBoundary>
       <RecaptchaWidgetInner {...props} />
     </RecaptchaErrorBoundary>
   );

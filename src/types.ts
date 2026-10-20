@@ -67,6 +67,8 @@ export interface Equipment {
   checkItems?: { id: string; name: string }[];
   inspeccionVOSO?: VOSOInspection;
   status?: string;
+  code?: string;
+  description?: string;
 }
 
 export interface HistoryEntry {
@@ -111,6 +113,8 @@ export interface Finding {
   equipmentDurationSeconds?: number;
   history?: HistoryEntry[];
   clima?: WeatherData | null;
+  category?: string;
+  inspector?: string;
 }
 
 export interface Notification {

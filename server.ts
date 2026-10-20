@@ -99,24 +99,26 @@ expressApp.get(/.*(pwa|logo|favicon|apple-touch).*\.png$/, (req, res, next) => {
   next();
 });
 
-// Endpoint to verify reCAPTCHA tokens
+// Endpoint to strictly verify reCAPTCHA tokens with Google's siteverify API
 expressApp.post('/api/verify-recaptcha', async (req, res) => {
   const { token } = req.body;
-  if (!token) {
-    return res.status(400).json({ success: false, error: 'Token de verificación requerido' });
+  if (!token || typeof token !== 'string' || token.trim().length === 0) {
+    return res.status(400).json({ success: false, error: 'Token de reCAPTCHA requerido' });
   }
 
-  // If token is generated in offline or fallback mode
-  if (token === 'offline-bypass-token' || token === 'manual-fallback-token') {
-    return res.json({ success: true, mode: 'fallback' });
+  const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+  if (!secretKey) {
+    console.error('[reCAPTCHA] RECAPTCHA_SECRET_KEY is not defined in server environment');
+    return res.status(503).json({ 
+      success: false, 
+      error: 'Servicio reCAPTCHA no configurado: falta RECAPTCHA_SECRET_KEY en las variables de entorno del servidor' 
+    });
   }
-
-  const secretKey = process.env.RECAPTCHA_SECRET_KEY || '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
 
   try {
     const postData = new URLSearchParams({
       secret: secretKey,
-      response: token,
+      response: token.trim(),
     }).toString();
 
     const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
@@ -125,12 +127,30 @@ expressApp.post('/api/verify-recaptcha', async (req, res) => {
       body: postData,
     });
 
+    if (!verifyResponse.ok) {
+      return res.status(502).json({ 
+        success: false, 
+        error: `Respuesta inesperada del servidor de verificación de Google (HTTP ${verifyResponse.status})` 
+      });
+    }
+
     const data = await verifyResponse.json();
-    return res.json({ success: Boolean(data.success), details: data });
+    if (data.success === true) {
+      return res.json({ success: true, hostname: data.hostname });
+    } else {
+      console.warn('[reCAPTCHA] Google verification rejected token:', data['error-codes']);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Verificación de reCAPTCHA fallida. Por favor intenta resolver la casilla nuevamente.',
+        errorCodes: data['error-codes'] || []
+      });
+    }
   } catch (error: any) {
-    console.error('Error verifying reCAPTCHA with Google:', error);
-    // Allow pass-through if Google verification endpoint is unreachable
-    return res.json({ success: true, warning: 'Verificación externa inaccesible, permitiendo acceso' });
+    console.error('[reCAPTCHA] Error communicating with Google siteverify:', error);
+    return res.status(502).json({ 
+      success: false, 
+      error: 'No se pudo establecer comunicación con los servidores de validación de Google reCAPTCHA' 
+    });
   }
 });
 
