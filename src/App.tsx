@@ -602,9 +602,27 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.98 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-6 transition-colors duration-200"
+          className="relative min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 overflow-hidden bg-zinc-950"
         >
-          <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl shadow-xl dark:shadow-none p-6 sm:p-8 text-center border border-zinc-100 dark:border-zinc-800 transition-colors duration-200">
+          {/* Responsive Industrial Background: Desktop horizontal / Mobile vertical */}
+          <div className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-hidden">
+            <picture className="w-full h-full block">
+              <source 
+                media="(min-width: 768px)" 
+                srcSet="/assets/aistudio/Fondo_corporativo_de_planta_cementera_51ed88b8.png" 
+              />
+              <img 
+                src="/assets/aistudio/Planta_industrial_con_dise_o_geom_trico_1e4261c8.png" 
+                alt="Planta Industrial CheKify" 
+                className="w-full h-full object-cover object-center transform scale-[1.01]" 
+              />
+            </picture>
+
+            {/* Industrial Contrast Overlay for Pristine Readability */}
+            <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/40 via-zinc-950/25 to-zinc-950/65 dark:from-zinc-950/75 dark:via-zinc-950/60 dark:to-zinc-950/85 backdrop-blur-[2px]" />
+          </div>
+
+          <div className="relative z-10 max-w-md w-full bg-white/95 dark:bg-zinc-900/90 backdrop-blur-xl rounded-3xl shadow-2xl p-6 sm:p-8 text-center border border-white/70 dark:border-white/10 transition-colors duration-200">
             <div className="flex justify-center mb-4">
               <Logo className="h-14 sm:h-16" />
             </div>
