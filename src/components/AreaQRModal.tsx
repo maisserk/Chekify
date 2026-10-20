@@ -70,7 +70,7 @@ const loadFullLogoAsDataUrl = async (): Promise<string> => {
 
 const loadSmallLogoAsDataUrl = async (): Promise<string> => {
   if (cachedSmallLogoDataUrl) return cachedSmallLogoDataUrl;
-  cachedSmallLogoDataUrl = await convertImgToDataUrl('/logo_small.png', 120, 120);
+  cachedSmallLogoDataUrl = await convertImgToDataUrl('/logo_small.png?v=2', 120, 120);
   return cachedSmallLogoDataUrl;
 };
 

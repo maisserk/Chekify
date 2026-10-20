@@ -1,4 +1,4 @@
-const CACHE_NAME = 'checkify-v6';
+const CACHE_NAME = 'chekify-v8-vibrant-icons';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -7,6 +7,10 @@ const ASSETS_TO_CACHE = [
   '/logo_small.png',
   '/apple-touch-icon.png',
   '/apple-touch-icon-precomposed.png',
+  '/pwa-icon-192.png',
+  '/pwa-icon-512.png',
+  '/pwa-icon-maskable-192.png',
+  '/pwa-icon-maskable-512.png',
   '/pwa-48x48.png',
   '/pwa-72x72.png',
   '/pwa-96x96.png',
@@ -23,13 +27,14 @@ const ASSETS_TO_CACHE = [
 
 // Install Event - Pre-cache essential app shell assets
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Pre-caching offline app shell assets');
+      console.log('[Service Worker] Pre-caching offline app shell assets with updated vibrant icons');
       return cache.addAll(ASSETS_TO_CACHE).catch(err => {
         console.warn('[Service Worker] Failed to pre-cache some assets:', err);
       });
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -68,8 +73,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Manifest and service worker should always be network-first to get instant icon updates
-  if (url.pathname === '/manifest.json' || url.pathname === '/sw.js') {
+  // Manifest, service worker, and icons should always be network-first to get instant icon updates
+  if (
+    url.pathname === '/manifest.json' || 
+    url.pathname === '/sw.js' || 
+    url.pathname.includes('pwa') || 
+    url.pathname.includes('logo') || 
+    url.pathname.includes('favicon') || 
+    url.pathname.includes('apple-touch')
+  ) {
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {

@@ -86,6 +86,19 @@ expressApp.get('/sw.js', (_req, res) => {
   res.sendFile(swPath);
 });
 
+// Explicitly serve PWA icons and logos with immediate cache invalidation
+expressApp.get(/.*(pwa|logo|favicon|apple-touch).*\.png$/, (req, res, next) => {
+  const cleanFilename = path.basename(req.path);
+  const filePath = path.join(process.cwd(), 'public', cleanFilename);
+  if (fs.existsSync(filePath)) {
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    return res.sendFile(filePath);
+  }
+  next();
+});
+
 function pushUnavailable(res: express.Response) {
   return res.status(503).json({ error: 'Push notifications are not configured on the server' });
 }

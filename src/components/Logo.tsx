@@ -9,7 +9,7 @@ export const Logo: React.FC<LogoProps> = ({ className = "h-10", isCollapsed = fa
   return (
     <div className={`flex items-center ${isCollapsed ? 'justify-center' : ''} ${className}`}>
       <img 
-        src={isCollapsed ? "/logo_small.png" : "/logo.png"} 
+        src={isCollapsed ? "/logo_small.png?v=2" : "/logo.png"} 
         alt="CheKify Logo" 
         className={`h-full w-auto object-contain transition-all duration-200 ${isCollapsed ? '' : 'dark:brightness-0 dark:invert'}`}
         referrerPolicy="no-referrer"
