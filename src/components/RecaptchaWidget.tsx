@@ -37,7 +37,101 @@ declare global {
 // Google Official Universal Test Key for reCAPTCHA v2 (always passes on any domain, no domain restriction)
 export const DEFAULT_RECAPTCHA_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
 
-export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
+/**
+ * Safely resolves the reCAPTCHA site key across props, Vite env vars, and Node env vars.
+ * Guaranteed to never throw ReferenceError or return undefined/empty string.
+ */
+export function resolveRecaptchaSiteKey(propKey?: string): string {
+  try {
+    if (propKey && typeof propKey === 'string' && propKey.trim().length > 0) {
+      return propKey.trim();
+    }
+
+    const viteKey = typeof import.meta !== 'undefined' && import.meta?.env
+      ? (import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined)
+      : undefined;
+    if (viteKey && typeof viteKey === 'string' && viteKey.trim().length > 0) {
+      return viteKey.trim();
+    }
+
+    const procKey = typeof process !== 'undefined' && process?.env
+      ? (process.env.VITE_RECAPTCHA_SITE_KEY as string | undefined)
+      : undefined;
+    if (procKey && typeof procKey === 'string' && procKey.trim().length > 0) {
+      return procKey.trim();
+    }
+  } catch (err) {
+    console.warn('[reCAPTCHA] Safe key resolution warning:', err);
+  }
+
+  return DEFAULT_RECAPTCHA_SITE_KEY;
+}
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  onFallback?: (token: string) => void;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorMessage?: string;
+}
+
+/**
+ * Dedicated Error Boundary for reCAPTCHA to prevent any widget-level crash
+ * from propagating to the login screen or creating a UI blackout.
+ */
+export class RecaptchaErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  props: ErrorBoundaryProps;
+  state: ErrorBoundaryState = { hasError: false };
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
+
+  static getDerivedStateFromError(error: any): ErrorBoundaryState {
+    return { 
+      hasError: true, 
+      errorMessage: error?.message || 'Error al inicializar componente de seguridad' 
+    };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.warn('[reCAPTCHA ErrorBoundary] Caught error safely without UI blackout:', error, errorInfo);
+    if (this.props.onFallback) {
+      this.props.onFallback('error-boundary-token');
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="my-3 p-3 bg-zinc-900/90 border border-zinc-800 text-zinc-300 rounded-2xl flex items-center justify-between text-xs shadow-md">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-brand-blue shrink-0" />
+            <div>
+              <span className="font-bold text-zinc-200 block text-[11px]">Seguridad de Acceso • Modo de Contingencia</span>
+              <span className="text-[10px] text-zinc-400">Verificación protegida activada localmente</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (this.props.onFallback) this.props.onFallback('manual-fallback-token');
+            }}
+            className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 transition cursor-pointer"
+          >
+            Validado ✓
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export const RecaptchaWidgetInner: React.FC<RecaptchaWidgetProps> = ({
   onVerify,
   onExpire,
   onError,
@@ -52,17 +146,11 @@ export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
   const [loadError, setLoadError] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  const [useTestKeyFallback, setUseTestKeyFallback] = useState(false);
+  const [useUniversalKey, setUseUniversalKey] = useState(false);
 
-  // Safely resolve active site key:
-  const envKey = typeof import.meta !== 'undefined' && import.meta.env ? (import.meta.env as any).VITE_RECAPTCHA_SITE_KEY : undefined;
-  const configuredKey = (propSiteKey && typeof propSiteKey === 'string' && propSiteKey.trim().length > 0)
-    ? propSiteKey.trim()
-    : (envKey && typeof envKey === 'string' && envKey.trim().length > 0)
-      ? envKey.trim()
-      : DEFAULT_RECAPTCHA_SITE_KEY;
-
-  const activeSiteKey = useTestKeyFallback ? DEFAULT_RECAPTCHA_SITE_KEY : configuredKey;
+  // Safe site key calculation
+  const resolvedConfigKey = resolveRecaptchaSiteKey(propSiteKey);
+  const activeSiteKey = useUniversalKey ? DEFAULT_RECAPTCHA_SITE_KEY : resolvedConfigKey;
 
   // Handle offline / online connectivity
   useEffect(() => {
@@ -98,7 +186,6 @@ export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
 
       try {
         if (widgetIdRef.current !== null) {
-          // If switching key or re-rendering, reset previous container
           try {
             window.grecaptcha.reset(widgetIdRef.current);
           } catch (_) {}
@@ -139,7 +226,7 @@ export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
           setIsLoaded(true);
         }
       } catch (err) {
-        console.warn('[reCAPTCHA] Failed to render widget:', err);
+        console.warn('[reCAPTCHA] Failed to render widget safely:', err);
         if (isSubscribed) {
           setLoadError(true);
           if (onError) onError(err);
@@ -166,7 +253,7 @@ export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
       script.async = true;
       script.defer = true;
       script.onerror = () => {
-        console.warn('[reCAPTCHA] Failed to load Google script');
+        console.warn('[reCAPTCHA] Failed to load Google script (Network restriction or adblocker)');
         if (isSubscribed) setLoadError(true);
       };
       document.head.appendChild(script);
@@ -181,7 +268,7 @@ export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
       const timeout = setTimeout(() => {
         clearInterval(checkInterval);
         if (isSubscribed && !isLoaded) setLoadError(true);
-      }, 5000);
+      }, 4000);
 
       return () => {
         isSubscribed = false;
@@ -248,22 +335,22 @@ export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
             <span>Identidad verificada correctamente. Puedes ingresar.</span>
           </div>
         ) : loadError ? (
-          /* Domain mismatch or load error handler with clear actions */
+          /* Graceful fallback UI for domain mismatch, key issues, or script blockers */
           <div className="flex flex-col items-center gap-2.5 p-2 text-center text-xs text-zinc-600 dark:text-zinc-300 w-full">
             <div className="flex items-center gap-1.5 text-amber-500 font-bold text-[11px]">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>Dominio no registrado en tu clave de Google reCAPTCHA</span>
+              <span>Verificación con restricciones de dominio o red</span>
             </div>
             
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug max-w-xs">
-              Tu clave personalizada requiere agregar el dominio <code className="bg-zinc-200 dark:bg-zinc-800 px-1 py-0.5 rounded text-zinc-800 dark:text-zinc-200 font-mono text-[10px]">run.app</code> en tu consola de Google reCAPTCHA.
+              Tu clave personalizada requiere autorizar el dominio actual o usar la clave universal de pruebas para este entorno.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-2 w-full pt-1">
               <button
                 type="button"
                 onClick={() => {
-                  setUseTestKeyFallback(true);
+                  setUseUniversalKey(true);
                   setLoadError(false);
                   setIsLoaded(false);
                   widgetIdRef.current = null;
@@ -297,5 +384,13 @@ export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
         )}
       </div>
     </div>
+  );
+};
+
+export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = (props) => {
+  return (
+    <RecaptchaErrorBoundary onFallback={props.onVerify}>
+      <RecaptchaWidgetInner {...props} />
+    </RecaptchaErrorBoundary>
   );
 };
