@@ -35,7 +35,7 @@ declare global {
 
 // Google Official Test Key for reCAPTCHA v2 (always passes on any domain, no domain restriction)
 // Can be overridden at runtime via VITE_RECAPTCHA_SITE_KEY
-const DEFAULT_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+const SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
 export const RecaptchaWidget: React.FC<RecaptchaWidgetProps> = ({
   onVerify,
