@@ -99,8 +99,30 @@ expressApp.get(/.*(pwa|logo|favicon|apple-touch).*\.png$/, (req, res, next) => {
   next();
 });
 
+// ============================================================================
+// CONFIGURACIÓN TEMPORAL PARA DEMOSTRACIÓN / DEMO MODE
+// Cambiar a false o definir DISABLE_RECAPTCHA="false" para reactivar reCAPTCHA.
+// ============================================================================
+const TEMPORARY_DISABLE_RECAPTCHA = process.env.DISABLE_RECAPTCHA === 'false' ? false : true;
+
+// Endpoint to check reCAPTCHA operational mode
+expressApp.get('/api/auth/recaptcha-config', (_req, res) => {
+  res.json({
+    enabled: !TEMPORARY_DISABLE_RECAPTCHA,
+    demoMode: TEMPORARY_DISABLE_RECAPTCHA
+  });
+});
+
 // Endpoint to strictly verify reCAPTCHA tokens with Google's siteverify API
 expressApp.post('/api/verify-recaptcha', async (req, res) => {
+  if (TEMPORARY_DISABLE_RECAPTCHA) {
+    return res.json({ 
+      success: true, 
+      bypassed: true, 
+      message: 'reCAPTCHA temporalmente desactivado para demostración urgente' 
+    });
+  }
+
   const { token } = req.body;
   if (!token || typeof token !== 'string' || token.trim().length === 0) {
     return res.status(400).json({ success: false, error: 'Token de reCAPTCHA requerido' });

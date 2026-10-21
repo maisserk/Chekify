@@ -128,6 +128,7 @@ import { InspectionService } from './services/InspectionService';
 import { offlineQueueService } from './services/OfflineQueueService';
 import { weatherService, WeatherData } from './services/weatherService';
 import { Plant } from './types';
+import { TEMPORARY_DISABLE_RECAPTCHA } from './config/authConfig';
 import { WeatherModule } from './components/WeatherModule';
 import { WeatherSafetyModal } from './components/WeatherSafetyModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -542,8 +543,8 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     e.preventDefault();
     if (isLoggingIn) return;
 
-    // Check reCAPTCHA verification when online
-    if (navigator.onLine && !recaptchaToken) {
+    // Check reCAPTCHA verification when online and reCAPTCHA is active
+    if (!TEMPORARY_DISABLE_RECAPTCHA && navigator.onLine && !recaptchaToken) {
       setError("Por favor, completa la verificación de seguridad (reCAPTCHA) para continuar.");
       return;
     }
@@ -552,8 +553,8 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     setError('');
 
     try {
-      // Strict server token verification
-      if (navigator.onLine) {
+      // Strict server token verification when reCAPTCHA is active
+      if (!TEMPORARY_DISABLE_RECAPTCHA && navigator.onLine) {
         if (!recaptchaToken) {
           setError("Por favor, completa la verificación de seguridad (reCAPTCHA) para continuar.");
           setIsLoggingIn(false);
@@ -589,8 +590,10 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
     } catch (err: any) {
       console.error("Password login failed", err);
       // Reset reCAPTCHA so a fresh check is required on the next attempt
-      setRecaptchaToken(null);
-      setRecaptchaResetCount(prev => prev + 1);
+      if (!TEMPORARY_DISABLE_RECAPTCHA) {
+        setRecaptchaToken(null);
+        setRecaptchaResetCount(prev => prev + 1);
+      }
 
       if (err.code === 'auth/network-request-failed') {
         setError("Error de red: No se pudo conectar con el servidor. Revisa tu conexión a internet.");
@@ -709,20 +712,22 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
                   </div>
                 </div>
 
-                {/* Google reCAPTCHA Verification */}
-                <RecaptchaWidget
-                  siteKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
-                  onVerify={(token) => {
-                    setRecaptchaToken(token);
-                    setError('');
-                  }}
-                  onExpire={() => setRecaptchaToken(null)}
-                  onError={() => {
-                    setRecaptchaToken(null);
-                  }}
-                  resetCount={recaptchaResetCount}
-                  isDark={document.documentElement.classList.contains('dark')}
-                />
+                {/* Google reCAPTCHA Verification (Active unless temporarily disabled for demo) */}
+                {!TEMPORARY_DISABLE_RECAPTCHA && (
+                  <RecaptchaWidget
+                    siteKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                    onVerify={(token) => {
+                      setRecaptchaToken(token);
+                      setError('');
+                    }}
+                    onExpire={() => setRecaptchaToken(null)}
+                    onError={() => {
+                      setRecaptchaToken(null);
+                    }}
+                    resetCount={recaptchaResetCount}
+                    isDark={document.documentElement.classList.contains('dark')}
+                  />
+                )}
 
                 <button
                   type="submit"
