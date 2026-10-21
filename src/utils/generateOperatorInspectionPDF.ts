@@ -897,9 +897,90 @@ export const generateOperatorInspectionPDF = async (
   }
 
   // --- EVIDENCIA FOTOGRÁFICA ---
-  const photos = extractFindingPhotos(finding);
+  const rawPhotos = extractFindingPhotos(finding);
 
-  if (photos.length > 0) {
+  const getPhotoCaptionInfo = (idx: number, pUrl: string) => {
+    // 1) Match via vosoResponses if available on finding
+    const voso = (finding as any).vosoResponses || (finding as any).voso;
+    if (voso && typeof voso === 'object') {
+      for (const [id, resp] of Object.entries(voso) as [string, any][]) {
+        if (resp && (resp.photoUrl === pUrl || (Array.isArray(resp.photoUrls) && resp.photoUrls.includes(pUrl)))) {
+          const matchingItem = allItems.find(item => 
+            (item.rawTitle && item.rawTitle.toLowerCase().includes(id.toLowerCase())) ||
+            (item.category && item.category.toLowerCase().includes(id.toLowerCase()))
+          );
+          const title = matchingItem?.rawTitle || resp.itemName || resp.name || `Hallazgo ${idx + 1}`;
+          const detail = resp.comment || matchingItem?.comment || matchingItem?.detail;
+          return {
+            title: `Foto ${idx + 1}: ${title}`,
+            detail: detail && detail !== 'Sin comentarios adicionales' ? detail : undefined
+          };
+        }
+      }
+    }
+
+    // 2) Match by index in allItems
+    if (allItems.length > 0) {
+      const item = allItems[idx] || (allItems.length === 1 ? allItems[0] : null);
+      if (item) {
+        const itemTitle = item.rawTitle || item.category || finding.equipmentName || 'Hallazgo';
+        const detail = item.comment || item.detail;
+        return {
+          title: `Foto ${idx + 1}: ${itemTitle}`,
+          detail: detail && detail !== 'Sin comentarios adicionales' ? detail : undefined
+        };
+      }
+    }
+
+    // 3) Fallback
+    const equipOrArea = finding.equipmentName || finding.areaName || 'Hallazgo';
+    const cleanDesc = finding.description
+      .replace(/^Inspecci[óo]n.*?(?=\n|•|$)/i, '')
+      .replace(/Condici[óo]n operativa: (En Funcionamiento|Detenido)[\.\s\]]*/gi, '')
+      .replace(/\[Condici[óo]n.*?\]/gi, '')
+      .replace(/HALLAZGOS VOSO:/gi, '')
+      .trim();
+
+    const shortDesc = cleanDesc.length > 70 ? cleanDesc.substring(0, 67) + '...' : cleanDesc;
+
+    return {
+      title: `Foto ${idx + 1}: ${equipOrArea}`,
+      detail: shortDesc || undefined
+    };
+  };
+
+  // Pre-load and deduplicate by image data signature so duplicate URLs or local mirrors are never duplicated in the PDF
+  interface UniqueInspectionPhoto {
+    url: string;
+    base64: string;
+    photoInfo: { title: string; detail?: string };
+  }
+
+  const uniquePhotos: UniqueInspectionPhoto[] = [];
+  const seenBase64Signatures = new Set<string>();
+
+  for (let i = 0; i < rawPhotos.length; i++) {
+    const pUrl = rawPhotos[i];
+    if (!pUrl || typeof pUrl !== 'string' || !pUrl.trim()) continue;
+
+    const pBase64 = await loadImageAsBase64(pUrl);
+    if (!pBase64) continue;
+
+    // Signature: length + start sample + end sample to identify identical images
+    const sig = `${pBase64.length}_${pBase64.slice(0, 100)}_${pBase64.slice(-100)}`;
+    if (seenBase64Signatures.has(sig)) {
+      continue;
+    }
+    seenBase64Signatures.add(sig);
+
+    uniquePhotos.push({
+      url: pUrl,
+      base64: pBase64,
+      photoInfo: getPhotoCaptionInfo(uniquePhotos.length, pUrl)
+    });
+  }
+
+  if (uniquePhotos.length > 0) {
     if (currentY > pageHeight - 75) {
       docPDF.addPage();
       currentY = 20;
@@ -912,76 +993,16 @@ export const generateOperatorInspectionPDF = async (
     docPDF.setFontSize(9);
     docPDF.setFont('helvetica', 'bold');
     docPDF.setTextColor(3, 105, 161); // Chekify Sky-700 (#0369A1)
-    docPDF.text(`EVIDENCIA FOTOGRÁFICA EN TERRENO (${photos.length} FOTO${photos.length > 1 ? 'S' : ''})`, margin + 6, currentY + 5);
+    docPDF.text(`EVIDENCIA FOTOGRÁFICA EN TERRENO (${uniquePhotos.length} FOTO${uniquePhotos.length > 1 ? 'S' : ''})`, margin + 6, currentY + 5);
 
     currentY += 10;
 
-    const photoWidth = photos.length === 1 ? 90 : 82;
-    const photoHeight = photos.length === 1 ? 65 : 55;
+    const photoWidth = uniquePhotos.length === 1 ? 90 : 82;
+    const photoHeight = uniquePhotos.length === 1 ? 65 : 55;
     const gap = 8;
 
-    const getPhotoCaptionInfo = (idx: number, pUrl: string) => {
-      // 1) Match via vosoResponses if available on finding
-      const voso = (finding as any).vosoResponses || (finding as any).voso;
-      if (voso && typeof voso === 'object') {
-        for (const [id, resp] of Object.entries(voso) as [string, any][]) {
-          if (resp && resp.photoUrl === pUrl) {
-            const matchingItem = allItems.find(item => 
-              (item.rawTitle && item.rawTitle.toLowerCase().includes(id.toLowerCase())) ||
-              (item.category && item.category.toLowerCase().includes(id.toLowerCase()))
-            );
-            const title = matchingItem?.rawTitle || resp.itemName || resp.name || `Hallazgo ${idx + 1}`;
-            const detail = resp.comment || matchingItem?.comment || matchingItem?.detail;
-            return {
-              title: `Foto ${idx + 1}: ${title}`,
-              detail: detail && detail !== 'Sin comentarios adicionales' ? detail : undefined
-            };
-          }
-        }
-      }
-
-      // 2) Match by index in allItems
-      if (allItems.length > 0) {
-        const item = allItems[idx] || (allItems.length === 1 ? allItems[0] : null);
-        if (item) {
-          const itemTitle = item.rawTitle || item.category || finding.equipmentName || 'Hallazgo';
-          const detail = item.comment || item.detail;
-          return {
-            title: `Foto ${idx + 1}: ${itemTitle}`,
-            detail: detail && detail !== 'Sin comentarios adicionales' ? detail : undefined
-          };
-        }
-      }
-
-      // 3) Fallback
-      const equipOrArea = finding.equipmentName || finding.areaName || 'Hallazgo';
-      const cleanDesc = finding.description
-        .replace(/^Inspecci[óo]n.*?(?=\n|•|$)/i, '')
-        .replace(/Condici[óo]n operativa: (En Funcionamiento|Detenido)[\.\s\]]*/gi, '')
-        .replace(/\[Condici[óo]n.*?\]/gi, '')
-        .replace(/HALLAZGOS VOSO:/gi, '')
-        .trim();
-
-      const shortDesc = cleanDesc.length > 70 ? cleanDesc.substring(0, 67) + '...' : cleanDesc;
-
-      return {
-        title: `Foto ${idx + 1}: ${equipOrArea}`,
-        detail: shortDesc || undefined
-      };
-    };
-
-    for (let i = 0; i < photos.length; i++) {
-      const pUrl = photos[i];
-      let pBase64 = await loadImageAsBase64(pUrl);
-      if (!pBase64) {
-        for (const candidate of photos) {
-          if (candidate !== pUrl) {
-            pBase64 = await loadImageAsBase64(candidate);
-            if (pBase64) break;
-          }
-        }
-      }
-      const photoInfo = getPhotoCaptionInfo(i, pUrl);
+    for (let i = 0; i < uniquePhotos.length; i++) {
+      const { base64: pBase64, photoInfo } = uniquePhotos[i];
 
       const isSecondCol = (i % 2) === 1;
       let pX = margin + (isSecondCol ? photoWidth + gap : 0);
@@ -1026,8 +1047,8 @@ export const generateOperatorInspectionPDF = async (
         }
       }
 
-      if (isSecondCol || i === photos.length - 1) {
-        if (i === photos.length - 1) {
+      if (isSecondCol || i === uniquePhotos.length - 1) {
+        if (i === uniquePhotos.length - 1) {
           currentY += photoHeight + 18;
         }
       }

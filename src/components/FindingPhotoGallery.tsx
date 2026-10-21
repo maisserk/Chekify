@@ -11,6 +11,26 @@ export const isPendingUpload = (_url: string | null | undefined): boolean => {
 export const extractFindingPhotos = (finding: Finding | null | undefined): string[] => {
   if (!finding) return [];
   const rawList: string[] = [];
+  const seenNormalizedKeys = new Set<string>();
+
+  const normalizeKey = (val: string): string => {
+    let s = val.trim();
+    if (s.startsWith('http://') || s.startsWith('https://')) {
+      try {
+        const u = new URL(s);
+        return `${u.origin}${u.pathname}`;
+      } catch {
+        return s.split('?')[0];
+      }
+    }
+    if (s.startsWith('offline-cached://')) {
+      return s;
+    }
+    if (s.startsWith('data:')) {
+      return `data_${s.length}_${s.slice(0, 50)}_${s.slice(-50)}`;
+    }
+    return s;
+  };
 
   const addPhoto = (val: any) => {
     if (!val) return;
@@ -21,7 +41,9 @@ export const extractFindingPhotos = (finding: Finding | null | undefined): strin
           str = `data:image/jpeg;base64,${str}`;
         }
       }
-      if (!rawList.includes(str)) {
+      const key = normalizeKey(str);
+      if (!seenNormalizedKeys.has(key)) {
+        seenNormalizedKeys.add(key);
         rawList.push(str);
       }
     } else if (Array.isArray(val)) {
@@ -84,23 +106,36 @@ export const extractFindingPhotos = (finding: Finding | null | undefined): strin
 
   if (rawList.length === 0) return [];
 
-  // Deduplicate while preserving online URLs first, followed by offline/cached/data URLs.
-  // We keep ALL URLs so OfflineImage can fall back to local/cached copy if online copy fails to load.
+  // Deduplicate while prioritizing online/uploaded URLs, preventing duplicates with local cached copies
   const onlineUrls = rawList.filter(p => p.startsWith('http://') || p.startsWith('https://') || p.startsWith('blob:'));
   const localUrls = rawList.filter(p => p.startsWith('offline-cached://') || p.startsWith('data:'));
 
   const result: string[] = [];
 
-  onlineUrls.forEach(url => {
-    if (!result.includes(url)) result.push(url);
-  });
+  if (onlineUrls.length > 0) {
+    onlineUrls.forEach(url => {
+      if (!result.includes(url)) result.push(url);
+    });
 
-  localUrls.forEach(url => {
-    if (!result.includes(url)) result.push(url);
-  });
+    // Only append local URLs if there are more local photos than online photos (meaning un-uploaded photos)
+    if (localUrls.length > onlineUrls.length) {
+      for (let i = onlineUrls.length; i < localUrls.length; i++) {
+        const u = localUrls[i];
+        if (!result.includes(u)) result.push(u);
+      }
+    }
+  } else {
+    // Pure offline mode or before first upload
+    localUrls.forEach(url => {
+      if (!result.includes(url)) result.push(url);
+    });
+  }
 
+  // Any remaining unclassified URLs
   rawList.forEach(url => {
-    if (!result.includes(url)) result.push(url);
+    if (!result.includes(url) && !localUrls.includes(url) && !onlineUrls.includes(url)) {
+      result.push(url);
+    }
   });
 
   return result;
