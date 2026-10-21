@@ -324,7 +324,7 @@ export const OrdenYLimpiezaDashboard = ({
     return FindingService.subscribeToFindings((data) => {
       setAllFindings(data);
     }, plantIdScope);
-  }, [user]);
+  }, [user.uid, user.plantId, user.role]);
 
   // Filter findings specifically for Orden y Limpieza
   const ordenFindings = useMemo(() => {

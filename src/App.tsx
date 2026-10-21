@@ -123,6 +123,8 @@ import {
 
 import { EquipmentService } from './services/EquipmentService';
 import { FindingService } from './services/FindingService';
+import { AreaService } from './services/AreaService';
+import { InspectionService } from './services/InspectionService';
 import { offlineQueueService } from './services/OfflineQueueService';
 import { weatherService, WeatherData } from './services/weatherService';
 import { Plant } from './types';
@@ -377,6 +379,7 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
   });
 
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [statusMessage, setStatusMessage] = useState('Iniciando Checkify...');
   const [isOfflineMode, setIsOfflineMode] = useState(!navigator.onLine);
@@ -420,13 +423,13 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
 
   // Guarantee minimum professional splash duration (1.1s) and smooth dismissal
   useEffect(() => {
-    if (!loading) {
+    if (!loading && authReady) {
       const dismissTimer = setTimeout(() => {
         setShowSplash(false);
       }, 950);
       return () => clearTimeout(dismissTimer);
     }
-  }, [loading]);
+  }, [loading, authReady]);
 
   // Auth State Listener
   useEffect(() => {
@@ -484,15 +487,22 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
             }
           }
           setLoading(false);
+          setAuthReady(true);
         }, (err) => {
           console.error("User doc listener error:", err);
           // If offline error, allow cached user to proceed immediately
           setLoading(false);
+          setAuthReady(true);
         });
       } else {
+        AreaService.reset();
+        EquipmentService.reset();
+        InspectionService.reset();
+        FindingService.reset();
         localStorage.removeItem('chekify_cached_user');
         setUser(null);
         setLoading(false);
+        setAuthReady(true);
       }
     });
 
@@ -598,15 +608,23 @@ const AuthWrapper = ({ children, theme }: { children: (user: AppUser) => React.R
 
   return (
     <AnimatePresence mode="wait">
-      {showSplash ? (
+      {showSplash || loading || !authReady ? (
         <SplashScreen
           key="chekify-splash"
           statusMessage={statusMessage}
           isOffline={isOfflineMode}
           onTimeoutRetry={() => window.location.reload()}
-          onForceContinue={() => setShowSplash(false)}
+          onForceContinue={() => {
+            if (auth.currentUser) {
+              setShowSplash(false);
+            } else {
+              setLoading(false);
+              setAuthReady(true);
+              setShowSplash(false);
+            }
+          }}
         />
-      ) : !user ? (
+      ) : (!user || !auth.currentUser) ? (
         <motion.div
           key="chekify-login"
           initial={{ opacity: 0, y: 6 }}
@@ -1447,96 +1465,81 @@ const OperatorDashboard = ({
   });
 
   useEffect(() => {
-    // Listen for areas
-    const unsubAreas = onSnapshot(collection(db, 'areas'), (snapshot) => {
-      let areaData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area));
-      if (user.role !== 'Administrador' && user.plantId) {
-        areaData = areaData.filter(a => a.plantId === user.plantId);
-      }
+    // Listen for areas scoped by plant via multiplexed AreaService
+    const unsubAreas = AreaService.subscribeToAreas((areaData) => {
       setAreas(areaData);
-      cacheAreas(areaData);
-    }, (error) => {
-      console.error("Error listening to areas:", error);
-    });
+    }, user.role === 'Administrador' ? undefined : (user.plantId || undefined));
 
     // Listen for equipment via enterprise EquipmentService honoring plant permissions
     const unsubEquip = EquipmentService.subscribeToEquipment((equipData) => {
       setEquipment(equipData);
-      cacheEquipment(equipData);
     }, user.role === 'Administrador' ? undefined : (user.plantId || undefined));
 
-    // Listen for inspections
-    const unsubInspections = onSnapshot(collection(db, 'inspections'), (snapshot) => {
-      const allDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const filtered = (user.role === 'Administrador' || !user.plantId)
-        ? allDocs
-        : allDocs.filter((insp: any) => !insp.plantId || insp.plantId === user.plantId);
-      setAllInspections(filtered);
-    }, (error) => {
-      console.error("Error listening to inspections:", error);
-    });
+    // Listen for recent inspections via multiplexed InspectionService
+    const unsubInspections = InspectionService.subscribeToRecentInspections((inspectionsData) => {
+      setAllInspections(inspectionsData);
+    }, user.plantId, user.role === 'Administrador');
 
-    // Listen for all findings in the user's plant to calculate KPIs using enterprise service layer
-    if (!user.plantId) {
-      return unsubAreas;
-    }
-    
-    const unsubStats = FindingService.subscribeToFindings((plantFindings) => {
-      setAllActiveFindings(plantFindings.filter(f => f.status !== 'Closed'));
-      
-      const closedFindings = plantFindings.filter(f => f.status === 'Closed' && f.closedAt && f.createdAt);
-      
-      let totalResolutionMs = 0;
-      closedFindings.forEach(f => {
-        const createdMs = parseAnyDate(f.createdAt)?.getTime() || 0;
-        const closedMs = parseAnyDate(f.closedAt)?.getTime() || 0;
-        const resolutionTime = closedMs - createdMs;
-        if (resolutionTime > 0) totalResolutionMs += resolutionTime;
-      });
-      
-      const avgHours = closedFindings.length > 0 
-        ? (totalResolutionMs / (1000 * 60 * 60)) / closedFindings.length 
-        : 0;
-
-      // Avg Inspection time
-      const inspectionsWithTime = plantFindings.filter(f => f.inspectionDurationSeconds !== undefined || (f.inspectionStartedAt && f.inspectionCompletedAt));
-      let totalAreaSeconds = 0;
-      let totalEquipSeconds = 0;
-      let equipCount = 0;
-
-      inspectionsWithTime.forEach(f => {
-        let areaSec = f.inspectionDurationSeconds || 0;
-        if (!areaSec && f.inspectionStartedAt && f.inspectionCompletedAt) {
-          const startMs = parseAnyDate(f.inspectionStartedAt)?.getTime() || 0;
-          const compMs = parseAnyDate(f.inspectionCompletedAt)?.getTime() || 0;
-          areaSec = (compMs - startMs) / 1000;
-        }
-        totalAreaSeconds += areaSec;
+    // Listen for findings in user's plant via shared multiplexed FindingService
+    let unsubStats: (() => void) | null = null;
+    if (user.plantId || user.role === 'Administrador') {
+      unsubStats = FindingService.subscribeToFindings((plantFindings) => {
+        setAllActiveFindings(plantFindings.filter(f => f.status !== 'Closed'));
         
-        if (f.equipmentDurationSeconds !== undefined) {
-          totalEquipSeconds += f.equipmentDurationSeconds;
-          equipCount++;
-        }
-      });
+        const closedFindings = plantFindings.filter(f => f.status === 'Closed' && f.closedAt && f.createdAt);
+        
+        let totalResolutionMs = 0;
+        closedFindings.forEach(f => {
+          const createdMs = parseAnyDate(f.createdAt)?.getTime() || 0;
+          const closedMs = parseAnyDate(f.closedAt)?.getTime() || 0;
+          const resolutionTime = closedMs - createdMs;
+          if (resolutionTime > 0) totalResolutionMs += resolutionTime;
+        });
+        
+        const avgHours = closedFindings.length > 0 
+          ? (totalResolutionMs / (1000 * 60 * 60)) / closedFindings.length 
+          : 0;
 
-      const avgAreaSeconds = inspectionsWithTime.length > 0 ? totalAreaSeconds / inspectionsWithTime.length : 0;
-      const avgEquipSeconds = equipCount > 0 ? totalEquipSeconds / equipCount : 0;
+        // Avg Inspection time
+        const inspectionsWithTime = plantFindings.filter(f => f.inspectionDurationSeconds !== undefined || (f.inspectionStartedAt && f.inspectionCompletedAt));
+        let totalAreaSeconds = 0;
+        let totalEquipSeconds = 0;
+        let equipCount = 0;
 
-      setPlantStats({
-        avgResolutionHours: Math.round(avgHours * 10) / 10,
-        avgInspectionSeconds: Math.round(avgAreaSeconds),
-        avgEquipSeconds: Math.round(avgEquipSeconds),
-        totalOpen: plantFindings.filter(f => f.status === 'Open').length,
-        totalInReview: plantFindings.filter(f => f.status === 'InReview').length,
-        totalClosed: plantFindings.filter(f => f.status === 'Closed').length
-      });
-    }, user.plantId);
+        inspectionsWithTime.forEach(f => {
+          let areaSec = f.inspectionDurationSeconds || 0;
+          if (!areaSec && f.inspectionStartedAt && f.inspectionCompletedAt) {
+            const startMs = parseAnyDate(f.inspectionStartedAt)?.getTime() || 0;
+            const compMs = parseAnyDate(f.inspectionCompletedAt)?.getTime() || 0;
+            areaSec = (compMs - startMs) / 1000;
+          }
+          totalAreaSeconds += areaSec;
+          
+          if (f.equipmentDurationSeconds !== undefined) {
+            totalEquipSeconds += f.equipmentDurationSeconds;
+            equipCount++;
+          }
+        });
+
+        const avgAreaSeconds = inspectionsWithTime.length > 0 ? totalAreaSeconds / inspectionsWithTime.length : 0;
+        const avgEquipSeconds = equipCount > 0 ? totalEquipSeconds / equipCount : 0;
+
+        setPlantStats({
+          avgResolutionHours: Math.round(avgHours * 10) / 10,
+          avgInspectionSeconds: Math.round(avgAreaSeconds),
+          avgEquipSeconds: Math.round(avgEquipSeconds),
+          totalOpen: plantFindings.filter(f => f.status === 'Open').length,
+          totalInReview: plantFindings.filter(f => f.status === 'InReview').length,
+          totalClosed: plantFindings.filter(f => f.status === 'Closed').length
+        });
+      }, user.plantId);
+    }
 
     return () => {
       unsubAreas();
       unsubEquip();
       unsubInspections();
-      unsubStats();
+      if (unsubStats) unsubStats();
     };
   }, [user.plantId, user.role]);
 
@@ -4567,7 +4570,7 @@ const SupervisorDashboard = ({
     return FindingService.subscribeToFindings((data) => {
       setFindings(data);
     }, plantIdScope);
-  }, [user]);
+  }, [user.uid, user.plantId, user.role]);
 
   useEffect(() => {
     if (initialFindingId && findings.length > 0) {
@@ -5579,7 +5582,7 @@ const ReportsView = ({
     return FindingService.subscribeToFindings((data) => {
       setFindings(data);
     }, plantIdScope);
-  }, [user]);
+  }, [user.uid, user.plantId, user.role]);
 
   useEffect(() => {
     if (initialFindingId && findings.length > 0) {
@@ -7176,7 +7179,7 @@ const AdminNotificationManagement = ({ plants }: { plants: {id: string, name: st
   const [feedback, setFeedback] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    const unsubNotif = onSnapshot(query(collection(db, 'notifications'), orderBy('createdAt', 'desc')), (snapshot) => {
+    const unsubNotif = onSnapshot(query(collection(db, 'notifications'), orderBy('createdAt', 'desc'), limit(50)), (snapshot) => {
       setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
     });
     return () => {
@@ -7746,8 +7749,8 @@ const AdminManagement = ({ plants }: { plants: {id: string, name: string}[] }) =
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
 
   useEffect(() => {
-    const unsubAreas = onSnapshot(collection(db, 'areas'), (snapshot) => {
-      setAreas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+    const unsubAreas = AreaService.subscribeToAreas((areaData) => {
+      setAreas(areaData);
     });
     const unsubEquip = EquipmentService.subscribeToEquipment((items) => {
       setEquipmentList(items);
@@ -9261,7 +9264,7 @@ const AdminEquipmentManagement = ({ plants, areas, equipment }: { plants: {id: s
 };
 
 const AdminUserManagement = ({ plants }: { plants: {id: string, name: string}[] }) => {
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const { users } = useAppUsers();
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [confirmDeleteUid, setConfirmDeleteUid] = useState<string | null>(null);
   const [resetPasswordFor, setResetPasswordFor] = useState<AppUser | null>(null);
@@ -9308,14 +9311,6 @@ const AdminUserManagement = ({ plants }: { plants: {id: string, name: string}[] 
     }
   }, [message]);
 
-  useEffect(() => {
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as AppUser)));
-    });
-    return () => {
-      unsubUsers();
-    };
-  }, []);
 
   const handleSaveUser = async () => {
     if (!formData.email || !formData.name || isSaving) return;
@@ -10426,7 +10421,6 @@ export default function App() {
   }, [theme]);
 
   const [activeTab, setActiveTab] = useState<'Home' | 'History' | 'Admin'>('Home');
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
@@ -10449,6 +10443,15 @@ export default function App() {
     </AuthWrapper>
   );
 }
+
+const LiveClock = React.memo(({ formatString }: { formatString: string }) => {
+  const [time, setTime] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <>{format(time, formatString, { locale: es })}</>;
+});
 
 const AppLayout = ({ 
   user, 
@@ -10482,9 +10485,17 @@ const AppLayout = ({
     return (saved as UserRole) || 'Operador'; // Default to Operador so user immediately has access to inspections
   });
 
-  const effectiveRole = (user.role === 'Administrador' || user.role === 'Supervisor') ? activeRoleView : 'Operador';
+  const handleSignOut = async () => {
+    AreaService.reset();
+    EquipmentService.reset();
+    InspectionService.reset();
+    FindingService.reset();
+    localStorage.removeItem('chekify_cached_user');
+    await signOut(auth);
+  };
 
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const effectiveRole = (user.role === 'Administrador' || user.role === 'Supervisor') ? activeRoleView : 'Operador';
+  const effectiveRoleUser = React.useMemo(() => ({ ...user, role: effectiveRole }), [user, effectiveRole]);
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   
@@ -10715,10 +10726,6 @@ const AppLayout = ({
 
   const unreadCount = notifications.filter(n => !user.readNotifications?.includes(n.id)).length;
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   return (
     <div data-theme={theme} className="min-h-screen bg-[#F5F5F7] dark:bg-black text-[#1D1D1F] dark:text-[#F5F5F7] flex flex-col md:flex-row transition-colors duration-200">
@@ -10951,7 +10958,7 @@ const AppLayout = ({
                 {!isSidebarCollapsed && <span>Limpiar Caché</span>}
               </button>
               <button 
-                onClick={() => signOut(auth)}
+                onClick={handleSignOut}
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2.5' : 'gap-2.5 px-3'} py-2 rounded-xl text-[#FF3B30] hover:bg-[#FF3B30]/10 transition-all text-xs font-semibold cursor-pointer`}
                 title={isSidebarCollapsed ? "Cerrar Sesión" : undefined}
               >
@@ -11004,7 +11011,7 @@ const AppLayout = ({
                       )}
                     </div>
                     <p className="text-[11px] text-[#6E6E73] dark:text-[#98989D] font-medium truncate mt-0.5">
-                      {format(currentTime, "EEEE, dd 'de' MMMM • HH:mm:ss", { locale: es })}
+                      <LiveClock formatString="EEEE, dd 'de' MMMM • HH:mm:ss" />
                     </p>
                   </div>
 
@@ -11123,7 +11130,7 @@ const AppLayout = ({
 
                     {/* Logout Button (Desktop only in header, mobile has it in drawer) */}
                     <button 
-                      onClick={() => signOut(auth)}
+                      onClick={handleSignOut}
                       className="hidden md:flex text-[#FF3B30] hover:bg-[#FF3B30]/10 transition-colors p-2 rounded-xl bg-white dark:bg-[#1C1C1E] border border-[#D2D2D7]/40 dark:border-white/10 shrink-0 items-center justify-center w-8 h-8 sm:w-9 sm:h-9 cursor-pointer shadow-xs"
                       title="Cerrar Sesión"
                     >
@@ -11146,7 +11153,7 @@ const AppLayout = ({
                     )}
                   </div>
                   <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold shrink-0 ml-1.5 tabular-nums">
-                    {format(currentTime, "HH:mm:ss", { locale: es })}
+                    <LiveClock formatString="HH:mm:ss" />
                   </span>
                 </div>
               </div>
@@ -11201,7 +11208,7 @@ const AppLayout = ({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    <OrdenYLimpiezaDashboard user={{ ...user, role: effectiveRole }} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
+                    <OrdenYLimpiezaDashboard user={effectiveRoleUser} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
                   </motion.div>
                 )}
                 {activeTab === 'History' && (
@@ -11211,7 +11218,7 @@ const AppLayout = ({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    <ReportsView user={{ ...user, role: effectiveRole }} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
+                    <ReportsView user={effectiveRoleUser} initialFindingId={pendingFindingId} onClearPending={() => setPendingFindingId(null)} />
                   </motion.div>
                 )}
                 {activeTab === 'Admin' && (
@@ -11621,7 +11628,7 @@ const AppLayout = ({
                       </button>
 
                       <button 
-                        onClick={() => signOut(auth)}
+                        onClick={handleSignOut}
                         className="flex-1 py-3 px-4 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-red-200/50 dark:border-red-500/20 cursor-pointer"
                       >
                         <LogOut className="w-4 h-4" />

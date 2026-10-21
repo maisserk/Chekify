@@ -9,7 +9,8 @@
  * Controls compressions, robust Firebase Storage uploads, plant scoping, and offline syncing.
  */
 
-import { db, storage, handleFirestoreError } from '../firebase';
+import { db, auth, storage, handleFirestoreError } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { removeEmojisBracketsAndParens } from '../utils/textSanitizer';
 import { 
   collection, 
@@ -47,40 +48,97 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000, errorMsg 
   ]);
 }
 
+interface FindingChannel {
+  plantKey: string;
+  subscribers: Map<number, (findings: Finding[]) => void>;
+  latestData: Finding[] | null;
+  unsubFirestore: (() => void) | null;
+  teardownTimeout: ReturnType<typeof setTimeout> | null;
+  unsubAuth: (() => void) | null;
+}
+
 export class FindingService {
   private static readonly COLLECTION_NAME = 'findings';
 
-  private static hasRunCleanup = false;
   private static knownEquipmentMap: Map<string, Equipment> = new Map();
+  private static nextSubId = 0;
+  private static channels: Map<string, FindingChannel> = new Map();
 
   /**
-   * Subscribes to real-time findings with multi-tenant plant scoping.
+   * Resets all finding channels and listeners on sign out.
+   */
+  public static reset(): void {
+    this.channels.forEach(ch => {
+      if (ch.teardownTimeout) {
+        clearTimeout(ch.teardownTimeout);
+        ch.teardownTimeout = null;
+      }
+      if (ch.unsubFirestore) {
+        try { ch.unsubFirestore(); } catch {}
+        ch.unsubFirestore = null;
+      }
+      if (ch.unsubAuth) {
+        try { ch.unsubAuth(); } catch {}
+        ch.unsubAuth = null;
+      }
+    });
+    this.channels.clear();
+  }
+
+  /**
+   * Subscribes to real-time findings with multi-tenant plant scoping and connection multiplexing.
+   * Multiple components in the same plant share a single active Firestore listener,
+   * drastically reducing redundant read quotas during navigation.
    */
   public static subscribeToFindings(
     callback: (findings: Finding[]) => void,
     plantId?: string
   ): () => void {
-    if (!this.hasRunCleanup) {
-      this.hasRunCleanup = true;
-      setTimeout(() => {
-        this.purgeSyntheticAndDuplicateFindings().catch(err => {
-          console.warn('[FindingService] Auto cleanup of synthetic duplicates failed:', err);
-        });
-      }, 1500);
-    }
+    const subId = ++this.nextSubId;
+    const plantKey = plantId ? plantId.trim().toLowerCase() : '__all__';
 
-    // Pre-populate and refresh equipment map for accurate lookup across plant findings
-    getCachedEquipment().forEach(eq => this.knownEquipmentMap.set(eq.id, eq));
-    EquipmentService.fetchEquipment(plantId).then(items => {
-      items.forEach(eq => this.knownEquipmentMap.set(eq.id, eq));
-    }).catch(() => {});
+    // Populate equipment map from local cache without triggering network getDocs
+    try {
+      getCachedEquipment().forEach(eq => this.knownEquipmentMap.set(eq.id, eq));
+    } catch {}
 
-    const findingsRef = collection(db, this.COLLECTION_NAME);
+    let channel = this.channels.get(plantKey);
 
-    return onSnapshot(
-      findingsRef,
-      (snapshot) => {
-        const rawList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
+    if (channel) {
+      if (channel.teardownTimeout) {
+        clearTimeout(channel.teardownTimeout);
+        channel.teardownTimeout = null;
+      }
+      channel.subscribers.set(subId, callback);
+      if (channel.latestData) {
+        callback(channel.latestData);
+      }
+    } else {
+      channel = {
+        plantKey,
+        subscribers: new Map([[subId, callback]]),
+        latestData: null,
+        unsubFirestore: null,
+        teardownTimeout: null,
+        unsubAuth: null
+      };
+      this.channels.set(plantKey, channel);
+
+      const attachFirestoreListener = () => {
+        const ch = this.channels.get(plantKey);
+        if (!ch || ch.unsubFirestore) return;
+        if (!auth.currentUser) return;
+
+        const findingsRef = collection(db, this.COLLECTION_NAME);
+        const findingsQuery = (plantId && plantId !== 'default-plant')
+          ? query(findingsRef, where('plantId', '==', plantId))
+          : findingsRef;
+
+        try {
+          ch.unsubFirestore = onSnapshot(
+            findingsQuery,
+            (snapshot) => {
+          const rawList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
         
         const cleanedList: Finding[] = [];
         for (const finding of rawList) {
@@ -112,7 +170,6 @@ export class FindingService {
             historyArr.some((h: any) => h?.action === 'Inspección Conforme (Sin hallazgos)' || h?.action === 'Hallazgo autogenerado (Inspección Registrada)');
 
           if (isSyntheticRecord) {
-            deleteDoc(doc(db, this.COLLECTION_NAME, finding.id)).catch(() => {});
             continue;
           }
 
@@ -128,14 +185,10 @@ export class FindingService {
             upperCategory === 'PUNTO DE CONTROL' ||
             upperCategory === 'PUNTOS DE CONTROL'
           ) {
-            // Delete registered document from Firestore
-            deleteDoc(doc(db, this.COLLECTION_NAME, finding.id)).catch(err => {
-              console.warn('[FindingService] Could not purge Punto de Control finding:', err);
-            });
             continue;
           }
 
-          // If description contains "Punto de Control" or "PUNTOS DE CONTROL", sanitize it
+          // If description contains "Punto de Control" or "PUNTOS DE CONTROL", sanitize it in-memory for clean presentation
           if (/punto[s]?\s*de\s*control/gi.test(desc) || /otros\s*puntos\s*de\s*inspecci[oó]n/gi.test(desc)) {
             const sanitizedDesc = desc
               .replace(/PUNTOS DE CONTROL DE INSPECCIÓN:/gi, 'EVALUACIONES DE INSPECCIÓN:')
@@ -145,13 +198,7 @@ export class FindingService {
               .replace(/Punto\s*Inspeccionado/gi, 'Ítem Inspeccionado');
 
             finding.description = sanitizedDesc;
-
-            // Background async fix in Firestore
-            setDoc(doc(db, this.COLLECTION_NAME, finding.id), { description: sanitizedDesc }, { merge: true }).catch(() => {});
           }
-
-          const rawDoc = finding as any;
-          const updatesToPersist: Record<string, any> = {};
 
           // Auto-enrich areaName or equipmentName if missing using local cache
           if (!finding.areaName) {
@@ -162,9 +209,6 @@ export class FindingService {
             }
             if (!finding.areaName) {
               finding.areaName = 'Área General';
-            }
-            if (!rawDoc.areaName) {
-              updatesToPersist.areaName = finding.areaName;
             }
           }
 
@@ -185,8 +229,6 @@ export class FindingService {
                 if (!finding.tag && !finding.equipmentTag && equip.tag) {
                   finding.tag = equip.tag.trim();
                   finding.equipmentTag = equip.tag.trim();
-                  updatesToPersist.tag = equip.tag.trim();
-                  updatesToPersist.equipmentTag = equip.tag.trim();
                 }
               }
             }
@@ -243,20 +285,13 @@ export class FindingService {
                 if (singleEquip.tag) {
                   finding.tag = singleEquip.tag.trim();
                   finding.equipmentTag = singleEquip.tag.trim();
-                  updatesToPersist.tag = singleEquip.tag.trim();
-                  updatesToPersist.equipmentTag = singleEquip.tag.trim();
                 }
-                updatesToPersist.equipmentId = singleEquip.id;
               }
             }
 
             // 4. Fallback: use areaName directly, never 'Puntos Generales de Inspección'
             if (!finding.equipmentName || finding.equipmentName.toLowerCase().includes('puntos generales')) {
               finding.equipmentName = finding.areaName || 'Área Principal';
-            }
-
-            if (rawDoc.equipmentName !== finding.equipmentName) {
-              updatesToPersist.equipmentName = finding.equipmentName;
             }
           }
 
@@ -266,20 +301,16 @@ export class FindingService {
 
           if (!finding.inspectionStartedAt) {
             finding.inspectionStartedAt = baseTimestamp;
-            if (!rawDoc.inspectionStartedAt) updatesToPersist.inspectionStartedAt = baseTimestamp;
           }
           if (!finding.inspectionCompletedAt) {
             finding.inspectionCompletedAt = baseTimestamp;
-            if (!rawDoc.inspectionCompletedAt) updatesToPersist.inspectionCompletedAt = baseTimestamp;
           }
 
           if (!finding.equipmentStartedAt) {
             finding.equipmentStartedAt = finding.inspectionStartedAt;
-            if (!rawDoc.equipmentStartedAt) updatesToPersist.equipmentStartedAt = finding.inspectionStartedAt;
           }
           if (!finding.equipmentCompletedAt) {
             finding.equipmentCompletedAt = finding.inspectionCompletedAt;
-            if (!rawDoc.equipmentCompletedAt) updatesToPersist.equipmentCompletedAt = finding.inspectionCompletedAt;
           }
 
           const startMs = parseAnyDate(finding.inspectionStartedAt)?.getTime() || baseDate.getTime();
@@ -299,12 +330,10 @@ export class FindingService {
 
           if (finding.inspectionDurationSeconds === undefined || finding.inspectionDurationSeconds === null || finding.inspectionDurationSeconds === 0) {
             finding.inspectionDurationSeconds = calcSecs;
-            if (rawDoc.inspectionDurationSeconds !== calcSecs) updatesToPersist.inspectionDurationSeconds = calcSecs;
           }
 
           if (finding.equipmentDurationSeconds === undefined || finding.equipmentDurationSeconds === null || finding.equipmentDurationSeconds === 0) {
             finding.equipmentDurationSeconds = calcSecs;
-            if (rawDoc.equipmentDurationSeconds !== calcSecs) updatesToPersist.equipmentDurationSeconds = calcSecs;
           }
 
           // Auto-enrich history array if missing or empty
@@ -345,13 +374,6 @@ export class FindingService {
             finding.history = generatedHistory;
           }
 
-          // Persist any healed attributes back to Firestore immediately
-          if (Object.keys(updatesToPersist).length > 0) {
-            setDoc(doc(db, this.COLLECTION_NAME, finding.id), updatesToPersist, { merge: true }).catch(err => {
-              console.warn('[FindingService] Could not persist healed fields for finding:', finding.id, err);
-            });
-          }
-
           cleanedList.push(finding);
         }
 
@@ -361,6 +383,15 @@ export class FindingService {
           const tB = parseAnyDate(b.createdAt || b.date)?.getTime() || Date.now();
           return tB - tA; // Newest first
         });
+
+        const currentChannel = this.channels.get(plantKey);
+        if (currentChannel) {
+          currentChannel.latestData = cleanedList;
+          currentChannel.subscribers.forEach(cb => {
+            try { cb(cleanedList); } catch (e) { console.error('[FindingService] Subscriber error:', e); }
+          });
+        }
+
         const hasOfflineCached = cleanedList.some(f => {
           const photos = extractFindingPhotos(f);
           return photos.some(p => p && typeof p === 'string' && p.startsWith('offline-cached://'));
@@ -368,12 +399,60 @@ export class FindingService {
         if (hasOfflineCached) {
           this.syncPendingOfflinePhotos(cleanedList).catch(() => {});
         }
-        callback(cleanedList);
       },
       (error) => {
+        if (!auth.currentUser) {
+          if (ch.unsubFirestore) {
+            try { ch.unsubFirestore(); } catch {}
+            ch.unsubFirestore = null;
+          }
+          return;
+        }
         handleFirestoreError(error, 'list', this.COLLECTION_NAME);
       }
     );
+  } catch (err) {
+    if (!auth.currentUser) return;
+    handleFirestoreError(err, 'list', this.COLLECTION_NAME);
+  }
+};
+
+      if (auth.currentUser) {
+        attachFirestoreListener();
+      }
+
+      channel.unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
+        if (firebaseUser) {
+          attachFirestoreListener();
+        } else {
+          const ch = this.channels.get(plantKey);
+          if (ch && ch.unsubFirestore) {
+            try { ch.unsubFirestore(); } catch {}
+            ch.unsubFirestore = null;
+          }
+        }
+      });
+    }
+
+    return () => {
+      const ch = this.channels.get(plantKey);
+      if (!ch) return;
+      ch.subscribers.delete(subId);
+      if (ch.subscribers.size === 0) {
+        if (ch.teardownTimeout) clearTimeout(ch.teardownTimeout);
+        ch.teardownTimeout = setTimeout(() => {
+          if (ch.subscribers.size === 0) {
+            if (ch.unsubFirestore) {
+              try { ch.unsubFirestore(); } catch {}
+            }
+            if (ch.unsubAuth) {
+              try { ch.unsubAuth(); } catch {}
+            }
+            this.channels.delete(plantKey);
+          }
+        }, 5 * 60 * 1000); // 5 minutes grace period to prevent re-querying all findings during tab navigation
+      }
+    };
   }
 
   /**
@@ -765,8 +844,15 @@ export class FindingService {
     try {
       let list = findingsList;
       if (!list) {
-        const snap = await getDocs(collection(db, this.COLLECTION_NAME));
-        list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Finding));
+        for (const ch of this.channels.values()) {
+          if (ch.latestData && ch.latestData.length > 0) {
+            list = ch.latestData;
+            break;
+          }
+        }
+      }
+      if (!list || list.length === 0) {
+        return;
       }
       for (const finding of list) {
         if (!finding || !finding.id) continue;

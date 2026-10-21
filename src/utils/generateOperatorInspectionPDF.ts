@@ -445,19 +445,27 @@ export const generateOperatorInspectionPDF = async (
     finding.equipmentId &&
     finding.equipmentId !== 'general'
   ) {
-    try {
-      const eqSnap = await getDoc(doc(db, 'equipment', finding.equipmentId));
-      if (eqSnap.exists()) {
-        const eqData = eqSnap.data();
-        if (eqData?.name) {
-          equipDetails.name = eqData.name.trim();
-          if (eqData.tag && (!equipDetails.tag || equipDetails.tag === 'S/N')) {
-            equipDetails.tag = eqData.tag.trim();
+    const cachedEq = getCachedEquipment().find(e => e.id === finding.equipmentId);
+    if (cachedEq && cachedEq.name) {
+      equipDetails.name = cachedEq.name.trim();
+      if (cachedEq.tag && (!equipDetails.tag || equipDetails.tag === 'S/N')) {
+        equipDetails.tag = cachedEq.tag.trim();
+      }
+    } else {
+      try {
+        const eqSnap = await getDoc(doc(db, 'equipment', finding.equipmentId));
+        if (eqSnap.exists()) {
+          const eqData = eqSnap.data();
+          if (eqData?.name) {
+            equipDetails.name = eqData.name.trim();
+            if (eqData.tag && (!equipDetails.tag || equipDetails.tag === 'S/N')) {
+              equipDetails.tag = eqData.tag.trim();
+            }
           }
         }
+      } catch (e) {
+        // offline fallback
       }
-    } catch (e) {
-      // offline fallback
     }
   }
 
@@ -469,6 +477,7 @@ export const generateOperatorInspectionPDF = async (
     finding.inspectionId
   ) {
     try {
+      const cachedList = getCachedEquipment();
       const inspSnap = await getDoc(doc(db, 'inspections', finding.inspectionId));
       if (inspSnap.exists()) {
         const inspData = inspSnap.data();
@@ -476,6 +485,12 @@ export const generateOperatorInspectionPDF = async (
         const eqIds = Object.keys(results);
         for (const eqId of eqIds) {
           if (eqId && eqId !== 'general') {
+            const cachedMatch = cachedList.find(e => e.id === eqId);
+            if (cachedMatch && cachedMatch.name) {
+              equipDetails.name = cachedMatch.name.trim();
+              if (cachedMatch.tag) equipDetails.tag = cachedMatch.tag.trim();
+              break;
+            }
             const eqSnap = await getDoc(doc(db, 'equipment', eqId));
             if (eqSnap.exists() && eqSnap.data()?.name) {
               equipDetails.name = eqSnap.data().name.trim();
